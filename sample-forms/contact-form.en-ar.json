@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "id": "form-contact-sample",
+    "title": { "en": "Contact Us", "ar": "اتصل بنا" },
+    "description": { "en": "We'd love to hear from you.", "ar": "يسعدنا التواصل معك." },
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "locales": [
+    { "code": "en", "label": "English", "direction": "ltr", "isDefault": true },
+    { "code": "ar", "label": "العربية", "direction": "rtl", "isDefault": false }
+  ],
+  "fields": [
+    {
+      "id": "field-heading1",
+      "type": "heading",
+      "name": "heading1",
+      "label": { "en": "Contact Details", "ar": "بيانات الاتصال" },
+      "required": false,
+      "width": "full",
+      "order": 0,
+      "validations": [],
+      "conditions": []
+    },
+    {
+      "id": "field-fullname",
+      "type": "textbox",
+      "name": "fullName",
+      "label": { "en": "Full Name", "ar": "الاسم الكامل" },
+      "placeholder": { "en": "Jane Doe", "ar": "اسم كامل" },
+      "required": true,
+      "width": "full",
+      "order": 1,
+      "validations": [
+        { "id": "val-fullname-min", "type": "minLength", "param": 2, "message": {} }
+      ],
+      "conditions": []
+    },
+    {
+      "id": "field-email",
+      "type": "email",
+      "name": "email",
+      "label": { "en": "Email", "ar": "البريد الإلكتروني" },
+      "placeholder": { "en": "jane@example.com", "ar": "jane@example.com" },
+      "required": true,
+      "width": "half",
+      "order": 2,
+      "validations": [
+        { "id": "val-email-format", "type": "email", "message": {} }
+      ],
+      "conditions": []
+    },
+    {
+      "id": "field-country",
+      "type": "dropdown",
+      "name": "country",
+      "label": { "en": "Country", "ar": "الدولة" },
+      "required": true,
+      "width": "half",
+      "order": 3,
+      "options": [
+        { "id": "opt-uae", "value": "uae", "label": { "en": "United Arab Emirates", "ar": "الإمارات العربية المتحدة" } },
+        { "id": "opt-sa", "value": "sa", "label": { "en": "Saudi Arabia", "ar": "المملكة العربية السعودية" } },
+        { "id": "opt-other", "value": "Other", "label": { "en": "Other", "ar": "أخرى" } }
+      ],
+      "validations": [],
+      "conditions": []
+    },
+    {
+      "id": "field-country-other",
+      "type": "textbox",
+      "name": "countryOther",
+      "label": { "en": "Specify Country", "ar": "حدد الدولة" },
+      "helpText": { "en": "Shown only when Country is Other.", "ar": "يظهر فقط عند اختيار أخرى." },
+      "required": false,
+      "width": "full",
+      "order": 4,
+      "validations": [],
+      "conditions": [
+        {
+          "id": "cond-country-other",
+          "sourceFieldId": "field-country",
+          "operator": "contains",
+          "value": "Other",
+          "action": "show"
+        }
+      ]
+    }
+  ]
+}
