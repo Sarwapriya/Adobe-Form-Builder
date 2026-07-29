@@ -385,10 +385,72 @@ select {
   font-size: 0.85rem;
 }
 
+<<<<<<< HEAD
 .required-marker {
   color: var(--danger);
 }
 
+=======
+.required-marker,
+.star {
+  color: var(--danger);
+}
+
+.preview-phone-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.preview-phone-row select {
+  flex: 0 0 auto;
+}
+
+.preview-phone-row input {
+  flex: 1;
+}
+
+.form_check_module {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.form_check_title h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.form_check_title p {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.form_check_list_wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.radio_wrap,
+.form_check_list {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form_check_list img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+>>>>>>> 569474c (update project)
 .preview-field-row input,
 .preview-field-row textarea,
 .preview-field-row select {
@@ -441,3 +503,74 @@ select {
   border: 1px solid #34d399;
   color: #065f46;
 }
+<<<<<<< HEAD
+=======
+
+/* Modal overlay (Countries & Locales panel) */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 3rem 1rem;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.modal-panel {
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 1.25rem;
+  width: 100%;
+  max-width: 560px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header button {
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+}
+
+.country-row-editor {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  background: var(--bg);
+}
+
+.country-row-fields {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.country-row-fields .field-group {
+  margin-bottom: 0;
+}
+
+.country-language-checkboxes {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.remove-country-button {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: 6px;
+  background: var(--surface);
+}
+>>>>>>> 569474c (update project)

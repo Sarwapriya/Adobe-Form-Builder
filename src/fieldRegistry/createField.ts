@@ -13,6 +13,10 @@ export function createDefaultField(type: FieldType, order: number): FieldDefinit
     required: false,
     width: "full",
     order,
+<<<<<<< HEAD
+=======
+    group: "profile",
+>>>>>>> 569474c (update project)
     validations: [],
     conditions: [],
   };

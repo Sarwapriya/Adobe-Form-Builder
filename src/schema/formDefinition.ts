@@ -1,12 +1,20 @@
 import type { LocaleConfig, LocalizedText } from "./locale";
 import type { ValidationRule } from "./validations";
 import type { ConditionRule } from "./conditions";
+<<<<<<< HEAD
+=======
+import type { CountryConfig } from "./country";
+>>>>>>> 569474c (update project)
 
 export type FieldType =
   | "textbox"
   | "textarea"
   | "number"
   | "email"
+<<<<<<< HEAD
+=======
+  | "phone"
+>>>>>>> 569474c (update project)
   | "checkbox"
   | "radio"
   | "dropdown"
@@ -15,10 +23,19 @@ export type FieldType =
 
 export type FieldWidth = "full" | "half" | "third";
 
+<<<<<<< HEAD
+=======
+export type FieldGroup = "profile" | "question";
+
+>>>>>>> 569474c (update project)
 export interface FieldOption {
   id: string;
   value: string;
   label: LocalizedText;
+<<<<<<< HEAD
+=======
+  imageUrl?: string;
+>>>>>>> 569474c (update project)
 }
 
 export interface FieldDefinition {
@@ -32,6 +49,11 @@ export interface FieldDefinition {
   required: boolean;
   width: FieldWidth;
   order: number;
+<<<<<<< HEAD
+=======
+  group: FieldGroup;
+  subheading?: LocalizedText;
+>>>>>>> 569474c (update project)
   options?: FieldOption[];
   validations: ValidationRule[];
   conditions: ConditionRule[];
@@ -51,6 +73,10 @@ export interface FormDefinition {
   schemaVersion: typeof CURRENT_SCHEMA_VERSION;
   metadata: FormMetadata;
   locales: LocaleConfig[];
+<<<<<<< HEAD
+=======
+  countries: CountryConfig[];
+>>>>>>> 569474c (update project)
   fields: FieldDefinition[];
 }
 
@@ -65,6 +91,10 @@ export function createEmptyForm(): FormDefinition {
       updatedAt: now,
     },
     locales: [{ code: "en", label: "English", direction: "ltr", isDefault: true }],
+<<<<<<< HEAD
+=======
+    countries: [],
+>>>>>>> 569474c (update project)
     fields: [],
   };
 }

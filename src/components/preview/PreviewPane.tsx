@@ -7,6 +7,10 @@ import { RuntimeFieldRenderer } from "./RuntimeFieldRenderer";
 export function PreviewPane() {
   const fields = useFormStore((s) => s.fields);
   const locales = useFormStore((s) => s.locales);
+<<<<<<< HEAD
+=======
+  const countries = useFormStore((s) => s.countries);
+>>>>>>> 569474c (update project)
   const metadata = useFormStore((s) => s.metadata);
   const previewLocale = useLocaleStore((s) => s.previewLocale);
   const setPreviewLocale = useLocaleStore((s) => s.setPreviewLocale);
@@ -21,6 +25,18 @@ export function PreviewPane() {
 
   const uiStates = useMemo(() => computeFieldStates(fields, values), [fields, values]);
 
+<<<<<<< HEAD
+=======
+  const questionNumbers = useMemo(() => {
+    const map: Record<string, number> = {};
+    let n = 0;
+    for (const field of [...fields].sort((a, b) => a.order - b.order)) {
+      if (field.group === "question") map[field.id] = ++n;
+    }
+    return map;
+  }, [fields]);
+
+>>>>>>> 569474c (update project)
   function handleChange(fieldId: string, value: string) {
     setValues((prev) => ({ ...prev, [fieldId]: value }));
     setErrors((prev) => ({ ...prev, [fieldId]: "" }));
@@ -34,7 +50,12 @@ export function PreviewPane() {
       const state = uiStates[field.id];
       if (field.type === "heading" || field.type === "paragraph" || !state?.visible) continue;
 
+<<<<<<< HEAD
       const value = values[field.id] ?? "";
+=======
+      const rawValue = values[field.id] ?? "";
+      const value = field.type === "phone" ? rawValue.split(":")[1] ?? "" : rawValue;
+>>>>>>> 569474c (update project)
       const rules = [...field.validations];
       if (state.required) rules.unshift({ id: "__required", type: "required", message: {} });
 
@@ -81,6 +102,11 @@ export function PreviewPane() {
               value={values[field.id] ?? ""}
               uiState={uiStates[field.id]}
               error={errors[field.id]}
+<<<<<<< HEAD
+=======
+              countries={countries}
+              questionNumber={field.group === "question" ? questionNumbers[field.id] : undefined}
+>>>>>>> 569474c (update project)
               onChange={(v) => handleChange(field.id, v)}
             />
           ))}
