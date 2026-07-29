@@ -49,6 +49,21 @@ export const FIELD_REGISTRY: Record<FieldType, FieldTypeDescriptor> = {
     availableValidations: ["required", "email"],
     isStructural: false,
   },
+<<<<<<< HEAD
+=======
+  phone: {
+    type: "phone",
+    displayName: "Phone",
+    inputTag: "input",
+    inputType: "tel",
+    supportsOptions: false,
+    supportsPlaceholder: true,
+    supportsRequired: true,
+    supportsConditions: true,
+    availableValidations: ["required", "minLength", "maxLength", "regex"],
+    isStructural: false,
+  },
+>>>>>>> 569474c (update project)
   checkbox: {
     type: "checkbox",
     displayName: "Checkbox",
@@ -115,6 +130,10 @@ export const FIELD_TYPES_IN_PALETTE_ORDER: FieldType[] = [
   "textarea",
   "number",
   "email",
+<<<<<<< HEAD
+=======
+  "phone",
+>>>>>>> 569474c (update project)
   "checkbox",
   "radio",
   "dropdown",

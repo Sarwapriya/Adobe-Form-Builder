@@ -29,6 +29,13 @@ window.FormRuntime = (function () {
     return fieldDef.type === "heading" || fieldDef.type === "paragraph";
   }
 
+<<<<<<< HEAD
+=======
+  function callingCodeSelect(fieldDef) {
+    return document.getElementById("field-" + fieldDef.id + "-calling");
+  }
+
+>>>>>>> 569474c (update project)
   function getFieldValue(fieldDef) {
     if (fieldDef.type === "checkbox") {
       var cb = document.querySelector('[name="' + fieldDef.name + '"]');
@@ -63,6 +70,13 @@ window.FormRuntime = (function () {
     formDefinition.fields.forEach(function (f) {
       if (isStructural(f)) return;
       values[f.id] = getFieldValue(f);
+<<<<<<< HEAD
+=======
+      if (f.type === "phone") {
+        var select = callingCodeSelect(f);
+        values[f.id + "__callingCode"] = select ? select.value : "";
+      }
+>>>>>>> 569474c (update project)
     });
     return values;
   }
@@ -71,6 +85,13 @@ window.FormRuntime = (function () {
     formDefinition.fields.forEach(function (f) {
       if (isStructural(f) || values[f.id] === undefined) return;
       setFieldValue(f, values[f.id]);
+<<<<<<< HEAD
+=======
+      if (f.type === "phone") {
+        var select = callingCodeSelect(f);
+        if (select && values[f.id + "__callingCode"] !== undefined) select.value = values[f.id + "__callingCode"];
+      }
+>>>>>>> 569474c (update project)
     });
   }
 
@@ -118,7 +139,15 @@ window.FormRuntime = (function () {
         el.disabled = !state.enabled;
         el.required = state.required;
       });
+<<<<<<< HEAD
       var marker = wrapper.querySelector(".required-marker");
+=======
+      if (fieldDef.type === "phone") {
+        var select = callingCodeSelect(fieldDef);
+        if (select) select.disabled = !state.enabled;
+      }
+      var marker = wrapper.querySelector(".star");
+>>>>>>> 569474c (update project)
       if (marker) marker.hidden = !state.required;
     });
   }
@@ -166,6 +195,13 @@ window.FormRuntime = (function () {
     formDefinition.fields.forEach(function (fieldDef) {
       if (isStructural(fieldDef)) return;
       var controls = document.querySelectorAll('[name="' + fieldDef.name + '"]');
+<<<<<<< HEAD
+=======
+      if (fieldDef.type === "phone") {
+        var select = callingCodeSelect(fieldDef);
+        if (select) controls = Array.prototype.slice.call(controls).concat([select]);
+      }
+>>>>>>> 569474c (update project)
       controls.forEach(function (el) {
         el.addEventListener("input", function () {
           evaluateAllConditions();
@@ -186,7 +222,16 @@ window.FormRuntime = (function () {
 
       var data = {};
       formDefinition.fields.forEach(function (f) {
+<<<<<<< HEAD
         if (!isStructural(f)) data[f.name] = getFieldValue(f);
+=======
+        if (isStructural(f)) return;
+        data[f.name] = getFieldValue(f);
+        if (f.type === "phone") {
+          var select = callingCodeSelect(f);
+          data[f.name + "CallingCode"] = select ? select.value : "";
+        }
+>>>>>>> 569474c (update project)
       });
 
       // TODO: wire to your backend endpoint here

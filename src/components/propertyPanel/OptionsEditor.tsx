@@ -10,6 +10,10 @@ export function OptionsEditor({ field }: Props) {
   const locales = useFormStore((s) => s.locales);
   const updateField = useFormStore((s) => s.updateField);
   const options = field.options ?? [];
+<<<<<<< HEAD
+=======
+  const supportsImage = field.type === "radio" || field.type === "checkbox";
+>>>>>>> 569474c (update project)
 
   function addOption() {
     const n = options.length + 1;
@@ -48,6 +52,18 @@ export function OptionsEditor({ field }: Props) {
               onChange={(e) => updateOption(option.id, { label: { ...option.label, [locale.code]: e.target.value } })}
             />
           ))}
+<<<<<<< HEAD
+=======
+          {supportsImage && (
+            <input
+              type="text"
+              className="option-image-input"
+              placeholder="image URL (optional)"
+              value={option.imageUrl ?? ""}
+              onChange={(e) => updateOption(option.id, { imageUrl: e.target.value || undefined })}
+            />
+          )}
+>>>>>>> 569474c (update project)
           <button type="button" onClick={() => removeOption(option.id)} aria-label="Remove option">
             ✕
           </button>

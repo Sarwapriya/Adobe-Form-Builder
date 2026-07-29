@@ -1,5 +1,9 @@
 import type { FormDefinition, LocaleCode } from "../schema";
 import { DEFAULT_VALIDATION_MESSAGES, defaultLocaleOf, resolveLocalizedText } from "../schema";
+<<<<<<< HEAD
+=======
+import { resolveLocaleIdentifier } from "./localeIdentifier";
+>>>>>>> 569474c (update project)
 
 export type StringTable = Record<string, string>;
 export type StringsByLocale = Record<string, StringTable>;
@@ -20,6 +24,12 @@ export function fieldPlaceholderKey(fieldId: string): string {
 export function fieldHelpKey(fieldId: string): string {
   return `field_${fieldId}_help`;
 }
+<<<<<<< HEAD
+=======
+export function fieldSubheadingKey(fieldId: string): string {
+  return `field_${fieldId}_subheading`;
+}
+>>>>>>> 569474c (update project)
 export function fieldOptionKey(fieldId: string, optionId: string): string {
   return `field_${fieldId}_opt_${optionId}`;
 }
@@ -29,6 +39,12 @@ export function fieldValidationKey(fieldId: string, ruleId: string): string {
 export function fieldRequiredKey(fieldId: string): string {
   return `field_${fieldId}_required_msg`;
 }
+<<<<<<< HEAD
+=======
+export function countryNameKey(countryId: string): string {
+  return `country_${countryId}_name`;
+}
+>>>>>>> 569474c (update project)
 
 export function buildStrings(form: FormDefinition): StringsByLocale {
   const defaultLocale = defaultLocaleOf(form.locales).code;
@@ -49,6 +65,12 @@ export function buildStrings(form: FormDefinition): StringsByLocale {
       if (field.helpText) {
         table[fieldHelpKey(field.id)] = resolveLocalizedText(field.helpText, locale, defaultLocale);
       }
+<<<<<<< HEAD
+=======
+      if (field.subheading) {
+        table[fieldSubheadingKey(field.id)] = resolveLocalizedText(field.subheading, locale, defaultLocale);
+      }
+>>>>>>> 569474c (update project)
       for (const option of field.options ?? []) {
         table[fieldOptionKey(field.id, option.id)] = resolveLocalizedText(option.label, locale, defaultLocale);
       }
@@ -66,7 +88,15 @@ export function buildStrings(form: FormDefinition): StringsByLocale {
       table[fieldRequiredKey(field.id)] = requiredMessage;
     }
 
+<<<<<<< HEAD
     result[locale] = table;
+=======
+    for (const country of form.countries) {
+      table[countryNameKey(country.id)] = resolveLocalizedText(country.name, locale, defaultLocale);
+    }
+
+    result[resolveLocaleIdentifier(locale, form.countries)] = table;
+>>>>>>> 569474c (update project)
   }
 
   return result;
