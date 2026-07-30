@@ -1,0 +1,3 @@
+{
+  "ignorePatterns": ["dist/**", "dist-sample-solution/**", "Final_forms_format/**"]
+}

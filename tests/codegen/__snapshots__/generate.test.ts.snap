@@ -1,0 +1,375 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateSolution > matches the reference fixture snapshot (data.js) 1`] = `
+"var FORM_DATA = {
+  "page_error": {
+    "en_GB": {
+      "heading": "Something went wrong.",
+      "subHeading": "",
+      "subHeadingUrlText": "",
+      "subHeadingUrl": ""
+    },
+    "ar_AE": {
+      "heading": "Something went wrong.",
+      "subHeading": "",
+      "subHeadingUrlText": "",
+      "subHeadingUrl": ""
+    }
+  },
+  "fields": {
+    "en_GB": {
+      "label": {
+        "email": "E-mail"
+      },
+      "callingCodeDropdownFirstEntry": "",
+      "submitButton": "Submit",
+      "headingBeforeBreak": "",
+      "headingAfterBreak": "",
+      "requiredField": "",
+      "redirectAfterSuccessUrl": "",
+      "thankYou": {
+        "heading": "Thank you for your interest",
+        "subHeading": "",
+        "subHeadingUrlText": "",
+        "subHeadingUrl": ""
+      },
+      "extra": {}
+    },
+    "ar_AE": {
+      "label": {
+        "email": "البريد الإلكتروني"
+      },
+      "callingCodeDropdownFirstEntry": "",
+      "submitButton": "إرسال",
+      "headingBeforeBreak": "",
+      "headingAfterBreak": "",
+      "requiredField": "",
+      "redirectAfterSuccessUrl": "",
+      "thankYou": {
+        "heading": "Thank you for your interest",
+        "subHeading": "",
+        "subHeadingUrlText": "",
+        "subHeadingUrl": ""
+      },
+      "extra": {}
+    }
+  },
+  "questions": {
+    "en_GB": {
+      "Q1": {
+        "heading": "I am currently using",
+        "subheading": "(Single answer)"
+      },
+      "Q2": {
+        "heading": "Which do you like? <script>alert(1)<\\/script>",
+        "subheading": "(Multiple answers)"
+      },
+      "Q3": {
+        "heading": "Any other comments?",
+        "subheading": ""
+      }
+    },
+    "ar_AE": {
+      "Q1": {
+        "heading": "أنا أستخدم حاليًا",
+        "subheading": "(إجابة واحدة)"
+      },
+      "Q2": {
+        "heading": "Which do you like? <script>alert(1)<\\/script>",
+        "subheading": "(Multiple answers)"
+      },
+      "Q3": {
+        "heading": "Any other comments?",
+        "subheading": ""
+      }
+    }
+  },
+  "answers": {
+    "en_GB": {
+      "Q1": {
+        "A1": "Galaxy",
+        "A2": "iPhone"
+      },
+      "Q2": {
+        "A1": "\\"; maliciousCode(); //",
+        "A2": "TV"
+      },
+      "Q3": {}
+    },
+    "ar_AE": {
+      "Q1": {
+        "A1": "جالاكسي",
+        "A2": "آيفون"
+      },
+      "Q2": {
+        "A1": "\\"; maliciousCode(); //",
+        "A2": "TV"
+      },
+      "Q3": {}
+    }
+  },
+  "validation_messages": {
+    "en_GB": {
+      "requiredField": "This field is required.",
+      "email": "Please enter a valid email address.",
+      "mobileNumber": "Please enter a valid mobile number.",
+      "modalMessage1": "Are you sure you want to submit?",
+      "modalMessage2": "You won't be able to change your answers after this.",
+      "modalButtonYes": "Yes, submit",
+      "modalButtonNo": "No, go back"
+    },
+    "ar_AE": {
+      "requiredField": "This field is required.",
+      "email": "Please enter a valid email address.",
+      "mobileNumber": "Please enter a valid mobile number.",
+      "modalMessage1": "Are you sure you want to submit?",
+      "modalMessage2": "You won't be able to change your answers after this.",
+      "modalButtonYes": "Yes, submit",
+      "modalButtonNo": "No, go back"
+    }
+  },
+  "calling_codes": [
+    {
+      "countryCode": "AE",
+      "callingCode": "971",
+      "countryName": "United Arab Emirates",
+      "mobileDigits": 9
+    },
+    {
+      "countryCode": "SA",
+      "callingCode": "966",
+      "countryName": "Saudi Arabia",
+      "mobileDigits": 9
+    },
+    {
+      "countryCode": "EG",
+      "callingCode": "20",
+      "countryName": "Egypt",
+      "mobileDigits": 10
+    },
+    {
+      "countryCode": "IL",
+      "callingCode": "972",
+      "countryName": "Israel",
+      "mobileDigits": 9
+    },
+    {
+      "countryCode": "PS",
+      "callingCode": "970",
+      "countryName": "Palestine",
+      "mobileDigits": 9
+    },
+    {
+      "countryCode": "TR",
+      "callingCode": "90",
+      "countryName": "Turkey",
+      "mobileDigits": 10
+    },
+    {
+      "countryCode": "JO",
+      "callingCode": "962",
+      "countryName": "Jordan",
+      "mobileDigits": 9
+    },
+    {
+      "countryCode": "LB",
+      "callingCode": "961",
+      "countryName": "Lebanon",
+      "mobileDigits": 8
+    },
+    {
+      "countryCode": "IQ",
+      "callingCode": "964",
+      "countryName": "Iraq",
+      "mobileDigits": 10
+    },
+    {
+      "countryCode": "KW",
+      "callingCode": "965",
+      "countryName": "Kuwait",
+      "mobileDigits": 8
+    },
+    {
+      "countryCode": "QA",
+      "callingCode": "974",
+      "countryName": "Qatar",
+      "mobileDigits": 8
+    },
+    {
+      "countryCode": "BH",
+      "callingCode": "973",
+      "countryName": "Bahrain",
+      "mobileDigits": 8
+    },
+    {
+      "countryCode": "OM",
+      "callingCode": "968",
+      "countryName": "Oman",
+      "mobileDigits": 8
+    },
+    {
+      "countryCode": "GB",
+      "callingCode": "44",
+      "countryName": "United Kingdom",
+      "mobileDigits": 10
+    },
+    {
+      "countryCode": "US",
+      "callingCode": "1",
+      "countryName": "United States",
+      "mobileDigits": 10
+    },
+    {
+      "countryCode": "FR",
+      "callingCode": "33",
+      "countryName": "France",
+      "mobileDigits": 9
+    },
+    {
+      "countryCode": "DE",
+      "callingCode": "49",
+      "countryName": "Germany",
+      "mobileDigits": 10
+    },
+    {
+      "countryCode": "IN",
+      "callingCode": "91",
+      "countryName": "India",
+      "mobileDigits": 10
+    },
+    {
+      "countryCode": "PK",
+      "callingCode": "92",
+      "countryName": "Pakistan",
+      "mobileDigits": 10
+    }
+  ],
+  "param": {
+    "apiEndpoint": "",
+    "fallbackLanguage": "en_GB",
+    "analytics": {
+      "enabled": false
+    }
+  }
+};
+"
+`;
+
+exports[`generateSolution > matches the reference fixture snapshot (ff.html) 1`] = `
+"<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title></title>
+<link rel="stylesheet" href="style.css">
+<script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/parsleyjs@2/dist/parsley.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/libphonenumber-js/1.11.4/libphonenumber-js.min.js"></script>
+
+</head>
+<body data-variant="ff">
+<div class="container">
+<div class="top_cont"><p><span class="star">*</span><span id="requiredFieldNote"></span></p></div>
+<div class="main">
+<form action="" id="dataForm">
+<div class="form_top_group"><div class="form_text_bx"><p class="form_label"><span></span><span class="star">*</span></p><div class="input_wrap"><input type="email" id="email" name="email" autocomplete="off" spellcheck="false" required data-parsley-required="true" data-parsley-type="email" data-parsley-pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"><div class="btn_clear"></div></div></div></div>
+<div class="form_check_group"><div class="form_check_module" id="Q1"><div class="form_check_title"><h3><span></span><span class="star">*</span></h3><p></p></div><div class="radio_group" id="Q1-errors"><div class="radio_wrap"><input type="radio" id="Q1A1" name="Q1" value="A1" required data-parsley-required="true" data-parsley-errors-container="#Q1-errors"><label for="Q1A1"><p></p></label></div><div class="radio_wrap"><input type="radio" id="Q1A2" name="Q1" value="A2"><label for="Q1A2"><p></p></label></div></div></div><div class="form_check_module" id="Q2"><div class="form_check_title"><h3><span></span><span class="star">*</span></h3><p></p></div><div class="form_check_list_wrap" id="Q2-errors"><div class="form_check_list"><input type="checkbox" id="Q2A1" name="Q2" value="A1" data-parsley-required="true" data-parsley-errors-container="#Q2-errors"><label for="Q2A1"><p></p></label></div><div class="form_check_list"><input type="checkbox" id="Q2A2" name="Q2" value="A2"><label for="Q2A2"><p></p></label></div></div></div><div class="form_check_module" id="Q3"><div class="form_check_title"><h3><span></span></h3><p></p></div><div class="form_text_bx"><div class="input_wrap"><textarea id="Q3" name="Q3" rows="3"></textarea></div></div></div><div class="form_bottom_group"><button class="disabled" disabled id="btnSubmit"></button><div class="error" id="apiError" style="display:none"></div></div></div>
+</form>
+</div>
+</div>
+<div id="hrTy" style="display:none"><h3></h3><p><a href="" target="_blank"></a></p></div>
+<div id="hrErr" style="display:none"><h3></h3><p><a href="" target="_blank"></a></p></div>
+<div id="overlay" style="display:none"><span class="loader"></span></div>
+<section id="submitIntentPopup" class="popup popup--alert">
+<div class="popup__dimmed"></div>
+<div class="popup__contents-wrap"><div class="popup__contents"><div class="popup__inner-wrap"><div class="popup__inner">
+<p class="popup__desc" id="submitIntentPopupMessage1"></p>
+<p class="popup__desc" id="submitIntentPopupMessage2"></p>
+</div></div>
+<div class="popup__btn-wrap">
+<button class="cta cta--outlined cta--black" id="submitIntentPopupNo"></button>
+<button class="cta cta--contained cta--black" id="submitIntentPopupYes"></button>
+</div>
+</div></div>
+</section>
+<script src="data.js"></script>
+<script src="behavior.js"></script>
+</body>
+</html>
+"
+`;
+
+exports[`generateSolution > matches the reference fixture snapshot (style.css head/tail) 1`] = `
+"a,
+abbr,
+acronym,
+address,
+applet,
+article,
+aside,
+audio,
+b,
+big,
+blockquote,
+body,
+canvas,
+caption,
+center,
+cite,
+code,
+dd,
+del,
+details,
+dfn,
+div,
+dl,
+dt,
+em,
+embed,
+fieldset,
+figcaption,
+figure,
+fo"
+`;
+
+exports[`generateSolution > matches the reference fixture snapshot (style.css head/tail) 2`] = `
+" free of
+   inline styles, so the equivalent rules live here instead) --- */
+#hrTy,
+#hrErr {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0 auto;
+  max-width: 480px;
+  padding: 24px;
+  text-align: center;
+}
+
+#hrTy h3,
+#hrErr h3 {
+  color: #000;
+  font-family: "SamsungSS Head Bold", arial, sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+#hrTy p,
+#hrErr p {
+  color: #000;
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 15px;
+}
+
+#hrTy a,
+#hrErr a {
+  color: #007bff;
+}
+"
+`;
