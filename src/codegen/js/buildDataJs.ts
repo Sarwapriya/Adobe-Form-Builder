@@ -1,6 +1,7 @@
 import { CALLING_CODES } from "../../form/callingCodes.ts";
 import { resolveLocalizedText, type FormDefinition, type LocaleCode, type PageCopy } from "../../form/formDefinition.ts";
 import { answerDomKey } from "../domIds.ts";
+import type { FileNames } from "../fileNames.ts";
 import type { BuilderConfig, GeneratedFile } from "../types.ts";
 import { safeJsonForScript } from "./escaping.ts";
 
@@ -35,7 +36,7 @@ function resolvePageCopy(map: Record<LocaleCode, PageCopy>, locale: LocaleCode, 
  * generation time (every included locale ends up with a complete string set) rather
  * than left to runtime lookup logic, keeping `behavior.js` a simple, direct reader.
  */
-export function buildDataJs(form: FormDefinition, config: BuilderConfig): GeneratedFile {
+export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNames: FileNames): GeneratedFile {
   const defaultLocale = form.meta.defaultLocale;
   const localeCodes = form.locales.map((l) => l.code);
 
@@ -137,5 +138,5 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig): Genera
   };
 
   const contents = `var FORM_DATA = ${safeJsonForScript(dataObject)};\n`;
-  return { path: "data.js", contents };
+  return { path: fileNames.dataJs, contents };
 }

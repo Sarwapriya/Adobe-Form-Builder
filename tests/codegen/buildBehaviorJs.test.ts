@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
+import { resolveFileNames } from "../../src/codegen/fileNames.ts";
 import { buildFfHtml } from "../../src/codegen/html/buildFfHtml.ts";
 import { buildOcHtml } from "../../src/codegen/html/buildOcHtml.ts";
 import { buildDataJs } from "../../src/codegen/js/buildDataJs.ts";
@@ -25,9 +26,10 @@ describe("generated bundle (ff.html + data.js + behavior.js) wired together", ()
   it("populates question headings, answer text, and RTL attributes at runtime", () => {
     const form = sampleFormDefinition();
     const config = defaultBuilderConfig();
-    const html = buildFfHtml(form, config);
-    const dataJs = buildDataJs(form, config);
-    const behaviorJs = buildBehaviorJs();
+    const fileNames = resolveFileNames(form, config);
+    const html = buildFfHtml(form, config, fileNames);
+    const dataJs = buildDataJs(form, config, fileNames);
+    const behaviorJs = buildBehaviorJs(fileNames);
 
     runGeneratedBundle(html.contents, dataJs.contents, behaviorJs.contents);
 
@@ -44,9 +46,10 @@ describe("generated bundle (ff.html + data.js + behavior.js) wired together", ()
     try {
       const form = sampleFormDefinition();
       const config = defaultBuilderConfig();
-      const html = buildFfHtml(form, config);
-      const dataJs = buildDataJs(form, config);
-      const behaviorJs = buildBehaviorJs();
+      const fileNames = resolveFileNames(form, config);
+      const html = buildFfHtml(form, config, fileNames);
+      const dataJs = buildDataJs(form, config, fileNames);
+      const behaviorJs = buildBehaviorJs(fileNames);
 
       runGeneratedBundle(html.contents, dataJs.contents, behaviorJs.contents);
 
@@ -61,9 +64,10 @@ describe("generated bundle (ff.html + data.js + behavior.js) wired together", ()
   it("leaves the submit button disabled until required fields are filled", () => {
     const form = sampleFormDefinition();
     const config = defaultBuilderConfig();
-    const html = buildFfHtml(form, config);
-    const dataJs = buildDataJs(form, config);
-    const behaviorJs = buildBehaviorJs();
+    const fileNames = resolveFileNames(form, config);
+    const html = buildFfHtml(form, config, fileNames);
+    const dataJs = buildDataJs(form, config, fileNames);
+    const behaviorJs = buildBehaviorJs(fileNames);
 
     runGeneratedBundle(html.contents, dataJs.contents, behaviorJs.contents);
 
@@ -75,9 +79,10 @@ describe("generated bundle (ff.html + data.js + behavior.js) wired together", ()
     const form = sampleFormDefinition();
     form.fields.callingCode = { labelByLocale: { en_GB: "Mobile No." }, dropdownFirstEntryByLocale: { en_GB: "Select country" } };
     const config = defaultBuilderConfig();
-    const html = buildOcHtml(form, config);
-    const dataJs = buildDataJs(form, config);
-    const behaviorJs = buildBehaviorJs();
+    const fileNames = resolveFileNames(form, config);
+    const html = buildOcHtml(form, config, fileNames);
+    const dataJs = buildDataJs(form, config, fileNames);
+    const behaviorJs = buildBehaviorJs(fileNames);
 
     runGeneratedBundle(html.contents, dataJs.contents, behaviorJs.contents);
 

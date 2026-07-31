@@ -1,3 +1,4 @@
+import { resolveFileNames } from "../../codegen/fileNames.ts";
 import { generateSolution } from "../../codegen/generate.ts";
 import { zipAndDownload } from "../../codegen/zipAndDownload.ts";
 import { useBuilderStore } from "../../store/builderStore.ts";
@@ -13,7 +14,8 @@ export function GenerateStep() {
 
   function handleGenerate() {
     const files = generateSolution(mapResult.form, config);
-    zipAndDownload(files, "form-solution.zip");
+    const { prefix } = resolveFileNames(mapResult.form, config);
+    zipAndDownload(files, `${prefix}.zip`);
   }
 
   return (

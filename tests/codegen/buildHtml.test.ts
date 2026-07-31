@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
+import { resolveFileNames } from "../../src/codegen/fileNames.ts";
 import { buildFfHtml } from "../../src/codegen/html/buildFfHtml.ts";
 import { buildOcHtml } from "../../src/codegen/html/buildOcHtml.ts";
-import { defaultBuilderConfig } from "../../src/codegen/types.ts";
+import { defaultBuilderConfig, type BuilderConfig } from "../../src/codegen/types.ts";
 import { sampleFormDefinition } from "./fixtures.ts";
 
 describe("buildFfHtml", () => {
   it("produces a parseable document with the expected structure and RTL attributes", () => {
     const form = sampleFormDefinition();
-    const file = buildFfHtml(form, defaultBuilderConfig());
-    expect(file.path).toBe("ff.html");
+    const config = defaultBuilderConfig();
+    const file = buildFfHtml(form, config, resolveFileNames(form, config));
+    expect(file.path).toBe("TEST-EN_FF.html");
 
     const doc = new DOMParser().parseFromString(file.contents, "text/html");
     expect(doc.documentElement.getAttribute("lang")).toBe("en");
@@ -39,8 +41,20 @@ describe("buildFfHtml", () => {
     expect(doc.querySelector("#Q1 h3 span")?.textContent).toBe("");
   });
 
+  it("references the resolved data/behavior/style file names in <head>/<script> tags", () => {
+    const form = sampleFormDefinition();
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+    const file = buildFfHtml(form, config, fileNames);
+    expect(file.contents).toContain(`href="${fileNames.css}"`);
+    expect(file.contents).toContain(`src="${fileNames.dataJs}"`);
+    expect(file.contents).toContain(`src="${fileNames.behaviorJs}"`);
+  });
+
   it("never leaks raw HTML-special characters from question/answer text into markup (text stays empty)", () => {
-    const file = buildFfHtml(sampleFormDefinition(), defaultBuilderConfig());
+    const form = sampleFormDefinition();
+    const config = defaultBuilderConfig();
+    const file = buildFfHtml(form, config, resolveFileNames(form, config));
     expect(file.contents).not.toContain("<script>alert(1)</script>");
     expect(file.contents).not.toContain("maliciousCode");
   });
@@ -48,22 +62,41 @@ describe("buildFfHtml", () => {
   it("sets dir=rtl and lang from the default locale when the source's default is RTL", () => {
     const form = sampleFormDefinition();
     form.meta.defaultLocale = "ar_AE";
-    const file = buildFfHtml(form, defaultBuilderConfig());
+    const config = defaultBuilderConfig();
+    const file = buildFfHtml(form, config, resolveFileNames(form, config));
     const doc = new DOMParser().parseFromString(file.contents, "text/html");
     expect(doc.documentElement.getAttribute("lang")).toBe("ar");
     expect(doc.documentElement.getAttribute("dir")).toBe("rtl");
   });
 
   it("includes the Adobe Launch script only when analytics is enabled", () => {
-    const withoutAnalytics = buildFfHtml(sampleFormDefinition(), defaultBuilderConfig());
+    const form = sampleFormDefinition();
+    const withoutAnalyticsConfig = defaultBuilderConfig();
+    const withoutAnalytics = buildFfHtml(form, withoutAnalyticsConfig, resolveFileNames(form, withoutAnalyticsConfig));
     expect(withoutAnalytics.contents).not.toContain("assets.adobedtm.com");
 
-    const withAnalytics = buildFfHtml(sampleFormDefinition(), {
+    const withAnalyticsConfig: BuilderConfig = {
       variants: ["ff"],
       apiEndpoint: "",
       analytics: { enabled: true, reportSuiteID: "rs", imsOrgID: "org", datastreamID: "ds" },
-    });
+    };
+    const withAnalytics = buildFfHtml(form, withAnalyticsConfig, resolveFileNames(form, withAnalyticsConfig));
     expect(withAnalytics.contents).toContain("assets.adobedtm.com");
+  });
+
+  it("includes favicon and custom-fonts <link> tags only when configured", () => {
+    const form = sampleFormDefinition();
+    const bare = buildFfHtml(form, defaultBuilderConfig(), resolveFileNames(form, defaultBuilderConfig()));
+    expect(bare.contents).not.toContain("shortcut icon");
+
+    const withAssetsConfig: BuilderConfig = {
+      variants: ["ff"],
+      faviconUrl: "https://example.com/favicon.png",
+      customFontsHref: "https://example.com/fonts.css",
+    };
+    const withAssets = buildFfHtml(form, withAssetsConfig, resolveFileNames(form, withAssetsConfig));
+    expect(withAssets.contents).toContain('<link rel="shortcut icon" href="https://example.com/favicon.png">');
+    expect(withAssets.contents).toContain('<link rel="stylesheet" href="https://example.com/fonts.css">');
   });
 });
 
@@ -72,7 +105,9 @@ describe("buildOcHtml", () => {
     const form = sampleFormDefinition();
     form.fields.callingCode = { labelByLocale: { en_GB: "Mobile No." }, dropdownFirstEntryByLocale: {} };
     form.fields.privacyPolicy = { textByLocale: { en_GB: "..." }, linkUrlByLocale: { en_GB: "https://x" } };
-    const file = buildOcHtml(form, defaultBuilderConfig());
+    const config = defaultBuilderConfig();
+    const file = buildOcHtml(form, config, resolveFileNames(form, config));
+    expect(file.path).toBe("TEST-EN_OC.html");
     const doc = new DOMParser().parseFromString(file.contents, "text/html");
 
     expect(doc.body.getAttribute("data-variant")).toBe("oc");

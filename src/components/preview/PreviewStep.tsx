@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { resolveFileNames } from "../../codegen/fileNames.ts";
 import { generateSolution } from "../../codegen/generate.ts";
 import { buildPreviewDocument } from "../../codegen/previewDocument.ts";
 import { useBuilderStore } from "../../store/builderStore.ts";
@@ -20,8 +21,9 @@ export function PreviewStep() {
     // rendering path), so it mounts the real generateSolution() output — this is the
     // same function the final "Generate" step calls, just fed to an iframe instead of
     // a zip download.
-    const files = generateSolution(mapResult.form, { ...config, variants: [previewVariant] });
-    const doc = buildPreviewDocument(files, previewVariant, previewLocale);
+    const previewConfig = { ...config, variants: [previewVariant] };
+    const files = generateSolution(mapResult.form, previewConfig);
+    const doc = buildPreviewDocument(files, previewVariant, previewLocale, resolveFileNames(mapResult.form, previewConfig));
     const blob = new Blob([doc], { type: "text/html" });
     const baseUrl = URL.createObjectURL(blob);
     setIframeUrl(baseUrl);

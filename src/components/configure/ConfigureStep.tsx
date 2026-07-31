@@ -39,6 +39,39 @@ export function ConfigureStep() {
       </div>
 
       <div className="field-row">
+        <label htmlFor="fileNamePrefix">Output file name prefix (optional)</label>
+        <input
+          id="fileNamePrefix"
+          type="text"
+          placeholder="Leave blank to derive from the workbook's subsidiary + language (e.g. SEIL-EN)"
+          value={config.fileNamePrefix ?? ""}
+          onChange={(e) => setConfig({ fileNamePrefix: e.target.value })}
+        />
+      </div>
+
+      <div className="field-row">
+        <label htmlFor="faviconUrl">Favicon URL (optional)</label>
+        <input
+          id="faviconUrl"
+          type="text"
+          placeholder="Leave blank to omit a favicon tag"
+          value={config.faviconUrl ?? ""}
+          onChange={(e) => setConfig({ faviconUrl: e.target.value })}
+        />
+      </div>
+
+      <div className="field-row">
+        <label htmlFor="customFontsHref">Custom fonts stylesheet URL (optional)</label>
+        <input
+          id="customFontsHref"
+          type="text"
+          placeholder="Leave blank to fall back to system fonts"
+          value={config.customFontsHref ?? ""}
+          onChange={(e) => setConfig({ customFontsHref: e.target.value })}
+        />
+      </div>
+
+      <div className="field-row">
         <label htmlFor="endpoint">Submission API endpoint (optional)</label>
         <input
           id="endpoint"

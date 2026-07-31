@@ -1,3 +1,4 @@
+import type { FileNames } from "../fileNames.ts";
 import type { GeneratedFile } from "../types.ts";
 // The reference CSS, copied near-verbatim (same class names, layout, and responsive
 // breakpoints) with its dangling asset references already patched to inline data-URI
@@ -84,6 +85,6 @@ const RTL_OVERRIDES = `
 }
 `;
 
-export function buildStyleCss(): GeneratedFile {
-  return { path: "style.css", contents: `${referenceCss}\n${RTL_OVERRIDES}` };
+export function buildStyleCss(fileNames: FileNames): GeneratedFile {
+  return { path: fileNames.css, contents: `${referenceCss}\n${RTL_OVERRIDES}` };
 }

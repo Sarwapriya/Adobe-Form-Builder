@@ -1,4 +1,5 @@
 import type { FormDefinition } from "../../form/formDefinition.ts";
+import type { FileNames } from "../fileNames.ts";
 import type { BuilderConfig, FormVariant } from "../types.ts";
 import { renderProfileFields } from "./fragments/renderProfileField.ts";
 import { renderQuestionModule } from "./fragments/renderQuestionModule.ts";
@@ -21,7 +22,7 @@ const ADOBE_LAUNCH_SCRIPT =
  * whether the privacy/subscribe checkboxes are present, and the submit-button
  * container (inline `.form_bottom_group` vs. OC's floating `.form_bottom_bar`).
  */
-export function renderPage(form: FormDefinition, config: BuilderConfig, variant: FormVariant): string {
+export function renderPage(form: FormDefinition, config: BuilderConfig, variant: FormVariant, fileNames: FileNames): string {
   const isOc = variant === "oc";
   const defaultLocaleInfo = form.locales.find((l) => l.code === form.meta.defaultLocale);
   const langSubtag = defaultLocaleInfo?.langSubtag ?? "en";
@@ -72,6 +73,8 @@ export function renderPage(form: FormDefinition, config: BuilderConfig, variant:
     : `<div class="form_bottom_group">${privacyBlock}${submitBlock}</div>`;
 
   const analyticsScript = config.analytics?.enabled ? ADOBE_LAUNCH_SCRIPT : "";
+  const faviconTag = config.faviconUrl ? `<link rel="shortcut icon" href="${config.faviconUrl}">` : "";
+  const fontsTag = config.customFontsHref ? `<link rel="stylesheet" href="${config.customFontsHref}">` : "";
 
   return `<!doctype html>
 <html lang="${langSubtag}" dir="${dir}">
@@ -79,7 +82,9 @@ export function renderPage(form: FormDefinition, config: BuilderConfig, variant:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title></title>
-<link rel="stylesheet" href="style.css">
+${faviconTag}
+${fontsTag}
+<link rel="stylesheet" href="${fileNames.css}">
 ${CDN_SCRIPTS}
 ${analyticsScript}
 </head>
@@ -108,8 +113,8 @@ ${analyticsScript}
 </div>
 </div></div>
 </section>
-<script src="data.js"></script>
-<script src="behavior.js"></script>
+<script src="${fileNames.dataJs}"></script>
+<script src="${fileNames.behaviorJs}"></script>
 </body>
 </html>
 `;
