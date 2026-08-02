@@ -60,11 +60,36 @@ describe("buildDataJs", () => {
     expect(FORM_DATA.param.analytics.enabled).toBe(false);
   });
 
-  it("includes a generic calling_codes table, not Samsung's subsidiary-routing table", () => {
+  it("includes a generic calling_codes table when no subsidiary is selected", () => {
     const file = buildFile();
     // eslint-disable-next-line no-new-func
     const FORM_DATA = new Function(`${file.contents}\nreturn FORM_DATA;`)();
     expect(Array.isArray(FORM_DATA.calling_codes)).toBe(true);
     expect(FORM_DATA.calling_codes.some((c: { countryCode: string }) => c.countryCode === "AE")).toBe(true);
+    expect(FORM_DATA.fields.en_GB.callingCodes).toBeUndefined();
+    expect(FORM_DATA.fields.en_GB.countryCodes).toBeUndefined();
+  });
+
+  it("populates per-locale callingCodes/countryCodes from the selected subsidiary, localized per locale", () => {
+    const file = buildFile({ ...defaultBuilderConfig(), subsidiaryCode: "SGE" });
+    // eslint-disable-next-line no-new-func
+    const FORM_DATA = new Function(`${file.contents}\nreturn FORM_DATA;`)();
+
+    const enCountryCodes = FORM_DATA.fields.en_GB.countryCodes;
+    expect(Array.isArray(enCountryCodes)).toBe(true);
+    expect(enCountryCodes.map((c: { countryCode: string }) => c.countryCode).sort()).toEqual([
+      "AE",
+      "BH",
+      "KW",
+      "OM",
+      "QA",
+    ]);
+    const enUae = enCountryCodes.find((c: { countryCode: string }) => c.countryCode === "AE");
+    expect(enUae.countryName).toBe("United Arab Emirates");
+
+    const arCallingCodes = FORM_DATA.fields.ar_AE.callingCodes;
+    const arUae = arCallingCodes.find((c: { countryCode: string }) => c.countryCode === "AE");
+    expect(arUae.countryName).toBe("الإمَارَات");
+    expect(arUae.mobileDigits).toBe(9);
   });
 });

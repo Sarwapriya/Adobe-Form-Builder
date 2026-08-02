@@ -72,6 +72,9 @@ export function buildBehaviorJs(fileNames: FileNames): GeneratedFile {
     var select = document.getElementById("callingCode");
     if (!select) return;
     var fields = FORM_DATA.fields[language];
+    // Prefer the subsidiary-specific list (present when a subsidiary code was selected
+    // in the builder) over the generic worldwide FORM_DATA.calling_codes table.
+    var entries = fields.callingCodes || FORM_DATA.calling_codes;
     select.innerHTML = "";
     var first = document.createElement("option");
     first.value = "";
@@ -79,14 +82,35 @@ export function buildBehaviorJs(fileNames: FileNames): GeneratedFile {
     first.disabled = true;
     first.selected = true;
     select.appendChild(first);
-    FORM_DATA.calling_codes.forEach(function (entry) {
+    entries.forEach(function (entry) {
       var opt = document.createElement("option");
       opt.value = entry.callingCode;
       opt.setAttribute("data-country-code", entry.countryCode);
       opt.setAttribute("data-mobile-digits", entry.mobileDigits);
-      opt.textContent = "+" + entry.callingCode + " " + entry.countryName;
+      opt.textContent = entry.countryName + " (+" + entry.callingCode + ")";
       select.appendChild(opt);
     });
+  }
+
+  function populateCountryCodeDropdown() {
+    var select = document.getElementById("countryCode");
+    if (!select) return;
+    var fields = FORM_DATA.fields[language];
+    var entries = fields.countryCodes;
+    if (!entries || !entries.length) return;
+    select.innerHTML = "";
+    entries.forEach(function (entry) {
+      var opt = document.createElement("option");
+      opt.value = entry.countryCode;
+      opt.textContent = entry.countryName;
+      select.appendChild(opt);
+    });
+    // Preselect the country matching the current locale, mirroring the reference.
+    var currentCountryCode = language.substring(language.indexOf("_") + 1);
+    var hasCurrentCountry = entries.some(function (entry) {
+      return entry.countryCode === currentCountryCode;
+    });
+    if (hasCurrentCountry) select.value = currentCountryCode;
   }
 
   function populateQuestions() {
@@ -333,6 +357,7 @@ export function buildBehaviorJs(fileNames: FileNames): GeneratedFile {
     setDirectionAndLang();
     populateProfileFields();
     populateCallingCodeDropdown();
+    populateCountryCodeDropdown();
     populateQuestions();
     populatePageCopy();
     populateMisc();

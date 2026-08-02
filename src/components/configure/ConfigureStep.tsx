@@ -1,10 +1,14 @@
 import type { FormVariant } from "../../codegen/types.ts";
+import { SUBSIDIARY_CODES, SUBSIDIARY_DETAIL, resolveSubsidiaryCountryName } from "../../form/subsidiaryData.ts";
 import { useBuilderStore } from "../../store/builderStore.ts";
 
 export function ConfigureStep() {
   const config = useBuilderStore((s) => s.config);
   const setConfig = useBuilderStore((s) => s.setConfig);
   const setStep = useBuilderStore((s) => s.setStep);
+  const form = useBuilderStore((s) => s.mapResult?.form);
+
+  const selectedSubsidiaryCountries = config.subsidiaryCode ? SUBSIDIARY_DETAIL[config.subsidiaryCode] : undefined;
 
   function toggleVariant(v: FormVariant) {
     const has = config.variants.includes(v);
@@ -47,6 +51,29 @@ export function ConfigureStep() {
           value={config.fileNamePrefix ?? ""}
           onChange={(e) => setConfig({ fileNamePrefix: e.target.value })}
         />
+      </div>
+
+      <div className="field-row">
+        <label htmlFor="subsidiaryCode">Subsidiary code</label>
+        <select
+          id="subsidiaryCode"
+          value={config.subsidiaryCode ?? ""}
+          onChange={(e) => setConfig({ subsidiaryCode: e.target.value })}
+        >
+          <option value="">None — use generic calling codes</option>
+          {SUBSIDIARY_CODES.map((code) => (
+            <option key={code} value={code}>
+              {code}
+            </option>
+          ))}
+        </select>
+        <p className="field-hint">
+          {selectedSubsidiaryCountries
+            ? `Populates the countryCode/callingCode dropdowns with: ${selectedSubsidiaryCountries
+                .map((c) => resolveSubsidiaryCountryName(c.countryName, form?.meta.defaultLocale ?? "en_GB", form?.meta.defaultLocale ?? "en_GB"))
+                .join(", ")}.`
+            : "Leave unset to use the generic worldwide calling-code list instead of a Samsung subsidiary's country list."}
+        </p>
       </div>
 
       <div className="field-row">

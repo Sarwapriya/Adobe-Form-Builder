@@ -1,5 +1,6 @@
-import { CALLING_CODES } from "../../form/callingCodes.ts";
+import { CALLING_CODES, findCallingCodeEntry } from "../../form/callingCodes.ts";
 import { resolveLocalizedText, type FormDefinition, type LocaleCode, type PageCopy } from "../../form/formDefinition.ts";
+import { SUBSIDIARY_DETAIL, resolveSubsidiaryCountryName } from "../../form/subsidiaryData.ts";
 import { answerDomKey } from "../domIds.ts";
 import type { FileNames } from "../fileNames.ts";
 import type { BuilderConfig, GeneratedFile } from "../types.ts";
@@ -39,6 +40,7 @@ function resolvePageCopy(map: Record<LocaleCode, PageCopy>, locale: LocaleCode, 
 export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNames: FileNames): GeneratedFile {
   const defaultLocale = form.meta.defaultLocale;
   const localeCodes = form.locales.map((l) => l.code);
+  const subsidiaryCountries = config.subsidiaryCode ? SUBSIDIARY_DETAIL[config.subsidiaryCode] : undefined;
 
   const fields: Record<LocaleCode, unknown> = {};
   const pageError: Record<LocaleCode, unknown> = {};
@@ -67,6 +69,25 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
       callingCodeDropdownFirstEntry: f.callingCode
         ? resolveLocalizedText(f.callingCode.dropdownFirstEntryByLocale, locale, defaultLocale)
         : "",
+      // Subsidiary-specific dropdown contents (present only when a subsidiary code is
+      // selected); behavior.js falls back to the generic top-level `calling_codes` table
+      // for the callingCode dropdown, and leaves countryCode unpopulated, when absent.
+      callingCodes: subsidiaryCountries
+        ? subsidiaryCountries
+            .filter((c) => c.callingCode !== "")
+            .map((c) => ({
+              callingCode: c.callingCode,
+              countryCode: c.countryCode,
+              countryName: resolveSubsidiaryCountryName(c.countryName, locale, defaultLocale),
+              mobileDigits: findCallingCodeEntry(c.countryCode)?.mobileDigits ?? (c.countryCode === "AE" ? 9 : 8),
+            }))
+        : undefined,
+      countryCodes: subsidiaryCountries
+        ? subsidiaryCountries.map((c) => ({
+            countryCode: c.countryCode,
+            countryName: resolveSubsidiaryCountryName(c.countryName, locale, defaultLocale),
+          }))
+        : undefined,
       privacyPolicy: f.privacyPolicy
         ? {
             text: resolveLocalizedText(f.privacyPolicy.textByLocale, locale, defaultLocale),

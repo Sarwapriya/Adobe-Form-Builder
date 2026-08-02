@@ -28,6 +28,14 @@ export interface BuilderConfig {
   faviconUrl?: string;
   /** URL/path for an additional `<link rel="stylesheet">` (e.g. a custom font sheet); omitted when blank. */
   customFontsHref?: string;
+  /**
+   * Samsung subsidiary code (see `form/subsidiaryData.ts`) selected by the builder user,
+   * typically pre-filled from the workbook's own "Subsidiary" metadata row when it
+   * matches a known code. When set, the generated form's countryCode/callingCode
+   * dropdowns are populated from that subsidiary's country list instead of the generic
+   * `CALLING_CODES` table.
+   */
+  subsidiaryCode?: string;
 }
 
 export function defaultBuilderConfig(): BuilderConfig {
@@ -38,5 +46,6 @@ export function defaultBuilderConfig(): BuilderConfig {
     fileNamePrefix: "",
     faviconUrl: "",
     customFontsHref: "",
+    subsidiaryCode: "",
   };
 }

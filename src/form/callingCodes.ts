@@ -1,16 +1,17 @@
 /**
  * A small, generic ISO-3166 + calling-code table bundled with the builder.
  *
- * The reference implementation's `country_subsidiary`/`subsidiary_detail` tables in
- * SGE-EN_F2H26.js are Samsung-org-specific plumbing (hundreds of subsidiary-routing
- * entries) and are not derived from the uploaded Excel — the Excel's `Lists` sheet has
- * no data-validation binding to it either, so it's reference-only, not a source of
- * truth. This table replaces that org-specific data with a plain, generic calling-code
- * list usable by any generated form's phone field.
+ * This is the *default* countryCode/callingCode dropdown source, used whenever the
+ * builder user hasn't selected a Samsung subsidiary code in the Configure step. The
+ * reference implementation's Samsung-org-specific `country_subsidiary`/`subsidiary_detail`
+ * tables (`Final_forms_format/SGE-EN_F2H26.js`) are transcribed separately in
+ * `subsidiaryData.ts` and take over the dropdown contents once a subsidiary is selected
+ * — see `codegen/js/buildDataJs.ts`.
  *
  * `mobileDigits` also replaces the reference's hardcoded `mobileNumberByCountry`
  * validator, which special-cased UAE=9 digits vs. everything else=8 digits — that rule
- * is made data-driven per country here instead.
+ * is made data-driven per country here instead, and is reused as a lookup (with the
+ * reference's UAE=9/else=8 rule as fallback) for subsidiary-driven entries too.
  */
 export interface CallingCodeEntry {
   countryCode: string; // ISO-3166 alpha-2
