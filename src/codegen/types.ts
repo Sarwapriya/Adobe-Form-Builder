@@ -28,14 +28,16 @@ export interface BuilderConfig {
   faviconUrl?: string;
   /** URL/path for an additional `<link rel="stylesheet">` (e.g. a custom font sheet); omitted when blank. */
   customFontsHref?: string;
-  /**
-   * Samsung subsidiary code (see `form/subsidiaryData.ts`) selected by the builder user,
-   * typically pre-filled from the workbook's own "Subsidiary" metadata row when it
-   * matches a known code. When set, the generated form's countryCode/callingCode
-   * dropdowns are populated from that subsidiary's country list instead of the generic
-   * `CALLING_CODES` table.
-   */
-  subsidiaryCode?: string;
+  /** Submission-tracking identifiers threaded into the generated FF/OC scripts' API
+   * request payload (`mapParam`, part of the byte-identical reference script), mirroring
+   * the reference's top-level `param` object. Each has no generic default — a real value
+   * must be entered by the builder user for the submitted payload to carry meaningful
+   * tracking data. */
+  project?: string;
+  channel?: { fullForm?: string; oneClick?: string };
+  channelDetail?: { fullForm?: string; oneClick?: string };
+  source?: { fullForm?: string; oneClick?: string };
+  voucherRequired?: "Y" | "N";
 }
 
 export function defaultBuilderConfig(): BuilderConfig {
@@ -46,6 +48,10 @@ export function defaultBuilderConfig(): BuilderConfig {
     fileNamePrefix: "",
     faviconUrl: "",
     customFontsHref: "",
-    subsidiaryCode: "",
+    project: "",
+    channel: { fullForm: "", oneClick: "" },
+    channelDetail: { fullForm: "", oneClick: "" },
+    source: { fullForm: "", oneClick: "" },
+    voucherRequired: "N",
   };
 }

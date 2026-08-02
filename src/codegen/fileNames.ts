@@ -17,7 +17,8 @@ export interface FileNames {
   prefix: string;
   css: string;
   dataJs: string;
-  behaviorJs: string;
+  ffJs: string;
+  ocJs: string;
   ffHtml: string;
   ocHtml: string;
 }
@@ -42,10 +43,10 @@ export function resolveFileNames(form: FormDefinition, config: BuilderConfig): F
     prefix,
     css: `${prefix}.css`,
     dataJs: `${prefix}.js`,
-    // Kept as one file shared by both variants (see buildBehaviorJs.ts) rather than the
-    // reference's duplicated `_FF.js`/`_OC.js` pair, so it gets its own distinct suffix
-    // instead of a variant one.
-    behaviorJs: `${prefix}_common.js`,
+    // Mirrors the reference's `_FF.js`/`_OC.js` pair: each variant gets its own behavior
+    // script (see buildVariantJs.ts) rather than a single shared file.
+    ffJs: `${prefix}_FF.js`,
+    ocJs: `${prefix}_OC.js`,
     ffHtml: `${prefix}_FF.html`,
     ocHtml: `${prefix}_OC.html`,
   };

@@ -6,30 +6,30 @@ import { defaultBuilderConfig, type FormVariant } from "../../src/codegen/types.
 import { sampleFormDefinition } from "./fixtures.ts";
 
 describe("generateSolution", () => {
-  it("FF-only config produces exactly the FF html, data.js, behavior.js, style.css", () => {
+  it("FF-only config produces exactly the FF html, FF js, data.js, style.css", () => {
     const form = sampleFormDefinition();
     const config = defaultBuilderConfig();
     const fileNames = resolveFileNames(form, config);
     const files = generateSolution(form, config);
-    expect(files.map((f) => f.path).sort()).toEqual([fileNames.css, fileNames.dataJs, fileNames.behaviorJs, fileNames.ffHtml].sort());
+    expect(files.map((f) => f.path).sort()).toEqual([fileNames.css, fileNames.dataJs, fileNames.ffJs, fileNames.ffHtml].sort());
   });
 
-  it("both-variants config produces exactly 5 files, no invented extras", () => {
+  it("both-variants config produces exactly 6 files, no invented extras", () => {
     const form = sampleFormDefinition();
     const config = { ...defaultBuilderConfig(), variants: ["ff", "oc"] as FormVariant[] };
     const fileNames = resolveFileNames(form, config);
     const files = generateSolution(form, config);
     expect(files.map((f) => f.path).sort()).toEqual(
-      [fileNames.css, fileNames.dataJs, fileNames.behaviorJs, fileNames.ffHtml, fileNames.ocHtml].sort(),
+      [fileNames.css, fileNames.dataJs, fileNames.ffJs, fileNames.ocJs, fileNames.ffHtml, fileNames.ocHtml].sort(),
     );
   });
 
-  it("OC-only config produces exactly the OC html, data.js, behavior.js, style.css", () => {
+  it("OC-only config produces exactly the OC html, OC js, data.js, style.css", () => {
     const form = sampleFormDefinition();
     const config = { ...defaultBuilderConfig(), variants: ["oc"] as FormVariant[] };
     const fileNames = resolveFileNames(form, config);
     const files = generateSolution(form, config);
-    expect(files.map((f) => f.path).sort()).toEqual([fileNames.css, fileNames.dataJs, fileNames.behaviorJs, fileNames.ocHtml].sort());
+    expect(files.map((f) => f.path).sort()).toEqual([fileNames.css, fileNames.dataJs, fileNames.ocJs, fileNames.ocHtml].sort());
   });
 
   it("matches the reference fixture snapshot (ff.html)", () => {

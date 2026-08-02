@@ -1,14 +1,10 @@
 import type { FormVariant } from "../../codegen/types.ts";
-import { SUBSIDIARY_CODES, SUBSIDIARY_DETAIL, resolveSubsidiaryCountryName } from "../../form/subsidiaryData.ts";
 import { useBuilderStore } from "../../store/builderStore.ts";
 
 export function ConfigureStep() {
   const config = useBuilderStore((s) => s.config);
   const setConfig = useBuilderStore((s) => s.setConfig);
   const setStep = useBuilderStore((s) => s.setStep);
-  const form = useBuilderStore((s) => s.mapResult?.form);
-
-  const selectedSubsidiaryCountries = config.subsidiaryCode ? SUBSIDIARY_DETAIL[config.subsidiaryCode] : undefined;
 
   function toggleVariant(v: FormVariant) {
     const has = config.variants.includes(v);
@@ -54,29 +50,6 @@ export function ConfigureStep() {
       </div>
 
       <div className="field-row">
-        <label htmlFor="subsidiaryCode">Subsidiary code</label>
-        <select
-          id="subsidiaryCode"
-          value={config.subsidiaryCode ?? ""}
-          onChange={(e) => setConfig({ subsidiaryCode: e.target.value })}
-        >
-          <option value="">None — use generic calling codes</option>
-          {SUBSIDIARY_CODES.map((code) => (
-            <option key={code} value={code}>
-              {code}
-            </option>
-          ))}
-        </select>
-        <p className="field-hint">
-          {selectedSubsidiaryCountries
-            ? `Populates the countryCode/callingCode dropdowns with: ${selectedSubsidiaryCountries
-                .map((c) => resolveSubsidiaryCountryName(c.countryName, form?.meta.defaultLocale ?? "en_GB", form?.meta.defaultLocale ?? "en_GB"))
-                .join(", ")}.`
-            : "Leave unset to use the generic worldwide calling-code list instead of a Samsung subsidiary's country list."}
-        </p>
-      </div>
-
-      <div className="field-row">
         <label htmlFor="faviconUrl">Favicon URL (optional)</label>
         <input
           id="faviconUrl"
@@ -107,6 +80,77 @@ export function ConfigureStep() {
           value={config.apiEndpoint ?? ""}
           onChange={(e) => setConfig({ apiEndpoint: e.target.value })}
         />
+      </div>
+
+      <div className="field-row">
+        <label htmlFor="project">Project code (optional)</label>
+        <input
+          id="project"
+          type="text"
+          placeholder="Leave blank to omit from the submission payload"
+          value={config.project ?? ""}
+          onChange={(e) => setConfig({ project: e.target.value })}
+        />
+      </div>
+
+      <div className="field-row">
+        <label>Channel (optional)</label>
+        <input
+          type="text"
+          placeholder="Full Form channel"
+          value={config.channel?.fullForm ?? ""}
+          onChange={(e) => setConfig({ channel: { ...config.channel, fullForm: e.target.value } })}
+        />
+        <input
+          type="text"
+          placeholder="One-Click channel"
+          value={config.channel?.oneClick ?? ""}
+          onChange={(e) => setConfig({ channel: { ...config.channel, oneClick: e.target.value } })}
+        />
+      </div>
+
+      <div className="field-row">
+        <label>Channel detail (optional)</label>
+        <input
+          type="text"
+          placeholder="Full Form channel detail"
+          value={config.channelDetail?.fullForm ?? ""}
+          onChange={(e) => setConfig({ channelDetail: { ...config.channelDetail, fullForm: e.target.value } })}
+        />
+        <input
+          type="text"
+          placeholder="One-Click channel detail"
+          value={config.channelDetail?.oneClick ?? ""}
+          onChange={(e) => setConfig({ channelDetail: { ...config.channelDetail, oneClick: e.target.value } })}
+        />
+      </div>
+
+      <div className="field-row">
+        <label>Source (optional)</label>
+        <input
+          type="text"
+          placeholder="Full Form source"
+          value={config.source?.fullForm ?? ""}
+          onChange={(e) => setConfig({ source: { ...config.source, fullForm: e.target.value } })}
+        />
+        <input
+          type="text"
+          placeholder="One-Click source"
+          value={config.source?.oneClick ?? ""}
+          onChange={(e) => setConfig({ source: { ...config.source, oneClick: e.target.value } })}
+        />
+      </div>
+
+      <div className="field-row">
+        <div className="checkbox-row">
+          <input
+            type="checkbox"
+            id="voucherRequired"
+            checked={config.voucherRequired === "Y"}
+            onChange={(e) => setConfig({ voucherRequired: e.target.checked ? "Y" : "N" })}
+          />
+          <label htmlFor="voucherRequired">Voucher required</label>
+        </div>
       </div>
 
       <div className="field-row">

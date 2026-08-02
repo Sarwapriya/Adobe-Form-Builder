@@ -15,18 +15,10 @@ describe("buildPreviewDocument", () => {
     const doc = buildPreviewDocument(files, "ff", "en_GB", fileNames);
     expect(doc).not.toContain(`href="${fileNames.css}"`);
     expect(doc).not.toContain(`src="${fileNames.dataJs}"`);
-    expect(doc).not.toContain(`src="${fileNames.behaviorJs}"`);
+    expect(doc).not.toContain(`src="${fileNames.ffJs}"`);
     expect(doc).toContain("<style>");
-    expect(doc).toContain("var FORM_DATA");
-    expect(doc).toContain("FORM_DATA.param");
-  });
-
-  it("injects a __PREVIEW_LANG__ override instead of relying on a blob: URL query string", () => {
-    const form = sampleFormDefinition();
-    const config = { ...defaultBuilderConfig(), variants: ["ff"] as FormVariant[] };
-    const files = generateSolution(form, config);
-    const doc = buildPreviewDocument(files, "ff", "ar_AE", resolveFileNames(form, config));
-    expect(doc).toContain('window.__PREVIEW_LANG__ = "ar_AE"');
+    expect(doc).toContain("const fields = ");
+    expect(doc).toContain("const param = ");
   });
 
   it("throws a clear error when the requested variant wasn't generated", () => {

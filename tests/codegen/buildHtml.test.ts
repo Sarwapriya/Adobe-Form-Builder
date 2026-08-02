@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { resolveFileNames } from "../../src/codegen/fileNames.ts";
 import { buildFfHtml } from "../../src/codegen/html/buildFfHtml.ts";
 import { buildOcHtml } from "../../src/codegen/html/buildOcHtml.ts";
-import { defaultBuilderConfig, type BuilderConfig } from "../../src/codegen/types.ts";
+import { defaultBuilderConfig } from "../../src/codegen/types.ts";
 import { sampleFormDefinition } from "./fixtures.ts";
 
 describe("buildFfHtml", () => {
@@ -16,7 +16,6 @@ describe("buildFfHtml", () => {
     const doc = new DOMParser().parseFromString(file.contents, "text/html");
     expect(doc.documentElement.getAttribute("lang")).toBe("en");
     expect(doc.documentElement.getAttribute("dir")).toBe("ltr");
-    expect(doc.body.getAttribute("data-variant")).toBe("ff");
 
     // Profile fields present per fixture (email + submitButton only; no firstName/lastName/callingCode).
     expect(doc.querySelector("#email")).not.toBeNull();
@@ -34,10 +33,22 @@ describe("buildFfHtml", () => {
     expect(doc.querySelector("#Q1A1")).not.toBeNull();
     expect(doc.querySelector("#Q1A1")?.getAttribute("value")).toBe("A1");
 
+    // Every submittable element is marked data-pt-api="y" (read by the reference
+    // FF.js/OC.js scripts' data-pt-api scan to build the submission payload).
+    expect(doc.querySelector("#email")?.getAttribute("data-pt-api")).toBe("y");
+    expect(doc.querySelector("#Q1A1")?.getAttribute("data-pt-api")).toBe("y");
+    expect(doc.querySelector("#Q3 textarea")?.getAttribute("data-pt-api")).toBe("y");
+
+    // No Parsley/required attributes on question inputs — the reference gates
+    // questions purely through its own hardcoded enableDisableSubmit(), not Parsley.
+    expect(doc.querySelector("#Q1A1")?.hasAttribute("data-parsley-required")).toBe(false);
+    expect(doc.querySelector("#Q1A1")?.hasAttribute("required")).toBe(false);
+    expect(doc.querySelector("#Q2A1")?.hasAttribute("data-parsley-multiple")).toBe(false);
+
     // No privacy checkbox rendered since the fixture has no privacyPolicy field.
     expect(doc.querySelector("#privacyPolicy")).toBeNull();
 
-    // All text nodes stay empty — text is injected at runtime by behavior.js.
+    // All text nodes stay empty — text is injected at runtime by the reference script.
     expect(doc.querySelector("#Q1 h3 span")?.textContent).toBe("");
   });
 
@@ -48,7 +59,7 @@ describe("buildFfHtml", () => {
     const file = buildFfHtml(form, config, fileNames);
     expect(file.contents).toContain(`href="${fileNames.css}"`);
     expect(file.contents).toContain(`src="${fileNames.dataJs}"`);
-    expect(file.contents).toContain(`src="${fileNames.behaviorJs}"`);
+    expect(file.contents).toContain(`src="${fileNames.ffJs}"`);
   });
 
   it("never leaks raw HTML-special characters from question/answer text into markup (text stays empty)", () => {
@@ -69,34 +80,14 @@ describe("buildFfHtml", () => {
     expect(doc.documentElement.getAttribute("dir")).toBe("rtl");
   });
 
-  it("includes the Adobe Launch script only when analytics is enabled", () => {
+  it("always includes the reference's exact static head/skeleton (title, favicon, fonts, Adobe Launch, T&C link)", () => {
     const form = sampleFormDefinition();
-    const withoutAnalyticsConfig = defaultBuilderConfig();
-    const withoutAnalytics = buildFfHtml(form, withoutAnalyticsConfig, resolveFileNames(form, withoutAnalyticsConfig));
-    expect(withoutAnalytics.contents).not.toContain("assets.adobedtm.com");
-
-    const withAnalyticsConfig: BuilderConfig = {
-      variants: ["ff"],
-      apiEndpoint: "",
-      analytics: { enabled: true, reportSuiteID: "rs", imsOrgID: "org", datastreamID: "ds" },
-    };
-    const withAnalytics = buildFfHtml(form, withAnalyticsConfig, resolveFileNames(form, withAnalyticsConfig));
-    expect(withAnalytics.contents).toContain("assets.adobedtm.com");
-  });
-
-  it("includes favicon and custom-fonts <link> tags only when configured", () => {
-    const form = sampleFormDefinition();
-    const bare = buildFfHtml(form, defaultBuilderConfig(), resolveFileNames(form, defaultBuilderConfig()));
-    expect(bare.contents).not.toContain("shortcut icon");
-
-    const withAssetsConfig: BuilderConfig = {
-      variants: ["ff"],
-      faviconUrl: "https://example.com/favicon.png",
-      customFontsHref: "https://example.com/fonts.css",
-    };
-    const withAssets = buildFfHtml(form, withAssetsConfig, resolveFileNames(form, withAssetsConfig));
-    expect(withAssets.contents).toContain('<link rel="shortcut icon" href="https://example.com/favicon.png">');
-    expect(withAssets.contents).toContain('<link rel="stylesheet" href="https://example.com/fonts.css">');
+    const file = buildFfHtml(form, defaultBuilderConfig(), resolveFileNames(form, defaultBuilderConfig()));
+    expect(file.contents).toContain("<title>Samsung</title>");
+    expect(file.contents).toContain("https://res6.mena2p.crm.samsung.com/res/tracking/Favicon.png");
+    expect(file.contents).toContain("samsungSS_fonts_2026.css");
+    expect(file.contents).toContain("assets.adobedtm.com");
+    expect(file.contents).toContain("* Terms and conditions apply.");
   });
 });
 
@@ -110,7 +101,6 @@ describe("buildOcHtml", () => {
     expect(file.path).toBe("TEST-EN_OC.html");
     const doc = new DOMParser().parseFromString(file.contents, "text/html");
 
-    expect(doc.body.getAttribute("data-variant")).toBe("oc");
     expect(doc.querySelector("#email")).toBeNull();
     expect(doc.querySelector("#firstName")).toBeNull();
     expect(doc.querySelector("#callingCode")).not.toBeNull();
@@ -118,5 +108,7 @@ describe("buildOcHtml", () => {
     expect(doc.querySelector(".form_bottom_bar#formBottomBar")).not.toBeNull();
     expect(doc.querySelector(".form_bottom_group")).toBeNull();
     expect(doc.querySelector(".container_oc")).not.toBeNull();
+    // OC-only heading the reference's setPageContent()/setFieldData() write into.
+    expect(doc.querySelector(".top_cont h2 span")).not.toBeNull();
   });
 });

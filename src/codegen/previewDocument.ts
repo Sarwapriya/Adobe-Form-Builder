@@ -10,26 +10,30 @@ import type { FormVariant, GeneratedFile } from "./types.ts";
  * separately hand-written rendering path) and can never diverge from the downloaded
  * output. Takes the same `FileNames` the generator used, so the substitution always
  * targets whatever names were actually written into the HTML.
+ *
+ * `previewLocale` is accepted but no longer wired into the iframe: the FF.js/OC.js
+ * scripts are now byte-identical copies of the reference (see buildFfJs.ts/
+ * buildOcJs.ts), which only ever resolve the language from a real `?lang=` URL query
+ * parameter — something a `blob:` URL can't reliably carry. The preview always renders
+ * the form's fallback/default locale; locale switching still works correctly on the
+ * real downloaded/deployed form, which is what actually ships.
  */
 export function buildPreviewDocument(
   files: GeneratedFile[],
   variant: FormVariant,
-  previewLocale: string,
+  _previewLocale: string,
   fileNames: FileNames,
 ): string {
   const htmlPath = variant === "ff" ? fileNames.ffHtml : fileNames.ocHtml;
+  const jsPath = variant === "ff" ? fileNames.ffJs : fileNames.ocJs;
   const html = files.find((f) => f.path === htmlPath)?.contents;
   const css = files.find((f) => f.path === fileNames.css)?.contents ?? "";
   const dataJs = files.find((f) => f.path === fileNames.dataJs)?.contents ?? "";
-  const behaviorJs = files.find((f) => f.path === fileNames.behaviorJs)?.contents ?? "";
+  const behaviorJs = files.find((f) => f.path === jsPath)?.contents ?? "";
   if (!html) throw new Error(`No generated ${htmlPath} file to preview.`);
-
-  // The preview is served from a blob: URL, which can't carry a working "?lang="
-  // query string — set the override global behavior.js's getLanguage() checks first.
-  const langOverride = `<script>window.__PREVIEW_LANG__ = ${JSON.stringify(previewLocale)};</script>`;
 
   return html
     .replace(`<link rel="stylesheet" href="${fileNames.css}">`, `<style>${css}</style>`)
-    .replace(`<script src="${fileNames.dataJs}"></script>`, `${langOverride}\n<script>${dataJs}</script>`)
-    .replace(`<script src="${fileNames.behaviorJs}"></script>`, `<script>${behaviorJs}</script>`);
+    .replace(`<script src="${fileNames.dataJs}"></script>`, `<script>${dataJs}</script>`)
+    .replace(`<script src="${jsPath}"></script>`, `<script>${behaviorJs}</script>`);
 }

@@ -5,7 +5,6 @@ import { mapWorkbook, type MapResult } from "../excel/mapper.ts";
 import { validateWorkbook } from "../excel/validator.ts";
 import type { Issue, ValidationResult } from "../excel/types.ts";
 import type { LocaleCode } from "../form/formDefinition.ts";
-import { SUBSIDIARY_DETAIL } from "../form/subsidiaryData.ts";
 
 export type WizardStep = "upload" | "preview" | "configure" | "generate";
 
@@ -54,11 +53,6 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       (i) => i.severity === "error" && i.sheet === "",
     );
 
-    // Pre-fill the subsidiary code from the workbook's own "Subsidiary" metadata row
-    // when it matches a known code; otherwise leave it for manual selection in Configure.
-    const detectedSubsidiary = mapResult.form.meta.subsidiary.trim().toUpperCase();
-    const matchedSubsidiary = SUBSIDIARY_DETAIL[detectedSubsidiary] ? detectedSubsidiary : "";
-
     set({
       fileName: file.name,
       mapResult,
@@ -66,7 +60,6 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       previewLocale: mapResult.form.meta.defaultLocale,
       step: "preview",
       loadError: parserFileError ? parserFileError.message : null,
-      config: { ...get().config, subsidiaryCode: matchedSubsidiary },
     });
   },
 

@@ -1,20 +1,26 @@
-import { CALLING_CODES, findCallingCodeEntry } from "../../form/callingCodes.ts";
 import { resolveLocalizedText, type FormDefinition, type LocaleCode, type PageCopy } from "../../form/formDefinition.ts";
-import { SUBSIDIARY_DETAIL, resolveSubsidiaryCountryName } from "../../form/subsidiaryData.ts";
+import { COUNTRY_SUBSIDIARY, SUBSIDIARY_DETAIL } from "../../form/subsidiaryData.ts";
 import { answerDomKey } from "../domIds.ts";
 import type { FileNames } from "../fileNames.ts";
 import type { BuilderConfig, GeneratedFile } from "../types.ts";
 import { safeJsonForScript } from "./escaping.ts";
 
-/** Excel supplies no per-locale translations for Parsley validation/modal copy, so a
- * single generic English set is used for every included locale — a documented
- * limitation, not a bug (there is no source data to translate from). */
-const DEFAULT_VALIDATION_MESSAGES = {
-  requiredField: "This field is required.",
-  email: "Please enter a valid email address.",
-  mobileNumber: "Please enter a valid mobile number.",
-  modalMessage1: "Are you sure you want to submit?",
-  modalMessage2: "You won't be able to change your answers after this.",
+/** Neither the workbook nor the schema carries per-locale translations for these —
+ * the reference itself only ever ships one generic English set, so this mirrors that
+ * (a documented limitation, not a bug: there is no source data to translate from). */
+const VALIDATION_MESSAGES = {
+  emailError: "Please enter a valid Email address",
+  firstNameError: "Only letters are allowed",
+  lastNameError: "Only letters are allowed",
+  callingCodeError: "Please select a value",
+  mobileNumberType: "Only digits are allowed",
+  mobileNumberLength: "Must be 9 or 10 digits",
+  mobileNumberError: "Enter a valid mobile number",
+  zipCodeError: "Please enter a valid ZIP code of 5 to 9 characters",
+  reCaptchaRequired: "Please complete reCaptcha verification",
+  apiError: "Something went wrong. Please try again later.",
+  modalMessage_1: "Are you sure you want to submit?",
+  modalMessage_2: "You won't be able to change your answers after this.",
   modalButtonYes: "Yes, submit",
   modalButtonNo: "No, go back",
 };
@@ -31,96 +37,68 @@ function resolvePageCopy(map: Record<LocaleCode, PageCopy>, locale: LocaleCode, 
 }
 
 /**
- * Builds `data.js`: the per-locale text/data constants that `behavior.js` reads at
- * runtime to populate the (otherwise text-empty) generated HTML — mirroring the
- * reference's `SGE-EN_F2H26.js` shape. Fallback-to-default-locale is baked in here at
- * generation time (every included locale ends up with a complete string set) rather
- * than left to runtime lookup logic, keeping `behavior.js` a simple, direct reader.
+ * Builds the data file (`{prefix}.js`): the bare top-level `const`s the byte-identical
+ * `buildFfJs.ts`/`buildOcJs.ts` scripts read at runtime — same names and shape as the
+ * reference's `SGE-EN_F2H26.js` (`page_error`, `fields`, `questions`, `answers`,
+ * `validation_messages`, `country_subsidiary`, `subsidiary_detail`, `param`), not the
+ * `FORM_DATA` wrapper object used previously. `country_subsidiary`/`subsidiary_detail`
+ * are embedded in full (see `form/subsidiaryData.ts`) rather than filtered to one
+ * selected subsidiary — the reference scripts resolve the right subsidiary themselves,
+ * at runtime, from the active locale's own country suffix.
  */
 export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNames: FileNames): GeneratedFile {
   const defaultLocale = form.meta.defaultLocale;
   const localeCodes = form.locales.map((l) => l.code);
-  const subsidiaryCountries = config.subsidiaryCode ? SUBSIDIARY_DETAIL[config.subsidiaryCode] : undefined;
 
   const fields: Record<LocaleCode, unknown> = {};
   const pageError: Record<LocaleCode, unknown> = {};
   const questions: Record<LocaleCode, unknown> = {};
   const answers: Record<LocaleCode, unknown> = {};
-  const validationMessages: Record<LocaleCode, typeof DEFAULT_VALIDATION_MESSAGES> = {};
+  const validationMessages: Record<LocaleCode, typeof VALIDATION_MESSAGES> = {};
 
   for (const locale of localeCodes) {
     const f = form.fields;
-    const label: Record<string, string> = {};
-    if (f.email) label.email = resolveLocalizedText(f.email.labelByLocale, locale, defaultLocale);
-    if (f.firstName) label.firstName = resolveLocalizedText(f.firstName.labelByLocale, locale, defaultLocale);
-    if (f.lastName) label.lastName = resolveLocalizedText(f.lastName.labelByLocale, locale, defaultLocale);
-    if (f.countryCode) label.countryCode = resolveLocalizedText(f.countryCode.labelByLocale, locale, defaultLocale);
-    if (f.callingCode) label.callingCode = resolveLocalizedText(f.callingCode.labelByLocale, locale, defaultLocale);
-
-    const extra: Record<string, string> = {};
-    if (f.extraFieldsByLocale) {
-      for (const [key, map] of Object.entries(f.extraFieldsByLocale)) {
-        extra[key] = resolveLocalizedText(map, locale, defaultLocale);
-      }
-    }
 
     fields[locale] = {
-      label,
+      headingBeforeBreakFF: "",
+      headingAfterBreakFF: "",
+      headingBeforeBreak: f.headingBeforeBreakByLocale ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale) : "",
+      headingAfterBreak: f.headingAfterBreakByLocale ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale) : "",
+      requiredField: f.requiredFieldNoteByLocale ? resolveLocalizedText(f.requiredFieldNoteByLocale, locale, defaultLocale) : "",
+      label: {
+        countryCode: f.countryCode ? resolveLocalizedText(f.countryCode.labelByLocale, locale, defaultLocale) : "",
+        email: f.email ? resolveLocalizedText(f.email.labelByLocale, locale, defaultLocale) : "",
+        firstName: f.firstName ? resolveLocalizedText(f.firstName.labelByLocale, locale, defaultLocale) : "",
+        lastName: f.lastName ? resolveLocalizedText(f.lastName.labelByLocale, locale, defaultLocale) : "",
+        callingCode: f.callingCode ? resolveLocalizedText(f.callingCode.labelByLocale, locale, defaultLocale) : "",
+        zipCode: "",
+      },
+      placeholder: {
+        email: f.email ? resolveLocalizedText(f.email.placeholderByLocale, locale, defaultLocale) : "",
+        firstName: f.firstName ? resolveLocalizedText(f.firstName.placeholderByLocale, locale, defaultLocale) : "",
+        lastName: f.lastName ? resolveLocalizedText(f.lastName.placeholderByLocale, locale, defaultLocale) : "",
+        mobileNumber: "",
+        zipCode: "",
+      },
       callingCodeDropdownFirstEntry: f.callingCode
         ? resolveLocalizedText(f.callingCode.dropdownFirstEntryByLocale, locale, defaultLocale)
         : "",
-      // Subsidiary-specific dropdown contents (present only when a subsidiary code is
-      // selected); behavior.js falls back to the generic top-level `calling_codes` table
-      // for the callingCode dropdown, and leaves countryCode unpopulated, when absent.
-      callingCodes: subsidiaryCountries
-        ? subsidiaryCountries
-            .filter((c) => c.callingCode !== "")
-            .map((c) => ({
-              callingCode: c.callingCode,
-              countryCode: c.countryCode,
-              countryName: resolveSubsidiaryCountryName(c.countryName, locale, defaultLocale),
-              mobileDigits: findCallingCodeEntry(c.countryCode)?.mobileDigits ?? (c.countryCode === "AE" ? 9 : 8),
-            }))
-        : undefined,
-      countryCodes: subsidiaryCountries
-        ? subsidiaryCountries.map((c) => ({
-            countryCode: c.countryCode,
-            countryName: resolveSubsidiaryCountryName(c.countryName, locale, defaultLocale),
-          }))
-        : undefined,
-      privacyPolicy: f.privacyPolicy
-        ? {
-            text: resolveLocalizedText(f.privacyPolicy.textByLocale, locale, defaultLocale),
-            linkUrl: resolveLocalizedText(f.privacyPolicy.linkUrlByLocale, locale, defaultLocale),
-          }
-        : undefined,
-      marketingOptin: f.marketingOptin
-        ? { text: resolveLocalizedText(f.marketingOptin.labelByLocale, locale, defaultLocale) }
-        : undefined,
-      termsAndConditions: f.termsAndConditions
-        ? {
-            text: resolveLocalizedText(f.termsAndConditions.textByLocale, locale, defaultLocale),
-            url: resolveLocalizedText(f.termsAndConditions.urlByLocale, locale, defaultLocale),
-          }
-        : undefined,
+      privacyPolicy: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.textByLocale, locale, defaultLocale) : "",
+      privacyPolicyLink: {
+        label: "",
+        image: "",
+        imageAlt: "",
+        url: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkUrlByLocale, locale, defaultLocale) : "",
+      },
+      subscribe: f.marketingOptin ? resolveLocalizedText(f.marketingOptin.labelByLocale, locale, defaultLocale) : "",
       submitButton: resolveLocalizedText(f.submitButton.labelByLocale, locale, defaultLocale),
-      headingBeforeBreak: f.headingBeforeBreakByLocale
-        ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale)
-        : "",
-      headingAfterBreak: f.headingAfterBreakByLocale
-        ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale)
-        : "",
-      requiredField: f.requiredFieldNoteByLocale
-        ? resolveLocalizedText(f.requiredFieldNoteByLocale, locale, defaultLocale)
-        : "",
+      hrTy: resolvePageCopy(form.thankYou, locale, defaultLocale),
       redirectAfterSuccessUrl: f.redirectAfterSuccessUrlByLocale
         ? resolveLocalizedText(f.redirectAfterSuccessUrlByLocale, locale, defaultLocale)
         : "",
-      thankYou: resolvePageCopy(form.thankYou, locale, defaultLocale),
-      extra,
     };
 
-    pageError[locale] = resolvePageCopy(form.pageError, locale, defaultLocale);
+    pageError[locale] = { hrErr: resolvePageCopy(form.pageError, locale, defaultLocale) };
 
     const questionsForLocale: Record<string, { heading: string; subheading: string }> = {};
     const answersForLocale: Record<string, Record<string, unknown>> = {};
@@ -141,23 +119,34 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
     questions[locale] = questionsForLocale;
     answers[locale] = answersForLocale;
 
-    validationMessages[locale] = DEFAULT_VALIDATION_MESSAGES;
+    validationMessages[locale] = VALIDATION_MESSAGES;
   }
 
-  const dataObject = {
-    page_error: pageError,
-    fields,
-    questions,
-    answers,
-    validation_messages: validationMessages,
-    calling_codes: CALLING_CODES,
-    param: {
-      apiEndpoint: config.apiEndpoint ?? "",
-      fallbackLanguage: defaultLocale,
-      analytics: config.analytics ?? { enabled: false },
-    },
-  };
+  const parts = [
+    ["page_error", pageError],
+    ["fields", fields],
+    ["questions", questions],
+    ["answers", answers],
+    ["validation_messages", validationMessages],
+    ["country_subsidiary", COUNTRY_SUBSIDIARY],
+    ["subsidiary_detail", SUBSIDIARY_DETAIL],
+    [
+      "param",
+      {
+        apiEndpoint: config.apiEndpoint ?? "",
+        channel: { fullForm: config.channel?.fullForm ?? "", oneClick: config.channel?.oneClick ?? "" },
+        channelDetail: { fullForm: config.channelDetail?.fullForm ?? "", oneClick: config.channelDetail?.oneClick ?? "" },
+        fallbackLanguage: defaultLocale,
+        project: config.project ?? "",
+        reCaptchaSiteKey: "",
+        redirectAfterSuccessInSecond: "5",
+        source: { fullForm: config.source?.fullForm ?? "", oneClick: config.source?.oneClick ?? "" },
+        voucherRequired: config.voucherRequired ?? "N",
+        analytics: config.analytics ?? { enabled: false },
+      },
+    ],
+  ] as const;
 
-  const contents = `var FORM_DATA = ${safeJsonForScript(dataObject)};\n`;
+  const contents = parts.map(([name, value]) => `const ${name} = ${safeJsonForScript(value)};`).join("\n\n") + "\n";
   return { path: fileNames.dataJs, contents };
 }

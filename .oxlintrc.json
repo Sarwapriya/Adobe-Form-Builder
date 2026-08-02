@@ -1,3 +1,3 @@
 {
-  "ignorePatterns": ["dist/**", "dist-sample-solution/**", "Final_forms_format/**"]
+  "ignorePatterns": ["dist/**", "dist-sample-solution/**", "Final_forms_format/**", "src/codegen/js/reference/**"]
 }
