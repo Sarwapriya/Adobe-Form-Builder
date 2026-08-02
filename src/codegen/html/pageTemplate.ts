@@ -9,11 +9,20 @@ const CDN_SCRIPTS =
   '<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/parsleyjs@2/dist/parsley.min.js"></script>\n' +
   '<script src="https://cdnjs.cloudflare.com/ajax/libs/libphonenumber-js/1.11.4/libphonenumber-js.min.js"></script>';
 
-// The following are hardcoded to the reference's literal values (favicon, fonts
-// stylesheet, Adobe Launch script, terms-and-conditions link) rather than sourced from
-// BuilderConfig — the generated FF.js/OC.js are byte-identical copies of the reference
-// scripts, so the HTML they run against needs to be the reference's own markup, not a
-// generic reskin of it.
+// Favicon/fonts/terms-link are hardcoded to the reference's literal values (inert
+// URLs/links, no executable behavior) rather than sourced from BuilderConfig — the
+// generated FF.js/OC.js are byte-identical copies of the reference scripts, so the
+// HTML they run against needs to be the reference's own markup, not a generic reskin.
+//
+// The Adobe Launch tag is different: it's Samsung's live production Adobe Experience
+// Platform tag, tied to Samsung's own domain/config. Loading it unconditionally (as
+// the reference's own HTML does) actively rewrites/clears the page in any browser
+// that isn't Samsung's real site — confirmed by driving a generated form in a real
+// browser, where it wiped the entire body down to an empty, display:none .container.
+// So this stays opt-in via `config.analytics.enabled`, same as before — the FF.js/
+// OC.js scripts already gate their own `_satellite.track(...)` calls on
+// `param.analytics.enabled` from the data file, so leaving the tag out entirely when
+// disabled doesn't leave any dangling reference to a script that was never loaded.
 const FAVICON_TAG = '<link rel="shortcut icon" href="https://res6.mena2p.crm.samsung.com/res/tracking/Favicon.png">';
 const FONTS_TAG = '<link rel="stylesheet" href="samsungSS_fonts_2026.css">';
 const ADOBE_LAUNCH_SCRIPT =
@@ -31,8 +40,9 @@ const termsLink = (extraClass: string) =>
  * heading is present, and the submit-button container (inline `.form_bottom_group` vs.
  * OC's floating `.form_bottom_bar`).
  */
-export function renderPage(form: FormDefinition, _config: BuilderConfig, variant: FormVariant, fileNames: FileNames): string {
+export function renderPage(form: FormDefinition, config: BuilderConfig, variant: FormVariant, fileNames: FileNames): string {
   const isOc = variant === "oc";
+  const analyticsScript = config.analytics?.enabled ? ADOBE_LAUNCH_SCRIPT : "";
   const defaultLocaleInfo = form.locales.find((l) => l.code === form.meta.defaultLocale);
   const langSubtag = defaultLocaleInfo?.langSubtag ?? "en";
   const dir = defaultLocaleInfo?.isRtl ? "rtl" : "ltr";
@@ -89,7 +99,7 @@ ${FAVICON_TAG}
 ${FONTS_TAG}
 <link rel="stylesheet" href="${fileNames.css}">
 ${CDN_SCRIPTS}
-${ADOBE_LAUNCH_SCRIPT}
+${analyticsScript}
 </head>
 <body>
 <div class="${isOc ? "container_oc" : "container"}">

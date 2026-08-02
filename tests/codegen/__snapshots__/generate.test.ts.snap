@@ -931,7 +931,50 @@ const subsidiary_detail = {
         "fr_FR": "Inde"
       }
     }
-  ]
+  ],
+  "SEIB": [],
+  "SELA": [],
+  "SEAD": [],
+  "SERC": [],
+  "SEDA": [],
+  "SSA": [],
+  "SEASA": [],
+  "SENZ": [],
+  "SEAS": [],
+  "SEAU": [],
+  "SENA": [],
+  "BANGLADESH": [],
+  "SEBN": [],
+  "SEROM": [],
+  "SEEA": [],
+  "SESP": [],
+  "SECH": [],
+  "SECA": [],
+  "SAMCOL": [],
+  "SEGR": [],
+  "SECZ": [],
+  "SEG": [],
+  "SEB": [],
+  "SEF": [],
+  "SEUK": [],
+  "SEHK": [],
+  "SEH": [],
+  "SEIN": [],
+  "SEI": [],
+  "SEJ": [],
+  "SECE": [],
+  "TSE": [],
+  "SRI LANKA": [],
+  "SEUC": [],
+  "SEM": [],
+  "SME": [],
+  "NEPAL": [],
+  "SEPR": [],
+  "SEPCO": [],
+  "SEPOL": [],
+  "SET": [],
+  "SEUZ": [],
+  "SAVINA": []
 };
 
 const param = {
@@ -973,7 +1016,7 @@ exports[`generateSolution > matches the reference fixture snapshot (ff.html) 1`]
 <script type="text/javascript" src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/parsleyjs@2/dist/parsley.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/libphonenumber-js/1.11.4/libphonenumber-js.min.js"></script>
-<script src="https://assets.adobedtm.com/72afb75f5516/dd6b57adea42/launch-b679a712f5a6.min.js" async></script>
+
 </head>
 <body>
 <div class="container">

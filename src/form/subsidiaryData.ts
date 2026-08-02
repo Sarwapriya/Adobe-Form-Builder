@@ -277,7 +277,10 @@ export const COUNTRY_SUBSIDIARY: Readonly<Record<string, string>> = {
   "ZW": "SSA"
 };
 
-export const SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCountryEntry[]>> = {
+/** The reference source's own `subsidiary_detail` — only the 11 subsidiaries relevant
+ * to its MENA campaign family, extracted verbatim (see `SUBSIDIARY_DETAIL` below for
+ * why the other 43 `COUNTRY_SUBSIDIARY` values need stub entries added on top of this). */
+const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCountryEntry[]>> = {
   "IRAN": [
     {
       "callingCode": "98",
@@ -764,6 +767,32 @@ export const SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCount
       }
     }
   ]
+};
+
+/**
+ * `COUNTRY_SUBSIDIARY` references 54 distinct subsidiary codes; `REFERENCE_SUBSIDIARY_DETAIL`
+ * only covers 11 of them. The reference's own `populateCountryCodeDropdown()` (in the
+ * byte-identical FF.js) does `subsidiary_detail[subsidiary].length` with no guard — so
+ * for any locale whose country resolves to one of the other 43 subsidiaries,
+ * `subsidiary_detail[...]` would be `undefined` and that `.length` access throws,
+ * which (caught by the script's own top-level try/catch) blanks the whole generated
+ * page. Since `country_subsidiary` covers essentially every real country — including
+ * plain "en_GB", the default source locale on every workbook — this isn't a rare edge
+ * case, it reproduces on the very first load of most real generated forms. Filling in
+ * the remaining subsidiaries with an empty country list (rather than inventing
+ * calling-code data we don't have) keeps the lookup defined, matching what the
+ * reference script expects, without touching its logic: the countryCode/callingCode
+ * dropdowns just end up empty for those subsidiaries instead of the whole page crashing.
+ */
+const STUB_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCountryEntry[]>> = Object.fromEntries(
+  [...new Set(Object.values(COUNTRY_SUBSIDIARY))]
+    .filter((code) => !(code in REFERENCE_SUBSIDIARY_DETAIL))
+    .map((code) => [code, []]),
+);
+
+export const SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCountryEntry[]>> = {
+  ...REFERENCE_SUBSIDIARY_DETAIL,
+  ...STUB_SUBSIDIARY_DETAIL,
 };
 
 export const SUBSIDIARY_CODES: readonly string[] = Object.keys(SUBSIDIARY_DETAIL).sort();

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { resolveFileNames } from "../../src/codegen/fileNames.ts";
 import { buildFfHtml } from "../../src/codegen/html/buildFfHtml.ts";
 import { buildOcHtml } from "../../src/codegen/html/buildOcHtml.ts";
-import { defaultBuilderConfig } from "../../src/codegen/types.ts";
+import { defaultBuilderConfig, type BuilderConfig } from "../../src/codegen/types.ts";
 import { sampleFormDefinition } from "./fixtures.ts";
 
 describe("buildFfHtml", () => {
@@ -80,14 +80,26 @@ describe("buildFfHtml", () => {
     expect(doc.documentElement.getAttribute("dir")).toBe("rtl");
   });
 
-  it("always includes the reference's exact static head/skeleton (title, favicon, fonts, Adobe Launch, T&C link)", () => {
+  it("always includes the reference's exact static head/skeleton (title, favicon, fonts, T&C link)", () => {
     const form = sampleFormDefinition();
     const file = buildFfHtml(form, defaultBuilderConfig(), resolveFileNames(form, defaultBuilderConfig()));
     expect(file.contents).toContain("<title>Samsung</title>");
     expect(file.contents).toContain("https://res6.mena2p.crm.samsung.com/res/tracking/Favicon.png");
     expect(file.contents).toContain("samsungSS_fonts_2026.css");
-    expect(file.contents).toContain("assets.adobedtm.com");
     expect(file.contents).toContain("* Terms and conditions apply.");
+  });
+
+  it("only includes the Adobe Launch tag when analytics is explicitly enabled — it's Samsung's live production tag and actively rewrites/clears the page outside Samsung's own site", () => {
+    const form = sampleFormDefinition();
+    const withoutAnalytics = buildFfHtml(form, defaultBuilderConfig(), resolveFileNames(form, defaultBuilderConfig()));
+    expect(withoutAnalytics.contents).not.toContain("assets.adobedtm.com");
+
+    const withAnalyticsConfig: BuilderConfig = {
+      ...defaultBuilderConfig(),
+      analytics: { enabled: true, reportSuiteID: "rs", imsOrgID: "org", datastreamID: "ds" },
+    };
+    const withAnalytics = buildFfHtml(form, withAnalyticsConfig, resolveFileNames(form, withAnalyticsConfig));
+    expect(withAnalytics.contents).toContain("assets.adobedtm.com");
   });
 });
 
