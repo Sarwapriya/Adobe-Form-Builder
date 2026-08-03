@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "backend"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -10,7 +13,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "generate-sample-solution": "tsx scripts/generate-sample-solution.ts"
+    "generate-sample-solution": "tsx scripts/generate-sample-solution.ts",
+    "dev:backend": "npm run dev --workspace=backend",
+    "build:backend": "npm run build --workspace=backend",
+    "start:backend": "npm run start --workspace=backend"
   },
   "dependencies": {
     "fflate": "^0.8.3",
