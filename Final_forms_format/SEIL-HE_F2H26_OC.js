@@ -11,11 +11,6 @@ $(document).ready(function ()
         // HTML Language
         $("html").attr("lang", language.substring(0, language.indexOf("_")));
 
-        // HTML Direction (RTL/LTR)
-        var rtlLangs = ["ar", "he", "ku", "fa", "ur", "yi"];
-        var langSubtag = language.substring(0, language.indexOf("_"));
-        $("html").attr("dir", rtlLangs.indexOf(langSubtag) !== -1 ? "rtl" : "ltr");
-
         // Error Message container content
         var heading = "",
             subHeading = "",
@@ -172,13 +167,12 @@ $(document).ready(function ()
             });
         });
     }
-	
+
 	function setAnswerDataFromparam(q01)
 	{
 		//isSubmitClicked = true;
 		$("#Q1"+q01).prop('checked', true);
 	}
-
     // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message
     function setValidationMessage()
     {
@@ -198,10 +192,6 @@ $(document).ready(function ()
         });
 
          $("#apiError").html(validation_messages[language]["apiError"]);
-        $("#submitIntentPopupMessage1").text(validation_messages[language]["modalMessage_1"]);
-        $("#submitIntentPopupMessage2").text(validation_messages[language]["modalMessage_2"]);
-        $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);
-        $("#submitIntentPopupNo").text(validation_messages[language]["modalButtonNo"]);
 		
 		$("input[data-parsley-mobile-number-by-country-message]").each(function()
         {
@@ -230,7 +220,7 @@ $(document).ready(function ()
             // If Calling Code is not blank
             if (text.callingCode != "")
             {
-                ddCallingCode.append($("<option></option>").val(text.callingCode).html(text.countryName[language] + " (+" + text.callingCode + ")"));
+                ddCallingCode.append($("<option></option>").val(text.callingCode).html(text.countryName[language] + " (" + text.callingCode + "+)"));
             }
         });
     }
@@ -251,7 +241,7 @@ $(document).ready(function ()
     // Function to enable Submit button if both Privacy Policy & Subscribe checkboxes are checked (else keep Submit button disabled)
     function enableDisableSubmit()
     {
-        if (($("#Q1A1").is(":checked") || $("#Q1A2").is(":checked") ||$("#Q1A3").is(":checked")))
+        if ($("#privacyPolicy").is(":checked") && ($("#Q1A1").is(":checked") || $("#Q1A2").is(":checked") ||$("#Q1A3").is(":checked")))
         {
             $("#btnSubmit").prop("disabled", false);
 
@@ -270,26 +260,15 @@ $(document).ready(function ()
         // Check whether any questions in the form have been answered
         submitModalAnsweredAny = $('[data-pt-api="y"][name^=Q]').filter((i, el) => el.checked).length > 0;
 
-		//submitModalWithsub = $("#subscribe").is(":checked");
         return !submitModalHasOpened && !submitModalAnsweredAny;
     }
 
-    function closeSubmitModalWithNo()
+    function closeSubmitModal()
     {
         if (submitModalElement)
         {
             submitModalElement.removeClass("popup--open");
         }
-    }
-	
-	function closeSubmitModalWithYes()
-    {
-		$("#subscribe").val("on");
-        if (submitModalElement)
-        {
-            submitModalElement.removeClass("popup--open");
-        }
-        submitModalHasOpened = false;
     }
 
     function showSubmitModal(resumeCallback)
@@ -353,17 +332,10 @@ $(document).ready(function ()
                 var callingCode = $("#callingCode").val();
                 if (!callingCode || callingCode === "0") return false;
 
-                // Check digit length by country: UAE allows 9 digits, others allow 8
-                var trimmedValue = value.replace(/\s/g, "");
-                if (callingCode === "971") {
-                    if (trimmedValue.length !== 9) return false;
-                } else {
-                    if (trimmedValue.length !== 8) return false;
-                }
-
+                var countryCode = callingCodeToCountry[callingCode];
                 var fullNumber = "+" + callingCode + value;
                 try {
-                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber);
+                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber, countryCode);
                     return phoneNumber && phoneNumber.isValid();
                 } catch (e) {
                     return false;
@@ -411,7 +383,7 @@ $(document).ready(function ()
         $("#mobileNumber").on("change", resetCallingCode);
 
         // Attach event to check Submit button state (enabled / disabled) on check / uncheck of Privacy Policy & Subscribe checkboxes
-        $("#Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
+        $("#privacyPolicy,#Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
 		//$("div.form_bottom_check_group input[type='checkbox'], #Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
         // Floating submit button (outside form) — trigger Parsley validation on click
         // $("#btnSubmit").on("click", function ()
@@ -451,7 +423,8 @@ $(document).ready(function ()
     {
 		//submitFlag = true;
         // Disable Submit button
-        $("#btnSubmit").attr("disabled", true).addClass("disabled");
+		$("#btnSubmit").attr("disabled", true).addClass("disabled");
+
 
         showOverlay();
 
@@ -502,8 +475,7 @@ $(document).ready(function ()
         $("#hrTy").css("display", "block");
 
         // Set Timeout for Redirection
-		window.top.location.href = fields[language]["redirectAfterSuccessUrl"];
-        //setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 10) * 1000));
+        setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 3) * 1000));
 
         hideOverlay();
 
@@ -636,7 +608,7 @@ $(document).ready(function ()
             apiCallErrorHandler(isSubmitClicked);
         }
     }
- // iOS or MacOS íŒë³„ í•¨ìˆ˜
+	// iOS or MacOS íŒë³„ í•¨ìˆ˜
     function isIOS() {
         var ua = navigator.userAgent || navigator.vendor || window.opera;
         var iOSClassic = /iPhone|iPad|iPod/.test(ua);
@@ -645,6 +617,7 @@ $(document).ready(function ()
         var hasMacUA = /Macintosh/.test(ua) && !iPadOS;
         return iOSClassic || iPadOS || MacOS || hasMacUA;
     }
+
     // Function to create Request data based on User Input & call method to trigger API
     function mapParam(userResponse, isSubmitClicked)
     {
@@ -666,7 +639,7 @@ $(document).ready(function ()
             last_name: userResponse["lastName"] || "",
             mid: "",
             pin_code: userResponse["zipCode"] || "",
-            privacy_policy_yn: "Y",//((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),
+            privacy_policy_yn:((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),
             project: param["project"],
             q01Answer: userResponse["Q1"],
             q02Answer: userResponse["Q2"],
@@ -691,7 +664,7 @@ $(document).ready(function ()
             recipientId: userResponse["recipientId"],
             registerDatetime: dtmCurrent.toISOString(),
             source: param["source"]["oneClick"],
-            subscribe_yn: "Y",//((isSubmitClicked === true) ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),
+            subscribe_yn: ((isSubmitClicked === true) ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),
             tm_yn: "",
             uniqueid: dtmCurrent.getTime() + "_" + crypto.randomUUID() + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),
             VoucherRequired: param["voucherRequired"],
@@ -793,14 +766,11 @@ $(document).ready(function ()
         userResponse["recipientId"] = recipientId;
 
         userResponse["language"] = language;
-		
 		userResponse["subscribe"] = $("#subscribe").val();
 		
         userResponse["channel"] = ch;
 
         userResponse["channel_detail"] = chd;
-
-        //userResponse["Q1"] = q01 === "" ? userResponse["Q1"]: q01;
 
         // Call function to map API Parameter with User Response & send data to server
         mapParam(userResponse, isSubmitClicked);
@@ -824,13 +794,14 @@ $(document).ready(function ()
         var countryCode = language.substring(language.indexOf("_") + 1);
 
 		//Coomment-CEJ-q01 
-        var q01 = frameUrlParam.get("q01") || "";	
+        var q01 = frameUrlParam.get("q01") || "";
 		
 		var ch = frameUrlParam.get("ch") || "";
 			
 		var chd = frameUrlParam.get("chd") || "";
 		
 		//var submitFlag = false;
+		
 
         setPageContent();
 
@@ -884,9 +855,9 @@ $(document).ready(function ()
         });
         $("form").parsley(parsleyConfig).on("form:submit", function ()
         {
-           validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
+            validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
 
-           return false;
+            return false;
         });
     }
     catch(err)

@@ -8,6 +8,57 @@ import type { GeneratedFile } from "../types.ts";
 import { REFERENCE_CSS as referenceCss } from "./referenceCssContent.ts";
 
 /**
+ * Language-specific font family overrides. The base CSS uses the English font
+ * families; this block switches to the correct Arabic/Hebrew variants based on
+ * the `dir` attribute.
+ */
+const FONT_OVERRIDES = `
+/* --- Language-specific font overrides --- */
+
+/* Arabic font overrides */
+[dir="rtl"] body,
+[dir="rtl"] html,
+[dir="rtl"] .top_cont h2,
+[dir="rtl"] .top_cont p,
+[dir="rtl"] .form_top_group,
+[dir="rtl"] .form_top_group input,
+[dir="rtl"] .form_top_group select,
+[dir="rtl"] .form_check_title h3,
+[dir="rtl"] .form_bottom_group button,
+[dir="rtl"] .form_bottom_bar button,
+[dir="rtl"] #hrTy,
+[dir="rtl"] #hrTy h3,
+[dir="rtl"] .popup__title,
+[dir="rtl"] .popup__desc,
+[dir="rtl"] .popup--alert .cta,
+[dir="rtl"] .fullform-submit-intent-popup .popup__contents,
+[dir="rtl"] .fullform-submit-intent-popup .cta {
+  font-family: 'SamsungSS Head Light Arabic', 'SamsungSS Body Regular Arabic', 'SamsungSS Head Bold Arabic', 'SamsungSS Body Bold Arabic', arial, sans-serif !important;
+}
+
+/* Hebrew font overrides */
+[dir="rtl"][lang="he"] body,
+[dir="rtl"][lang="he"] html,
+[dir="rtl"][lang="he"] .top_cont h2,
+[dir="rtl"][lang="he"] .top_cont p,
+[dir="rtl"][lang="he"] .form_top_group,
+[dir="rtl"][lang="he"] .form_top_group input,
+[dir="rtl"][lang="he"] .form_top_group select,
+[dir="rtl"][lang="he"] .form_check_title h3,
+[dir="rtl"][lang="he"] .form_bottom_group button,
+[dir="rtl"][lang="he"] .form_bottom_bar button,
+[dir="rtl"][lang="he"] #hrTy,
+[dir="rtl"][lang="he"] #hrTy h3,
+[dir="rtl"][lang="he"] .popup__title,
+[dir="rtl"][lang="he"] .popup__desc,
+[dir="rtl"][lang="he"] .popup--alert .cta,
+[dir="rtl"][lang="he"] .fullform-submit-intent-popup .popup__contents,
+[dir="rtl"][lang="he"] .fullform-submit-intent-popup .cta {
+  font-family: 'SamsungSS Head Light Hebrew', 'SamsungSS Body Regular Hebrew', 'SamsungSS Head Bold Hebrew', 'SamsungSS Body Bold Hebrew', arial, sans-serif !important;
+}
+`;
+
+/**
  * The reference stylesheet has zero real RTL handling (only an incidental, unrelated
  * `direction: rtl` on one popup icon) despite the spec requiring proper Arabic/Hebrew
  * support. This block is new: CSS logical properties handle most of the flip for free,
@@ -86,5 +137,5 @@ const RTL_OVERRIDES = `
 `;
 
 export function buildStyleCss(fileNames: FileNames): GeneratedFile {
-  return { path: fileNames.css, contents: `${referenceCss}\n${RTL_OVERRIDES}` };
+  return { path: fileNames.css, contents: `${referenceCss}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}` };
 }

@@ -30,7 +30,11 @@ export function renderQuestionModule(q: QuestionDefinition): string {
   }
 
   const inputType = q.controlType === "checkbox" ? "checkbox" : "radio";
-  const groupClass = q.controlType === "checkbox" ? "form_check_list_wrap" : "radio_group";
+  // Match the reference: radio with ≤3 answers uses radio_group (inline layout),
+  // radio with >3 answers uses form_check_list_wrap (grid layout) with radio_wrap
+  // children. Checkboxes always use form_check_list_wrap with form_check_list children.
+  const isRadioWithFewAnswers = q.controlType === "radio" && q.answers.length <= 3;
+  const groupClass = isRadioWithFewAnswers ? "radio_group" : "form_check_list_wrap";
   const wrapClass = q.controlType === "checkbox" ? "form_check_list" : "radio_wrap";
   // Matches the reference's Q1A1, which alone carries a (Parsley-inert, since nothing
   // declares it required) "must select one" error message — kept for exact parity.

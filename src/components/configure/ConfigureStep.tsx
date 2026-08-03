@@ -2,6 +2,7 @@ import type { FormVariant } from "../../codegen/types.ts";
 import { useBuilderStore } from "../../store/builderStore.ts";
 
 export function ConfigureStep() {
+  const mapResult = useBuilderStore((s) => s.mapResult)!;
   const config = useBuilderStore((s) => s.config);
   const setConfig = useBuilderStore((s) => s.setConfig);
   const setStep = useBuilderStore((s) => s.setStep);
@@ -151,6 +152,33 @@ export function ConfigureStep() {
           />
           <label htmlFor="voucherRequired">Voucher required</label>
         </div>
+      </div>
+
+      <div className="field-row">
+        <label>Question required status</label>
+        <p style={{ fontSize: "0.85em", color: "#666", marginBottom: 8 }}>
+          Uncheck to make a question optional (removes the <span className="star">*</span> marker).
+        </p>
+        {mapResult.form.questions.map((q) => (
+          <div className="checkbox-row" key={q.id}>
+            <input
+              type="checkbox"
+              id={`q-req-${q.id}`}
+              checked={config.questionRequired?.[q.id] ?? true}
+              onChange={(e) =>
+                setConfig({
+                  questionRequired: {
+                    ...config.questionRequired,
+                    [q.id]: e.target.checked,
+                  },
+                })
+              }
+            />
+            <label htmlFor={`q-req-${q.id}`}>
+              {q.id}: {q.headingByLocale["en_GB"] || "(no English text)"}
+            </label>
+          </div>
+        ))}
       </div>
 
       <div className="field-row">

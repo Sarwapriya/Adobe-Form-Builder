@@ -6,6 +6,7 @@ import type {
   PageCopy,
   ProfileFieldSet,
   QuestionDefinition,
+  ValidationMessageSet,
 } from "../form/formDefinition.ts";
 import { ENGLISH_LOCALE, resolveLocales, type UnresolvedLocale } from "./localeDetection.ts";
 import { isBracketPlaceholder, normalizeLoose } from "./textUtils.ts";
@@ -15,8 +16,9 @@ const SHEET_NAME = "Complete Translations";
 const ANSWER_MARKER_RE = /^\(\s*(single|multiple)\s+answers?\s*\)/i;
 const QUESTION_KEY_RE = /^q\d+$/i;
 const ANSWER_KEY_RE = /^a\d+$/i;
+const ERROR_MESSAGES_MARKER = normalizeLoose("Error Messages");
 
-type Section = "fields" | "pageError" | "thankYou";
+type Section = "fields" | "pageError" | "thankYou" | "validation";
 
 interface QuestionAccumulator {
   id: string;
@@ -126,6 +128,8 @@ export function mapWorkbook(parsed: ParsedWorkbook): MapResult {
   const thankYou: Record<LocaleCode, PageCopy> = {};
   const extraFields: Record<string, Record<LocaleCode, string>> = {};
 
+  const validationMessages: Record<LocaleCode, Record<string, string>> = {};
+
   const seenQuestionIds = new Set<string>();
   let currentSection: Section = "fields";
   let current: QuestionAccumulator | null = null;
@@ -232,6 +236,11 @@ export function mapWorkbook(parsed: ParsedWorkbook): MapResult {
         currentSection = "pageError";
         continue;
       }
+      if (/^error messages/i.test(row.englishText)) {
+        flushQuestion();
+        currentSection = "validation";
+        continue;
+      }
       // Benign no-op: spacer row, or a section sub-header like "Fields needed (English)"
       // / "Select correct values for this form" that isn't meant for automated reading.
       continue;
@@ -243,7 +252,24 @@ export function mapWorkbook(parsed: ParsedWorkbook): MapResult {
       continue;
     }
 
-    if (currentSection !== "fields" && PAGE_COPY_FIELD_BY_KEY.has(keyLoose)) {
+    // "Error Messages" section marker — switches to validation message collection
+    if (keyLoose === ERROR_MESSAGES_MARKER) {
+      flushQuestion();
+      currentSection = "validation";
+      continue;
+    }
+
+    // Handle validation/error message keys
+    if (currentSection === "validation" && keyLoose !== "") {
+      flushQuestion();
+      const textMap_ = textMap(row);
+      for (const [locale, text] of Object.entries(textMap_)) {
+        validationMessages[locale] = { ...validationMessages[locale], [keyLoose]: text };
+      }
+      continue;
+    }
+
+    if ((currentSection === "pageError" || currentSection === "thankYou") && PAGE_COPY_FIELD_BY_KEY.has(keyLoose)) {
       flushQuestion();
       setPageCopyField(currentSection, PAGE_COPY_FIELD_BY_KEY.get(keyLoose)!, textMap(row));
       continue;
@@ -277,7 +303,7 @@ export function mapWorkbook(parsed: ParsedWorkbook): MapResult {
     locales,
     questions,
     fields,
-    validationMessages: {},
+    validationMessages: validationMessages as Record<LocaleCode, ValidationMessageSet>,
     pageError,
     thankYou,
   };

@@ -38,6 +38,9 @@ export interface BuilderConfig {
   channelDetail?: { fullForm?: string; oneClick?: string };
   source?: { fullForm?: string; oneClick?: string };
   voucherRequired?: "Y" | "N";
+  /** Per-question required override: questionId → true/false. Undefined keeps the
+   * default (true). Used to make a question optional in the generated form. */
+  questionRequired?: Record<string, boolean>;
 }
 
 export function defaultBuilderConfig(): BuilderConfig {

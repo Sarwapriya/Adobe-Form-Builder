@@ -3,7 +3,9 @@ import type { Issue, ParsedWorkbook, RawRow, WorkbookMeta } from "./types.ts";
 import { normalize, normalizeLoose } from "./textUtils.ts";
 
 const TARGET_SHEET_NAME = normalizeLoose("Complete Translations");
+const SHEET_NAME_HINTS = ["translation", "complete", "translat"];
 const METADATA_SCAN_ROWS = 15;
+const HEADER_SCAN_ROWS = 10;
 
 export function isSupportedExcelFile(fileName: string): boolean {
   return /\.(xlsx|xls)$/i.test(fileName.trim());
@@ -35,7 +37,14 @@ export function parseWorkbook(buffer: ArrayBuffer, sourceFileName: string): Pars
     };
   }
 
-  const sheetName = workbook.SheetNames.find((n) => normalizeLoose(n) === TARGET_SHEET_NAME);
+  // Try exact match first, then fuzzy match on known hints
+  let sheetName = workbook.SheetNames.find((n) => normalizeLoose(n) === TARGET_SHEET_NAME);
+  if (!sheetName) {
+    sheetName = workbook.SheetNames.find((n) => {
+      const loose = normalizeLoose(n);
+      return SHEET_NAME_HINTS.some((hint) => loose.includes(hint));
+    });
+  }
   if (!sheetName) {
     return {
       sourceFileName,
@@ -47,7 +56,7 @@ export function parseWorkbook(buffer: ArrayBuffer, sourceFileName: string): Pars
         {
           severity: "error",
           sheet: "",
-          message: `No sheet named "Complete Translations" was found. Sheets present: ${workbook.SheetNames.join(", ")}.`,
+          message: `No sheet named "Complete Translations" (or similar) was found. Sheets present: ${workbook.SheetNames.join(", ")}.`,
         },
       ],
     };
@@ -101,21 +110,56 @@ interface ColumnLocation {
   headerIssues: Issue[];
 }
 
-/** Finds the header row (fuzzy match on "Original en_GB Text" / "Complete this
- * Translation Column"), and from it, the column indices for key/English/translation
- * C/D. Falls back to the observed-standard A/B/C/D layout, with a warning, if the
- * header text can't be located within the first few rows. */
+/** Various header text patterns that identify the English/source text column. */
+const ENGLISH_HEADER_HINTS = [
+  "originalengbtext",
+  "originaltext",
+  "sourcetext",
+  "englishtext",
+  "english",
+  "original",
+  "source",
+];
+
+/** Various header text patterns that identify a translation column. */
+const TRANSLATION_HEADER_HINTS = [
+  "completethistranslationcolumn",
+  "translationcolumn",
+  "translation",
+  "translatetext",
+  "targettext",
+  "target",
+];
+
+/** Finds the header row (fuzzy match on English source / translation column headers),
+ * and from it, the column indices for key/English/translation C/D. Falls back to the
+ * observed-standard A/B/C/D layout, with a warning, if the header text can't be
+ * located within the first few rows. */
 function locateColumns(grid: string[][], sheetName: string): ColumnLocation {
   const headerIssues: Issue[] = [];
 
-  for (let r = 0; r < Math.min(5, grid.length); r++) {
+  for (let r = 0; r < Math.min(HEADER_SCAN_ROWS, grid.length); r++) {
     const line = grid[r] ?? [];
-    const englishCol = line.findIndex((c) => normalizeLoose(c).includes("originalengbtext"));
+
+    // Find the English/source text column
+    let englishCol = -1;
+    for (let c = 0; c < line.length; c++) {
+      const loose = normalizeLoose(line[c]);
+      if (ENGLISH_HEADER_HINTS.some((hint) => loose.includes(hint))) {
+        englishCol = c;
+        break;
+      }
+    }
     if (englishCol === -1) continue;
 
+    // Find translation columns
     const translationCols: number[] = [];
     for (let c = 0; c < line.length; c++) {
-      if (normalizeLoose(line[c]).includes("completethistranslationcolumn")) translationCols.push(c);
+      if (c === englishCol) continue;
+      const loose = normalizeLoose(line[c]);
+      if (TRANSLATION_HEADER_HINTS.some((hint) => loose.includes(hint))) {
+        translationCols.push(c);
+      }
     }
     if (translationCols.length === 0) continue;
 
@@ -134,7 +178,7 @@ function locateColumns(grid: string[][], sheetName: string): ColumnLocation {
     sheet: sheetName,
     row: 1,
     message:
-      'Could not locate the "Original en_GB Text" / "Complete this Translation Column" headers within the first 5 rows; falling back to the standard A/B/C/D column layout.',
+      'Could not locate English/translation column headers within the first 10 rows; falling back to the standard A/B/C/D column layout.',
   });
   return { keyCol: 0, englishCol: 1, translationCCol: 2, translationDCol: 3, headerRowNumber: 1, headerIssues };
 }

@@ -107,6 +107,16 @@ export interface ValidationMessageSet {
   modalMessage2?: string;
   modalButtonYes?: string;
   modalButtonNo?: string;
+  emailError?: string;
+  firstNameError?: string;
+  lastNameError?: string;
+  callingCodeError?: string;
+  mobileNumberType?: string;
+  mobileNumberLength?: string;
+  mobileNumberError?: string;
+  zipCodeError?: string;
+  reCaptchaRequired?: string;
+  apiError?: string;
 }
 
 export interface FormDefinition {

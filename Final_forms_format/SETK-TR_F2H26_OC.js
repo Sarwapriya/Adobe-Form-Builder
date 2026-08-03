@@ -11,11 +11,6 @@ $(document).ready(function ()
         // HTML Language
         $("html").attr("lang", language.substring(0, language.indexOf("_")));
 
-        // HTML Direction (RTL/LTR)
-        var rtlLangs = ["ar", "he", "ku", "fa", "ur", "yi"];
-        var langSubtag = language.substring(0, language.indexOf("_"));
-        $("html").attr("dir", rtlLangs.indexOf(langSubtag) !== -1 ? "rtl" : "ltr");
-
         // Error Message container content
         var heading = "",
             subHeading = "",
@@ -98,26 +93,53 @@ $(document).ready(function ()
         $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()
         {
             // Label
-            var ckbLabel = $(this).find("label");
-
-            ckbLabel.html(fields[language][ckbLabel.attr("for")] + ckbLabel.html());
+           var ckbLabel = $(this).find("label");
+			ckbLabel.html(ckbLabel.html() + fields[language][ckbLabel.attr("for")] + fields[language][ckbLabel.attr("for") + "Link"]["star"]);
 
             // Link within Label
             var ckbLabelLink = ckbLabel.find("a");
 
             // Is present
             if(ckbLabelLink.length === 1)
-            {
-                ckbLabelLink.children("img").attr("alt", fields[language][ckbLabel.attr("for") + "Link"]["imageAlt"]);
-
-                ckbLabelLink.children("img").attr("src", fields[language][ckbLabel.attr("for") + "Link"]["image"]);
-
-                ckbLabelLink.html(fields[language][ckbLabel.attr("for") + "Link"]["label"] + ckbLabelLink.html());
+            {				
+				ckbLabelLink.html(fields[language][ckbLabel.attr("for") + "Link"]["label"] + ckbLabelLink.html());
 
                 ckbLabelLink.attr("href", fields[language][ckbLabel.attr("for") + "Link"]["url"]);
+				
             }
         });
+		$("div.form_bottom_bar").find("div.form_label").each(function()
+        {
+            // Label
+            var atag = $(this).find("a");
 
+            atag.html(fields[language][atag.attr("for")] + atag.html());
+
+
+            // Is present
+            if(atag.length === 1)
+            {
+				if(fields[language][atag.attr("for") + "Link"]["url"] === "")
+				{
+					atag.attr("style","display: none;");
+				}
+				else
+				{
+                atag.children("img").attr("alt", fields[language][atag.attr("for") + "Link"]["imageAlt"]);
+
+                atag.children("img").attr("src", fields[language][atag.attr("for") + "Link"]["image"]);
+				
+                atag.children("img").attr("class", fields[language][atag.attr("for") + "Link"]["class"]);
+				
+                atag.children("span").attr("star", fields[language][atag.attr("for") + "Link"]["star"]);
+								
+                atag.html(fields[language][atag.attr("for") + "Link"]["label"] + atag.html());
+
+                atag.attr("href", fields[language][atag.attr("for") + "Link"]["url"]);
+					
+				}
+            }
+        });
         // Submit Button
         $("#btnSubmit").html(fields[language]["submitButton"]);
         
@@ -172,13 +194,12 @@ $(document).ready(function ()
             });
         });
     }
-	
+
 	function setAnswerDataFromparam(q01)
 	{
 		//isSubmitClicked = true;
 		$("#Q1"+q01).prop('checked', true);
 	}
-
     // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message
     function setValidationMessage()
     {
@@ -198,11 +219,6 @@ $(document).ready(function ()
         });
 
          $("#apiError").html(validation_messages[language]["apiError"]);
-        $("#submitIntentPopupMessage1").text(validation_messages[language]["modalMessage_1"]);
-        $("#submitIntentPopupMessage2").text(validation_messages[language]["modalMessage_2"]);
-        $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);
-        $("#submitIntentPopupNo").text(validation_messages[language]["modalButtonNo"]);
-		
 		$("input[data-parsley-mobile-number-by-country-message]").each(function()
         {
             $(this).attr("data-parsley-mobile-number-by-country-message", validation_messages[language][$(this).attr("id") + "Error"]);
@@ -251,7 +267,7 @@ $(document).ready(function ()
     // Function to enable Submit button if both Privacy Policy & Subscribe checkboxes are checked (else keep Submit button disabled)
     function enableDisableSubmit()
     {
-        if (($("#Q1A1").is(":checked") || $("#Q1A2").is(":checked") ||$("#Q1A3").is(":checked")))
+        if ($("#Q1A1").is(":checked") || $("#Q1A2").is(":checked") ||$("#Q1A3").is(":checked"))
         {
             $("#btnSubmit").prop("disabled", false);
 
@@ -270,26 +286,15 @@ $(document).ready(function ()
         // Check whether any questions in the form have been answered
         submitModalAnsweredAny = $('[data-pt-api="y"][name^=Q]').filter((i, el) => el.checked).length > 0;
 
-		//submitModalWithsub = $("#subscribe").is(":checked");
         return !submitModalHasOpened && !submitModalAnsweredAny;
     }
 
-    function closeSubmitModalWithNo()
+    function closeSubmitModal()
     {
         if (submitModalElement)
         {
             submitModalElement.removeClass("popup--open");
         }
-    }
-	
-	function closeSubmitModalWithYes()
-    {
-		$("#subscribe").val("on");
-        if (submitModalElement)
-        {
-            submitModalElement.removeClass("popup--open");
-        }
-        submitModalHasOpened = false;
     }
 
     function showSubmitModal(resumeCallback)
@@ -353,17 +358,10 @@ $(document).ready(function ()
                 var callingCode = $("#callingCode").val();
                 if (!callingCode || callingCode === "0") return false;
 
-                // Check digit length by country: UAE allows 9 digits, others allow 8
-                var trimmedValue = value.replace(/\s/g, "");
-                if (callingCode === "971") {
-                    if (trimmedValue.length !== 9) return false;
-                } else {
-                    if (trimmedValue.length !== 8) return false;
-                }
-
+                var countryCode = callingCodeToCountry[callingCode];
                 var fullNumber = "+" + callingCode + value;
                 try {
-                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber);
+                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber, countryCode);
                     return phoneNumber && phoneNumber.isValid();
                 } catch (e) {
                     return false;
@@ -371,6 +369,7 @@ $(document).ready(function ()
             },
             message: "Enter a valid mobile number"
         });
+
         // Clear / reset user entered data (from Profile fields)
         $(".btn_clear").on("click", function()
         {
@@ -411,9 +410,8 @@ $(document).ready(function ()
         $("#mobileNumber").on("change", resetCallingCode);
 
         // Attach event to check Submit button state (enabled / disabled) on check / uncheck of Privacy Policy & Subscribe checkboxes
-        $("#Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
-		//$("div.form_bottom_check_group input[type='checkbox'], #Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
-        // Floating submit button (outside form) — trigger Parsley validation on click
+        //$("#privacyPolicy, #subscribe").on("change", enableDisableSubmit);
+		$("#Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
         // $("#btnSubmit").on("click", function ()
         // {
             // var $form = $("#dataForm").parsley();
@@ -502,8 +500,8 @@ $(document).ready(function ()
         $("#hrTy").css("display", "block");
 
         // Set Timeout for Redirection
-		window.top.location.href = fields[language]["redirectAfterSuccessUrl"];
-        //setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 10) * 1000));
+        //window.top.location.href = fields[language]["redirectAfterSuccessUrl"];
+        setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 3) * 1000));
 
         hideOverlay();
 
@@ -636,7 +634,7 @@ $(document).ready(function ()
             apiCallErrorHandler(isSubmitClicked);
         }
     }
- // iOS or MacOS íŒë³„ í•¨ìˆ˜
+	// iOS or MacOS íŒë³„ í•¨ìˆ˜
     function isIOS() {
         var ua = navigator.userAgent || navigator.vendor || window.opera;
         var iOSClassic = /iPhone|iPad|iPod/.test(ua);
@@ -645,6 +643,7 @@ $(document).ready(function ()
         var hasMacUA = /Macintosh/.test(ua) && !iPadOS;
         return iOSClassic || iPadOS || MacOS || hasMacUA;
     }
+
     // Function to create Request data based on User Input & call method to trigger API
     function mapParam(userResponse, isSubmitClicked)
     {
@@ -653,7 +652,7 @@ $(document).ready(function ()
 
         var requestBody = {
             app_yn: (getPlatformType() === "app" ? "Y" : "N"),
-			channel: ch === "" ? param["channel"]["oneClick"] : ch,
+            channel: ch === "" ? param["channel"]["oneClick"] : ch,
 			channel_detail: chd === "" ? param["channelDetail"]["oneClick"] : chd,
             cid: userResponse["campaignId"],
             country_alpha_2: userResponse["countryCode"],
@@ -666,14 +665,14 @@ $(document).ready(function ()
             last_name: userResponse["lastName"] || "",
             mid: "",
             pin_code: userResponse["zipCode"] || "",
-            privacy_policy_yn: "Y",//((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),
+           privacy_policy_yn: "Y",//((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),
             project: param["project"],
             q01Answer: userResponse["Q1"],
             q02Answer: userResponse["Q2"],
             q03Answer: userResponse["Q3"],
             q04Answer: userResponse["Q4"],
             q05Answer: userResponse["Q5"],
-            q06Answer: "",
+            q06Answer: userResponse["Q6"],
             q07Answer: "",
             q08Answer: "",
             q09Answer: "",
@@ -793,7 +792,6 @@ $(document).ready(function ()
         userResponse["recipientId"] = recipientId;
 
         userResponse["language"] = language;
-		
 		userResponse["subscribe"] = $("#subscribe").val();
 		
         userResponse["channel"] = ch;
@@ -822,10 +820,10 @@ $(document).ready(function ()
         var recipientId = frameUrlParam.get("id") || "";
 
         var countryCode = language.substring(language.indexOf("_") + 1);
-
-		//Coomment-CEJ-q01 
-        var q01 = frameUrlParam.get("q01") || "";	
 		
+		
+		//Coomment-CEJ-q01 
+        var q01 = frameUrlParam.get("q01") || "";
 		var ch = frameUrlParam.get("ch") || "";
 			
 		var chd = frameUrlParam.get("chd") || "";
@@ -884,9 +882,9 @@ $(document).ready(function ()
         });
         $("form").parsley(parsleyConfig).on("form:submit", function ()
         {
-           validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
+            validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
 
-           return false;
+            return false;
         });
     }
     catch(err)

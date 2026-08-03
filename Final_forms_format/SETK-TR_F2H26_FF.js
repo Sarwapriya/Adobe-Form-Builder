@@ -1,22 +1,29 @@
+/*
+Function to hide reCaptcha verification error
+function hideCaptchaVerificationError()
+{
+    $("#reCaptchaRequired").hide();
+}
+
+reCapthca Callback method
+/*var onloadCallback = function()
+{
+    grecaptcha.render("g-recaptcha",
+    {
+        "sitekey" : param["reCaptchaSiteKey"],
+        "callback": hideCaptchaVerificationError
+    });
+}
+*/
+
 // Once the document is ready
 $(document).ready(function ()
-{    
-    
-
-    // Function to set content for Page Language & Error Message
+{
+    // Function to set content for Error Message
     // It is kept separate instead of being defined within setFieldData to provide handling in case data is not available in config for received language
     // If data is not available in config for received language, fallbackLanguage will be used
-    function setPageContent()
+    function setErrorContent()
     {
-        // HTML Language
-        $("html").attr("lang", language.substring(0, language.indexOf("_")));
-
-        // HTML Direction (RTL/LTR)
-        var rtlLangs = ["ar", "he", "ku", "fa", "ur", "yi"];
-        var langSubtag = language.substring(0, language.indexOf("_"));
-        $("html").attr("dir", rtlLangs.indexOf(langSubtag) !== -1 ? "rtl" : "ltr");
-
-        // Error Message container content
         var heading = "",
             subHeading = "",
             subHeadingUrl = "",
@@ -53,25 +60,18 @@ $(document).ready(function ()
             $("div#hrErr").find("p").html(subHeading + $("div#hrErr").find("p").html());
         }
     }
-    
-    
-
-    
-
-    // Function to check all the Param(s) expected in URL are available or not
-    function validateRequiredUrlParam()
-    {
-        if(recipientId == "" || recipientId == null || recipientId == undefined)
-        {
-            throw new Error("Recipient Id Missing");
-        }
-    }
 
     // Function to get value for passed key from fields JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder
     function setFieldData()
     {
+        // HTML Language
+        $("html").attr("lang", language.substring(0, language.indexOf("_")));
+
+        // Error page / section
+        setErrorContent();
+
         // Heading
-        $("div.top_cont h2").html(fields[language]["headingBeforeBreak"] + $("div.top_cont h2").html() + fields[language]["headingAfterBreak"]);
+        //$("div.top_cont h2").html(fields[language]["headingBeforeBreakFF"] + $("div.top_cont h2").html() + fields[language]["headingAfterBreakFF"]);
 
         // Subheading
         $("div.top_cont p").html($("div.top_cont p").html() + fields[language]["requiredField"]);
@@ -99,22 +99,18 @@ $(document).ready(function ()
         {
             // Label
             var ckbLabel = $(this).find("label");
-
-            ckbLabel.html(fields[language][ckbLabel.attr("for")] + ckbLabel.html());
+			ckbLabel.html(ckbLabel.html() + fields[language][ckbLabel.attr("for")] + fields[language][ckbLabel.attr("for") + "Link"]["star"]);
 
             // Link within Label
             var ckbLabelLink = ckbLabel.find("a");
 
             // Is present
             if(ckbLabelLink.length === 1)
-            {
-                ckbLabelLink.children("img").attr("alt", fields[language][ckbLabel.attr("for") + "Link"]["imageAlt"]);
-
-                ckbLabelLink.children("img").attr("src", fields[language][ckbLabel.attr("for") + "Link"]["image"]);
-
-                ckbLabelLink.html(fields[language][ckbLabel.attr("for") + "Link"]["label"] + ckbLabelLink.html());
+            {				
+				ckbLabelLink.html(fields[language][ckbLabel.attr("for") + "Link"]["label"] + ckbLabelLink.html());
 
                 ckbLabelLink.attr("href", fields[language][ckbLabel.attr("for") + "Link"]["url"]);
+				
             }
         });
 
@@ -172,12 +168,6 @@ $(document).ready(function ()
             });
         });
     }
-	
-	function setAnswerDataFromparam(q01)
-	{
-		//isSubmitClicked = true;
-		$("#Q1"+q01).prop('checked', true);
-	}
 
     // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message
     function setValidationMessage()
@@ -197,16 +187,52 @@ $(document).ready(function ()
             $(this).attr("data-parsley-length-message", validation_messages[language][$(this).attr("id") + "Length"]);
         });
 
-         $("#apiError").html(validation_messages[language]["apiError"]);
-        $("#submitIntentPopupMessage1").text(validation_messages[language]["modalMessage_1"]);
-        $("#submitIntentPopupMessage2").text(validation_messages[language]["modalMessage_2"]);
-        $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);
-        $("#submitIntentPopupNo").text(validation_messages[language]["modalButtonNo"]);
-		
-		$("input[data-parsley-mobile-number-by-country-message]").each(function()
+        $("input[data-parsley-mobile-number-by-country-message]").each(function()
         {
             $(this).attr("data-parsley-mobile-number-by-country-message", validation_messages[language][$(this).attr("id") + "Error"]);
         });
+
+        //$("#reCaptchaRequired").html(validation_messages[language]["reCaptchaRequired"]);
+
+         $("#apiError").html(validation_messages[language]["apiError"]);
+
+        // Modal Messages
+        $("#submitIntentPopupMessage").text(validation_messages[language]["modalMessage"]);
+        $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);
+        $("#submitIntentPopupNo").text(validation_messages[language]["modalButtonNo"]);
+    }
+
+    // Function to populate Country Code dropdown
+    function populateCountryCodeDropdown()
+    {
+        // Get Subsidiary from Country Code (parsed from Language)
+        var subsidiary = country_subsidiary[countryCode];
+
+        // Get Country Code dropdown
+        var ddCountryCode = $("#countryCode");
+
+        // Check if Country Code dropdown is available
+        var isCountryCodeDrodownPresent = (ddCountryCode.length === 1);
+
+        // If Country Code dropdown is available
+        if (isCountryCodeDrodownPresent)
+        {
+            // Set Option(s) in Country Code dropdown
+            $.each(subsidiary_detail[subsidiary], function (val, text)
+            {
+                // Append value(s) to Country Code dropdown
+                ddCountryCode.append($("<option></option>").val(text.countryCode).html(text.countryName[language]));
+            });
+        
+            // Show Country (parsed from Language) as selected
+            ddCountryCode.val(countryCode);
+
+            // If Subsidiary has more than 1 Country, then only show the dropdown
+            if(subsidiary_detail[subsidiary].length > 1)
+            {
+                ddCountryCode.closest("div.form_text_bx").css("display", "block");
+            }
+        }
     }
 
     // Function to populate Calling Code dropdown
@@ -251,7 +277,7 @@ $(document).ready(function ()
     // Function to enable Submit button if both Privacy Policy & Subscribe checkboxes are checked (else keep Submit button disabled)
     function enableDisableSubmit()
     {
-        if (($("#Q1A1").is(":checked") || $("#Q1A2").is(":checked") ||$("#Q1A3").is(":checked")))
+        if ($("#privacyPolicy").is(":checked") && ($("#Q1A1").is(":checked") || $("#Q1A2").is(":checked") ||$("#Q1A3").is(":checked")))
         {
             $("#btnSubmit").prop("disabled", false);
 
@@ -267,29 +293,18 @@ $(document).ready(function ()
 
     function validateModal()
     {
-        // Check whether any questions in the form have been answered
-        submitModalAnsweredAny = $('[data-pt-api="y"][name^=Q]').filter((i, el) => el.checked).length > 0;
+        // Check whether any questions in the full form have been answered
+        submitModalAnsweredAny = $('[data-pt-api="y"][name^=Q]').filter((i, el) => el.checked).length > 0
 
-		//submitModalWithsub = $("#subscribe").is(":checked");
         return !submitModalHasOpened && !submitModalAnsweredAny;
     }
 
-    function closeSubmitModalWithNo()
+    function closeSubmitModal()
     {
         if (submitModalElement)
         {
             submitModalElement.removeClass("popup--open");
         }
-    }
-	
-	function closeSubmitModalWithYes()
-    {
-		$("#subscribe").val("on");
-        if (submitModalElement)
-        {
-            submitModalElement.removeClass("popup--open");
-        }
-        submitModalHasOpened = false;
     }
 
     function showSubmitModal(resumeCallback)
@@ -303,7 +318,7 @@ $(document).ready(function ()
             submitModalElement.find("#submitIntentPopupNo").on("click", function ()
             {
                 closeSubmitModal();
-
+                
                 if (submitModalResume)
                 {
                     submitModalResume();
@@ -335,7 +350,7 @@ $(document).ready(function ()
             }
         });
 
-		// Build callingCode -> countryCode mapping from subsidiary_detail
+        // Build callingCode -> countryCode mapping from subsidiary_detail
         var callingCodeToCountry = {};
         $.each(subsidiary_detail, function(subsidiary, countries) {
             $.each(countries, function(i, country) {
@@ -353,17 +368,10 @@ $(document).ready(function ()
                 var callingCode = $("#callingCode").val();
                 if (!callingCode || callingCode === "0") return false;
 
-                // Check digit length by country: UAE allows 9 digits, others allow 8
-                var trimmedValue = value.replace(/\s/g, "");
-                if (callingCode === "971") {
-                    if (trimmedValue.length !== 9) return false;
-                } else {
-                    if (trimmedValue.length !== 8) return false;
-                }
-
+                var countryCode = callingCodeToCountry[callingCode];
                 var fullNumber = "+" + callingCode + value;
                 try {
-                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber);
+                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber, countryCode);
                     return phoneNumber && phoneNumber.isValid();
                 } catch (e) {
                     return false;
@@ -371,6 +379,7 @@ $(document).ready(function ()
             },
             message: "Enter a valid mobile number"
         });
+
         // Clear / reset user entered data (from Profile fields)
         $(".btn_clear").on("click", function()
         {
@@ -411,23 +420,8 @@ $(document).ready(function ()
         $("#mobileNumber").on("change", resetCallingCode);
 
         // Attach event to check Submit button state (enabled / disabled) on check / uncheck of Privacy Policy & Subscribe checkboxes
-        $("#Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
-		//$("div.form_bottom_check_group input[type='checkbox'], #Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
-        // Floating submit button (outside form) — trigger Parsley validation on click
-        // $("#btnSubmit").on("click", function ()
-        // {
-            // var $form = $("#dataForm").parsley();
-
-            // if ($form.isValid())
-            // {
-                // validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
-            // }
-            // else
-            // {
-                // $form.validate();
-            // }
-        // });
-
+        //$("#privacyPolicy, #subscribe").on("change", enableDisableSubmit);
+		$("#privacyPolicy, #Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
 
         // For Calling Code & Mobile Number fields, override Parsley method to change DOM position of validation message
         window.Parsley.on('field:error', function()
@@ -446,12 +440,21 @@ $(document).ready(function ()
         });
     }
 
+    
+    /*
+    Function to check if User has verified the reCaptcha
+    function isCaptchaVerified()
+    {
+        return ((grecaptcha) && (grecaptcha.getResponse().length !== 0));
+    }
+    */
+   
+
     // Function to carry out task(s) at the start of Form submit process
     function preSubmitProcess()
     {
-		//submitFlag = true;
         // Disable Submit button
-        $("#btnSubmit").attr("disabled", true).addClass("disabled");
+        $("#submitform").attr("disabled", true).addClass("disabled");
 
         showOverlay();
 
@@ -481,10 +484,10 @@ $(document).ready(function ()
     function showSuccess()
     {
         // Hide div having Form fields
-        $("div.container_oc").css("display", "none");
+        $("div.container").css("display", "none");
 
         // Empty div (having Form fields)
-        $("div.container_oc").empty();
+        $("div.container").empty();
 
         // Hide div having Error message
         $("#hrErr").css("display", "none");
@@ -502,10 +505,12 @@ $(document).ready(function ()
         $("#hrTy").css("display", "block");
 
         // Set Timeout for Redirection
-		window.top.location.href = fields[language]["redirectAfterSuccessUrl"];
-        //setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 10) * 1000));
-
+		//window.top.location.href = fields[language]["redirectAfterSuccessUrl"];
+        setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 3) * 1000));
+		window.parent.postMessage('success_message', '*');  
         hideOverlay();
+		const heightn = document.body.scrollHeight;
+		parent.postMessage(heightn, '*'); 
 
         // Empty div (having Ovelary with Loader)
         $("#overlay").empty();
@@ -520,10 +525,10 @@ $(document).ready(function ()
     function showError()
     {
         // Hide div having Form fields
-        $("div.container_oc").css("display", "none");
+        $("div.container").css("display", "none");
 
         // Empty div (having Form fields)
-        $("div.container_oc").empty();
+        $("div.container").empty();
 
         // Hide div having Success message
         $("#hrTy").css("display", "none");
@@ -575,29 +580,25 @@ $(document).ready(function ()
     }
 
     // Function to handle error occurred during API call
-    function apiCallErrorHandler(isSubmitClicked)
+    function apiCallErrorHandler()
     {
-        if(isSubmitClicked)
-        {
-            // Show error message
-            $("#apiError").show();
+        // Show error message
+        $("#apiError").show();
 
-            // Enable Submit button so that user can try again
-            enableDisableSubmit();
+        // Enable Submit button so that user can try again
+        enableDisableSubmit();
 
-            // Scroll to Bottom
-            window.scrollTo({
-                top: document.body.scrollHeight,
-                behavior: "smooth"
-            });
-        }
+        // Scroll to Bottom
+        window.scrollTo({
+            top: document.body.scrollHeight,
+            behavior: "smooth"
+        });
 
         hideOverlay();
     }
-    
 
     // Function to Send Data to API
-    function sendData(request, isSubmitClicked)
+    function sendData(request)
     {
         try
         {
@@ -612,31 +613,37 @@ $(document).ready(function ()
             {
                 if(!(response.ok) || response.status != "200")
                 {
-                    apiCallErrorHandler(isSubmitClicked);
+                    apiCallErrorHandler();
                 }
                 else
                 {
-                    if(isSubmitClicked)
-                    {
-                        showSuccess();
-                    }
-                    else
-                    {
-                        hideOverlay();
-                    }
+					// Submit Success Tagging
+                    window.parent.postMessage({ type: 'submit_success', content: 'the next galaxy f2h26-pre registration_register' }, '*')
+					
+                    showSuccess();
                 }
             }).
             catch(error =>
             {
-                apiCallErrorHandler(isSubmitClicked);
+                apiCallErrorHandler();
             });
         }
         catch(err)
         {
-            apiCallErrorHandler(isSubmitClicked);
+            apiCallErrorHandler();
         }
     }
- // iOS or MacOS íŒë³„ í•¨ìˆ˜
+
+    function uuidv4Fallback() {
+        // Return a RFC4122 version 4 compliant UUID
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+        });
+    }
+	
+    // iOS or MacOS íŒë³„ í•¨ìˆ˜
     function isIOS() {
         var ua = navigator.userAgent || navigator.vendor || window.opera;
         var iOSClassic = /iPhone|iPad|iPod/.test(ua);
@@ -648,32 +655,31 @@ $(document).ready(function ()
     // Function to create Request data based on User Input & call method to trigger API
     function mapParam(userResponse, isSubmitClicked)
     {
-		if(isSubmitClicked === false ? userResponse["Q1"] = "": userResponse["Q1"] = userResponse["Q1"]);
         var dtmCurrent = new Date();
 
         var requestBody = {
             app_yn: (getPlatformType() === "app" ? "Y" : "N"),
-			channel: ch === "" ? param["channel"]["oneClick"] : ch,
-			channel_detail: chd === "" ? param["channelDetail"]["oneClick"] : chd,
+			channel: ch === "" ? param["channel"]["fullForm"] : ch,
+			channel_detail: chd === "" ? param["channelDetail"]["fullForm"] : chd,
             cid: userResponse["campaignId"],
             country_alpha_2: userResponse["countryCode"],
             deliveryId: userResponse["deliveryId"],
-            email: userResponse["email"] || "",
-            first_name: userResponse["firstName"] || "",
+            email: userResponse["email"],
+            first_name: userResponse["firstName"],
             hhp: identifyHHP(userResponse["callingCode"], userResponse["mobileNumber"]),
             imei: "",
             language: userResponse["language"],
-            last_name: userResponse["lastName"] || "",
+            last_name: userResponse["lastName"],
             mid: "",
-            pin_code: userResponse["zipCode"] || "",
-            privacy_policy_yn: "Y",//((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),
+            pin_code: userResponse["zipCode"],
+            privacy_policy_yn: (userResponse["privacyPolicy"] === "on" ? "Y" : "N"),
             project: param["project"],
             q01Answer: userResponse["Q1"],
             q02Answer: userResponse["Q2"],
             q03Answer: userResponse["Q3"],
             q04Answer: userResponse["Q4"],
             q05Answer: userResponse["Q5"],
-            q06Answer: "",
+            q06Answer: userResponse["Q6"],
             q07Answer: "",
             q08Answer: "",
             q09Answer: "",
@@ -690,126 +696,21 @@ $(document).ready(function ()
             q20Answer: "",
             recipientId: userResponse["recipientId"],
             registerDatetime: dtmCurrent.toISOString(),
-            source: param["source"]["oneClick"],
-            subscribe_yn: "Y",//((isSubmitClicked === true) ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),
+            source: param["source"]["fullForm"],
+            subscribe_yn: (userResponse["subscribe"] === "on" ? "Y" : "N"),
             tm_yn: "",
-            uniqueid: dtmCurrent.getTime() + "_" + crypto.randomUUID() + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),
+            uniqueid: dtmCurrent.getTime() + "_" + (crypto.randomUUID ? crypto.randomUUID() : uuidv4Fallback()) + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),
             VoucherRequired: param["voucherRequired"],
-			oneclickFlag: "Y",
+			oneclickFlag: "N",
             submitFlag: (isSubmitClicked === true ? "Y" : "N"),
             iosFlag: (isIOS() ? "Y" : "N")
         };
 
-        sendData(requestBody, isSubmitClicked);
-    }
-
-    // Function to Process User Input & transfer flow for further processing
-    // This methoed will be called:
-    // 1 - When the page is viewed - This call will register Recipient as HR (blank / default data will be passed for form fields)
-    // 2 - When user clicks the Submit button - This call will send User Response to API
-    // Input variable received by this method is to differentiate between the 2 method calls mentioned above
-    function processFormData(isSubmitClicked)
-    {
-        var formElements = document.getElementById("dataForm");
-
-        var elementId,
-            elementName,
-            objectValue,
-            cBrBData = {},
-            formData = [],
-            elementDataAttr,
-            userResponse = {};
-
-        // Process all the Form Fields
-        for (i = 0; i < formElements.length; i++)
-        {
-            if (formElements.elements[i].type != "hidden")
-            {
-                elementId = formElements.elements[i].id;
-
-                elementName = formElements.elements[i].name;
-
-                elementDataAttr = formElements.elements[i].getAttribute("data-pt-api");
-
-                if (elementDataAttr && elementDataAttr.trim() !== "" && elementDataAttr.trim() === "y")
-                {
-                    if (formElements.elements[i].type == "radio")
-                    {
-                        if (!cBrBData[elementName])
-                        {
-                            cBrBData[elementName] = [];
-                        }
-
-                        if ($("#" + elementId).is(":checked"))
-                        {
-                            cBrBData[elementName].push($("#" + elementId).val());
-                        }
-                    }
-                    else if (formElements.elements[i].type == "checkbox")
-                    {
-                        if (!cBrBData[elementName])
-                        {
-                            cBrBData[elementName] = [];
-                        }
-
-                        if ($("#" + elementId).is(":checked"))
-                        {
-                            cBrBData[elementName].push($("#" + elementId).val());
-                        }
-                    }
-                    else
-                    {
-                        objectValue = $("#" + elementId).val();
-
-                        formData.push({name: elementName, value: objectValue});
-                    }
-                }
-            }
-        }
-
-        Object.keys(cBrBData).forEach(function (key)
-        {
-            formData.push({ name: key, value: cBrBData[key].join("|") });
-        });
-
-        // Move data from Array to Key / Value pair
-        for (var i=0, len=formData.length; i < len; i++)
-        {
-            userResponse[formData[i]["name"]] = formData[i]["value"];
-        }
-
-        // If Country Code dropdown is present in form, then pick the value from dropdown -- This is already handled above along with other fields (no special handling required).
-        // If Country Code dropdown is not present in form, then pick the value from URL (parsed from Language).
-        if(userResponse["countryCode"] == null || userResponse["countryCode"] == undefined)
-        {
-            userResponse["countryCode"] = countryCode;
-        }
-
-        // Add data determined earlier (from URL Parameter) to Key / Value pair
-        userResponse["campaignId"] = campaignId;
-
-        userResponse["deliveryId"] = deliveryId;
-
-        userResponse["recipientId"] = recipientId;
-
-        userResponse["language"] = language;
-		
-		userResponse["subscribe"] = $("#subscribe").val();
-		
-        userResponse["channel"] = ch;
-
-        userResponse["channel_detail"] = chd;
-
-        //userResponse["Q1"] = q01 === "" ? userResponse["Q1"]: q01;
-
-        // Call function to map API Parameter with User Response & send data to server
-        mapParam(userResponse, isSubmitClicked);
+        return requestBody;
     }
 
     try
     {
-        showOverlay();
-
         // Get Parameter Value from URL
         var frameUrlParam = new URLSearchParams(window.location.search);
 
@@ -822,19 +723,10 @@ $(document).ready(function ()
         var recipientId = frameUrlParam.get("id") || "";
 
         var countryCode = language.substring(language.indexOf("_") + 1);
-
-		//Coomment-CEJ-q01 
-        var q01 = frameUrlParam.get("q01") || "";	
 		
 		var ch = frameUrlParam.get("ch") || "";
 			
 		var chd = frameUrlParam.get("chd") || "";
-		
-		//var submitFlag = false;
-
-        setPageContent();
-
-        validateRequiredUrlParam();
 
         setFieldData();
 
@@ -842,35 +734,17 @@ $(document).ready(function ()
 
         setValidationMessage();
 
+        populateCountryCodeDropdown();
+
         populateCallingCodeDropdown();
 
         attachEvent();
-		
-		//Coomment-CEJ-q01 
-		if(q01 !== "")
-		{
-			setAnswerDataFromparam(q01);
-		}
-		
-		enableDisableSubmit();
 
-        // Load and display submit modal when form is submitted, or none of answers are selected
+        // Load and display submit modal (modal.html) when form is submitted, or none of answers are selected
         var submitModalElement = null;
         var submitModalResume = null;
         var submitModalHasOpened = false;
         var submitModalAnsweredAny = false;
-
-        // Call method to send data to API and register Recipient as HR
-        // Varaible false passed to method call confirms that the Submit button wasn't clicked
-		processFormData(false);
-
-        function processValidatedSubmit()
-        {
-            preSubmitProcess();
-
-            // Varaible true passed to method call confirms that the Submit button wasn clicked
-            processFormData(true);
-        }
 
         var parsleyConfig = {
             errorsWrapper: '<span class="parsley-errors"></span>',
@@ -878,25 +752,131 @@ $(document).ready(function ()
             excluded: 'input[type=button], input[type=submit], input[type=reset], input[type=hidden], input[class=noValidate]',
         }
 
+        function processValidatedSubmit()
+        {
+            preSubmitProcess();
+
+            var formElements = document.getElementById("dataForm");
+
+            var elementId,
+                elementName,
+                objectValue,
+                cBrBData = {},
+                formData = [],
+                elementDataAttr,
+                userResponse = {},
+                isSubmitClicked = true;
+
+            // Process all the Form Fields
+            for (i = 0; i < formElements.length; i++)
+            {
+                if (formElements.elements[i].type != "hidden")
+                {
+                    elementId = formElements.elements[i].id;
+
+                    elementName = formElements.elements[i].name;
+
+                    elementDataAttr = formElements.elements[i].getAttribute("data-pt-api");
+
+                    if (elementDataAttr && elementDataAttr.trim() !== "" && elementDataAttr.trim() === "y")
+                    {
+                        if (formElements.elements[i].type == "radio")
+                        {
+                            if (!cBrBData[elementName])
+                            {
+                                cBrBData[elementName] = [];
+                            }
+
+                            if ($("#" + elementId).is(":checked"))
+                            {
+                                cBrBData[elementName].push($("#" + elementId).val());
+                            }
+                        }
+                        else if (formElements.elements[i].type == "checkbox")
+                        {
+                            if (!cBrBData[elementName])
+                            {
+                                cBrBData[elementName] = [];
+                            }
+
+                            if ($("#" + elementId).is(":checked"))
+                            {
+                                cBrBData[elementName].push($("#" + elementId).val());
+                            }
+                        }
+                        else
+                        {
+                            objectValue = $("#" + elementId).val();
+
+                            formData.push({name: elementName, value: objectValue});
+                        }
+                    }
+                }
+            }
+
+            Object.keys(cBrBData).forEach(function (key)
+            {
+                formData.push({ name: key, value: cBrBData[key].join("|") });
+            });
+
+            // Move data from Array to Key / Value pair
+            for (var i=0, len=formData.length; i < len; i++)
+            {
+                userResponse[formData[i]["name"]] = formData[i]["value"];
+            }
+
+            // If Country Code dropdown is present in form, then pick the value from dropdown -- This is already handled above along with other fields (no special handling required).
+            // If Country Code dropdown is not present in form, then pick the value from URL (parsed from Language).
+            if(userResponse["countryCode"] == null || userResponse["countryCode"] == undefined)
+            {
+                userResponse["countryCode"] = countryCode;
+            }
+
+            // Add data determined earlier (from URL Parameter) to Key / Value pair
+            userResponse["campaignId"] = campaignId;
+
+            userResponse["deliveryId"] = deliveryId;
+
+            userResponse["recipientId"] = recipientId;
+
+            userResponse["language"] = language;
+
+            userResponse["channel"] = ch;
+
+            userResponse["channel_detail"] = chd;
+        
+
+            // Call function to map (API) Parameter with User Response & send data to server
+            sendData(mapParam(userResponse, isSubmitClicked));
+        }
+
         // Carry out following after the submit button is clicked
-        $("#btnSubmit").on("click", function() {
-            $("#dataForm").trigger("submit");
-        });
         $("form").parsley(parsleyConfig).on("form:submit", function ()
         {
-           validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
+            validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
 
-           return false;
+			/*
+			Check if reCaptcha is verified
+			if (($(".g-recaptcha").length) && (!(isCaptchaVerified())))
+			{
+				$("#reCaptchaRequired").show();
+
+				return false;
+			}
+			*/
+
+            return false;
         });
     }
     catch(err)
     {
         showError();
     }
-});
 
-//OC_JS Final Update 08/07/2027 10:30:00 UAE
-//All update align with MENAO and SUWON.
-//All data tested.
-//Commented on 08/07/2027 15:22:00 UAE
-//Commented on 14/07/2027 11:22:00 UAE
+});
+	function postHeight(e) {
+		const height = document.body.scrollHeight;
+		parent.postMessage(height, '*');  
+	};
+	window.addEventListener('load', postHeight);
+	window.addEventListener('resize', postHeight);

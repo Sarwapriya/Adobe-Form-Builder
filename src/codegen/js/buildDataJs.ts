@@ -5,10 +5,10 @@ import type { FileNames } from "../fileNames.ts";
 import type { BuilderConfig, GeneratedFile } from "../types.ts";
 import { safeJsonForScript } from "./escaping.ts";
 
-/** Neither the workbook nor the schema carries per-locale translations for these —
- * the reference itself only ever ships one generic English set, so this mirrors that
+/** Fallback validation messages when the workbook carries no "Error Messages" section.
+ * The reference itself only ever ships one generic English set; these mirror that
  * (a documented limitation, not a bug: there is no source data to translate from). */
-const VALIDATION_MESSAGES = {
+const DEFAULT_VALIDATION_MESSAGES = {
   emailError: "Please enter a valid Email address",
   firstNameError: "Only letters are allowed",
   lastNameError: "Only letters are allowed",
@@ -54,7 +54,7 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
   const pageError: Record<LocaleCode, unknown> = {};
   const questions: Record<LocaleCode, unknown> = {};
   const answers: Record<LocaleCode, unknown> = {};
-  const validationMessages: Record<LocaleCode, typeof VALIDATION_MESSAGES> = {};
+  const validationMessages: Record<LocaleCode, typeof DEFAULT_VALIDATION_MESSAGES> = {};
 
   for (const locale of localeCodes) {
     const f = form.fields;
@@ -119,7 +119,11 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
     questions[locale] = questionsForLocale;
     answers[locale] = answersForLocale;
 
-    validationMessages[locale] = VALIDATION_MESSAGES;
+    // Merge workbook-provided validation messages with hardcoded defaults.
+    // Workbook values take precedence for the current locale; missing keys fall
+    // back to the default English set.
+    const wbMessages = form.validationMessages[locale] ?? {};
+    validationMessages[locale] = { ...DEFAULT_VALIDATION_MESSAGES, ...wbMessages };
   }
 
   const parts = [

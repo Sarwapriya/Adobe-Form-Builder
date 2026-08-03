@@ -11,17 +11,14 @@ import type { FormVariant, GeneratedFile } from "./types.ts";
  * output. Takes the same `FileNames` the generator used, so the substitution always
  * targets whatever names were actually written into the HTML.
  *
- * `previewLocale` is accepted but no longer wired into the iframe: the FF.js/OC.js
- * scripts are now byte-identical copies of the reference (see buildFfJs.ts/
- * buildOcJs.ts), which only ever resolve the language from a real `?lang=` URL query
- * parameter — something a `blob:` URL can't reliably carry. The preview always renders
- * the form's fallback/default locale; locale switching still works correctly on the
- * real downloaded/deployed form, which is what actually ships.
+ * `previewLocale` is injected into the iframe by monkey-patching `URLSearchParams`
+ * so the behavior JS (which reads `?lang=` from the URL) sees the correct locale
+ * even though `blob:` URLs can't carry query parameters.
  */
 export function buildPreviewDocument(
   files: GeneratedFile[],
   variant: FormVariant,
-  _previewLocale: string,
+  previewLocale: string,
   fileNames: FileNames,
 ): string {
   const htmlPath = variant === "ff" ? fileNames.ffHtml : fileNames.ocHtml;
@@ -32,8 +29,18 @@ export function buildPreviewDocument(
   const behaviorJs = files.find((f) => f.path === jsPath)?.contents ?? "";
   if (!html) throw new Error(`No generated ${htmlPath} file to preview.`);
 
+  // Inject a small script before the behavior JS so that `new URLSearchParams(...)`
+  // returns the preview locale when the behavior JS asks for the "lang" parameter.
+  // This bridges the gap: the reference JS only reads language from `?lang=`, but
+  // blob: URLs can't carry query strings.
+  const langOverride =
+    `<script>(function(){var L="${previewLocale}";var O=window.URLSearchParams;` +
+    `window.URLSearchParams=function(s){var p=new O(s||"");var g=p.get.bind(p);` +
+    `p.get=function(n){return n==="lang"?L:g(n)};return p};` +
+    `window.URLSearchParams.prototype=O.prototype})();</script>\n`;
+
   return html
     .replace(`<link rel="stylesheet" href="${fileNames.css}">`, `<style>${css}</style>`)
     .replace(`<script src="${fileNames.dataJs}"></script>`, `<script>${dataJs}</script>`)
-    .replace(`<script src="${jsPath}"></script>`, `<script>${behaviorJs}</script>`);
+    .replace(`<script src="${jsPath}"></script>`, `${langOverride}<script>${behaviorJs}</script>`);
 }

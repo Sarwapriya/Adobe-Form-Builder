@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en_AE">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Samsung</title>
+  <link rel="shortcut icon" href="https://res6.mena2p.crm.samsung.com/res/tracking/Favicon.png">
+  <link rel="stylesheet" type="text/css"href="samsungSS_fonts_2026.css"/>
+  <link rel="stylesheet" type="text/css"href="TR-F2H26.css"/>
+  <script type="text/javascript" src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/parsleyjs@2/dist/parsley.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/libphonenumber-js/1.11.4/libphonenumber-js.min.js"></script>
+  <script src="https://assets.adobedtm.com/72afb75f5516/dd6b57adea42/launch-b679a712f5a6.min.js" async></script>
+ </head>
+ <body>
+  <div class="container">
+   <div class="top_cont">
+    <!--<h2><br class="b_850"><span>&nbsp;</span></h2>-->
+    <p><span class="star">*</span><span>&nbsp;</span></p>
+   </div>
+   <div class="main">
+    <form action="" id="dataForm">
+     <div class="form_top_group">
+      <div class="form_text_bx select_bx" style="display: none;">
+       <p class="form_label"></p>
+       <div class="select_wrap">
+        <select autocomplete="off" data-pt-api="y" id="countryCode" name="countryCode"></select>
+       </div>
+      </div>
+      <div class="form_text_bx">
+       <p class="form_label"><span>&nbsp;</span><span class="star">*</span></p>
+       <div class="input_wrap">
+        <input autocapitalize="none" autocomplete="off" autocorrect="off" data-parsley-trigger="blur" data-parsley-error-message="Enter a valid Email address" data-parsley-pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" data-parsley-required="true" data-parsley-type="email" data-pt-api="y" id="email" maxlength="128" name="email" placeholder="" spellcheck="false" type="email">
+        <div class="btn_clear"></div>
+       </div>
+      </div>
+      <div class="form_text_group">
+       <div class="form_text_bx">
+        <p class="form_label"><span>&nbsp;</span><span class="star">*</span></p>
+        <div class="input_wrap">
+         <input autocapitalize="none" autocomplete="off" autocorrect="off" data-parsley-trigger="blur" data-parsley-error-message="Letters are allowed" data-parsley-pattern="^[A-Za-zçÇğĞıİöÖşŞüÜ]+(\s[A-Za-zçÇğĞıİöÖşŞüÜ]+)*$" data-parsley-required="true" data-pt-api="y" id="firstName" maxlength="200" name="firstName" placeholder="" spellcheck="false" type="firstName">
+         <div class="btn_clear"></div>
+        </div>
+       </div>
+       <div class="form_text_bx">
+        <p class="form_label"><span>&nbsp;</span><span class="star">*</span></p>
+        <div class="input_wrap">
+         <input autocapitalize="none" autocomplete="off" autocorrect="off" data-parsley-trigger="blur" data-parsley-error-message="Letters are allowed" data-parsley-pattern="^[A-Za-zçÇğĞıİöÖşŞüÜ]+(\s[A-Za-zçÇğĞıİöÖşŞüÜ]+)*$" data-parsley-required="true" data-pt-api="y" id="lastName" maxlength="200" name="lastName" placeholder="" spellcheck="false" type="lastName">
+         <div class="btn_clear"></div>
+        </div>
+       </div>
+      </div>
+      <div class="form_text_bx select_bx">
+       <p class="form_label"></p>
+       <div class="select_wrap">
+        <select autocomplete="off" data-parsley-error-message="Select a value" data-parsley-required-if="#mobileNumber" data-parsley-validate-if-empty="true" data-pt-api="y" id="callingCode" name="callingCode"></select>
+        <div class="input_wrap">
+         <input autocapitalize="none" autocomplete="off" autocorrect="off"  data-parsley-trigger="blur" data-parsley-mobile-number-by-country="true" data-parsley-mobile-number-by-country-message="Enter a valid mobile number" data-parsley-type-message="Digits are allowed" data-parsley-type="digits" data-pt-api="y" id="mobileNumber" maxlength="10" name="mobileNumber" placeholder="" spellcheck="false" type="text">
+         <div class="btn_clear"></div>
+        </div>
+       </div>
+      </div>
+     <!-- <div class="form_text_bx">
+       <p class="form_label"></p>
+       <div class="input_wrap">
+        <input autocapitalize="none" autocomplete="off" autocorrect="off" data-parsley-error-message="Enter a valid ZIP code of 5 to 9 characters" data-parsley-length="[5, 9]" data-parsley-type="alphanum" data-pt-api="y" id="zipCode" maxlength="9" name="zipCode" placeholder="" spellcheck="false" type="text">
+        <div class="btn_clear"></div>
+       </div>
+      </div>-->
+     </div>
+     <div class="form_check_group">
+      <div class="form_check_module" id="Q1">
+       <div class="form_check_title">
+        <h3><span>&nbsp;</span><span class="star">*</span></h3>
+        <p></p>
+       </div>
+       <div class="radio_group">
+        <div class="radio_wrap">
+         <input type="radio" data-pt-api="y" id="Q1A1" name="Q1" value="A1" data-parsley-error-message="Must select atleast one">
+         <label for="Q1A1"></label>
+        </div>
+        <div class="radio_wrap">
+         <input type="radio" data-pt-api="y" id="Q1A2" name="Q1" value="A2">
+         <label for="Q1A2"></label>
+        </div>
+        <div class="radio_wrap">
+         <input type="radio" data-pt-api="y" id="Q1A3" name="Q1" value="A3">
+         <label for="Q1A3"></label>
+        </div>
+       </div>
+      </div>
+      <div class="form_check_module" id="Q2">
+       <div class="form_check_title">
+        <h3><span>&nbsp;</span></h3>
+        <p></p>
+       </div>
+       <div class="form_check_list_wrap">
+        <div class="form_check_list">
+         <input type="checkbox" data-pt-api="y" id="Q2A1" name="Q2" value="A1">
+         <label for="Q2A1">
+          <img src="" alt="">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" data-pt-api="y" id="Q2A2" name="Q2" value="A2">
+         <label for="Q2A2">
+          <img src="" alt="">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" data-pt-api="y" id="Q2A3" name="Q2" value="A3">
+         <label for="Q2A3">
+          <img src="" alt="">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" data-pt-api="y" id="Q2A4" name="Q2" value="A4">
+         <label for="Q2A4">
+          <img src="" alt="">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" data-pt-api="y" id="Q2A5" name="Q2" value="A5">
+         <label for="Q2A5">
+          <img src="" alt="">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" data-pt-api="y" id="Q2A6" name="Q2" value="A6">
+         <label for="Q2A6">
+          <img src="" alt="">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" data-pt-api="y" id="Q2A7" name="Q2" value="A7">
+         <label for="Q2A7">
+          <img src="" alt="">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" data-pt-api="y" id="Q2A8" name="Q2" value="A8">
+         <label for="Q2A8">
+          <img src="" alt="">
+          <p></p>
+         </label>
+        </div>
+       </div>
+      </div>
+      <div class="form_check_module" id="Q3">
+       <div class="form_check_title">
+        <h3><span>&nbsp;</span></h3>
+        <p></p>
+       </div>
+       <div class="form_check_list_wrap">
+        <div class="radio_wrap">
+         <input type="radio" id="Q3A1" data-pt-api="y" name="Q3" value="A1">
+         <label for="Q3A1"></label>
+        </div>
+        <div class="radio_wrap">
+         <input type="radio" id="Q3A2" data-pt-api="y" name="Q3" value="A2">
+         <label for="Q3A2"></label>
+        </div>
+        <div class="radio_wrap">
+         <input type="radio" id="Q3A3" data-pt-api="y" name="Q3" value="A3">
+         <label for="Q3A3"></label>
+        </div>
+        <div class="radio_wrap">
+         <input type="radio" id="Q3A4" data-pt-api="y" name="Q3" value="A4">
+         <label for="Q3A4"></label>
+        </div>
+        <div class="radio_wrap">
+         <input type="radio" id="Q3A5" data-pt-api="y" name="Q3" value="A5">
+         <label for="Q3A5"></label>
+        </div>
+       </div>
+      </div>
+      <div class="form_check_module form_check_module2" id="Q4">
+       <div class="form_check_title">
+        <h3><span>&nbsp;</span></h3>
+        <p></p>
+       </div>
+       <div class="form_check_list_wrap">
+        <div class="form_check_list">
+         <input type="checkbox" id="Q4A1" data-pt-api="y" name="Q4" value="A1">
+         <label for="Q4A1">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q4A2" data-pt-api="y" name="Q4" value="A2">
+         <label for="Q4A2">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q4A3" data-pt-api="y" name="Q4" value="A3">
+         <label for="Q4A3">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q4A4" data-pt-api="y" name="Q4" value="A4">
+         <label for="Q4A4">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q4A5" data-pt-api="y" name="Q4" value="A5">
+         <label for="Q4A5">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q4A6" data-pt-api="y" name="Q4" value="A6">
+         <label for="Q4A6">
+          <p></p>
+         </label>
+        </div>
+       </div>
+      </div>
+      <div class="form_check_module form_check_module2" id="Q5">
+       <div class="form_check_title">
+        <h3><span>&nbsp;</span></h3>
+        <p></p>
+       </div>
+       <div class="form_check_list_wrap">
+        <div class="form_check_list">
+         <input type="checkbox" id="Q5A1" data-pt-api="y" name="Q5" value="A1">
+         <label for="Q5A1">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q5A2" data-pt-api="y" name="Q5" value="A2">
+         <label for="Q5A2">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q5A3" data-pt-api="y" name="Q5" value="A3">
+         <label for="Q5A3">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q5A4" data-pt-api="y" name="Q5" value="A4">
+         <label for="Q5A4">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q5A5" data-pt-api="y" name="Q5" value="A5">
+         <label for="Q5A5">
+          <p></p>
+         </label>
+        </div>
+        <div class="form_check_list">
+         <input type="checkbox" id="Q5A6" data-pt-api="y" name="Q5" value="A6">
+         <label for="Q5A6">
+          <p></p>
+         </label>
+        </div>
+       </div>
+      </div>
+     <div class="form_bottom_group">
+       <div class="form_bottom_check_group">
+        <div class="form_bottom_check">
+         <input data-pt-api="y" id="privacyPolicy" name="privacyPolicy" type="checkbox">
+         <label for="privacyPolicy">
+          <a href="#" target="_blank"><span>&nbsp;</span><span class="star"></span></a>
+         </label>
+        </div>
+        <div class="form_bottom_check form_bottom_check2">
+         <input data-pt-api="y" id="subscribe" name="subscribe" type="checkbox">
+         <label for="subscribe">
+          <a href="#" target="_blank"><span>&nbsp;</span></a>
+		  <span>&nbsp;</span>
+		 </label>
+        </div>
+        <div class="form_bottom_check form_bottom_check3">
+         <input data-pt-api="y" id="Q6A1" name="Q6" type="checkbox">
+         <label for="Q6A1">
+		 <a href="#" target="_blank"><span>&nbsp;</span></a>
+		 <span>&nbsp;</span></label>
+        </div>
+       </div>
+       <div class="error" id="reCaptchaRequired" style="display:none"></div>
+       <button class="disabled" disabled id="btnSubmit"></button>
+       <div class="error" id="apiError" style="text-align:center; display: none;"></div>
+	   <a  style="text-align:center" href="https://res6.mena2p.crm.samsung.com/res/tracking/HR_Kampanya_Legal_V2.pdf" target="_blank">* Kampanya koşulları geçerlidir<span>&nbsp;</span><img class="form_bottom_img" src="blue_arr.png"></a>
+       </div>
+      </div>
+     </div>
+    </form>
+   </div>
+  </div>
+  <div id="hrTy" style="display:none;">
+   <div>
+    <div>
+     <div>
+      <div>
+       <div>
+        <h3 style="-moz-osx-font-smoothing: grayscale; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; color: #000000; font-size: 32px; font-weight: 700; line-height: 1.5; margin-bottom: 10px; margin-top: 0; text-align: center;"></h3>
+        <p style="-moz-osx-font-smoothing: grayscale; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; color: #000000; font-size: 16px; font-weight: 400; line-height: 1.5; margin-bottom: 15px; margin-top: 0; text-align: center;"><span>&nbsp;</span><a style="color: #007bff;" href="" target="_blank"></a></p>
+       </div>
+      </div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div id="hrErr" style="display:none;">
+   <div>
+    <div>
+     <div>
+      <div>
+       <div>
+        <h3 style="-moz-osx-font-smoothing: grayscale; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; color: #000000; font-size: 32px; font-weight: 700; line-height: 1.5; margin-bottom: 10px; margin-top: 0; text-align: center;"></h3>
+        <p style="-moz-osx-font-smoothing: grayscale; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; color: #000000; font-size: 16px; font-weight: 400; line-height: 1.5; margin-bottom: 15px; margin-top: 0; text-align: center;"><span>&nbsp;</span><a style="color: #007bff;" href="" target="_blank" rel="noopener"></a></p>
+       </div>
+      </div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div id="overlay" style="display:none">
+   <span class="loader"></span>
+  </div>
+  <!--/* CO70_Hand Raiser Alert Popup */-->
+    <!-- 팝업 오픈시 popup--open 클래스 추가 -->
+
+    <section class="co70-hand-raiser__alert-popup popup popup--alert" role="dialog" aria-modal="true" data-comp-name="popup" data-auto-init="false" id="submitIntentPopup">
+    <div class="popup__dimmed"></div>
+    <div class="popup__contents-wrap">
+    <div class="popup__contents">
+        <div class="popup__inner-wrap">
+        <div class="popup__inner">
+            <p class="popup__desc popup__desc--align-center" id="submitIntentPopupMessage"></p>
+        </div>
+        </div>
+
+        <div class="popup__btn-wrap">
+        <button class="cta cta--outlined cta--black" id="submitIntentPopupNo">No</button>
+        <button class="cta cta--contained cta--black" id="submitIntentPopupYes">Yes</button>
+        </div>
+
+        <button class="popup__close">
+        <span class="hidden">Close</span>
+        <svg class="icon" focusable="false" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"> <!-- 요거 바꿈 -->
+            <polygon points="79.17 11.17 48 42.34 16.83 11.17 11.17 16.83 42.34 48 11.17 79.17 16.83 84.83 48 53.66 79.17 84.83 84.83 79.17 53.66 48 84.83 16.83"></polygon>
+        </svg>
+        </button>
+    </div>
+    </div>
+    </section>
+    <!--/* // CO70_Hand Raiser Alert Popup */-->
+  <script type="text/javascript" src="SETK-TR_F2H26.js"></script>
+  <script type="text/javascript" src="SETK-TR_F2H26_FF.js"></script>
+  <!--<script async defer src="https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit" type="text/javascript"></script>-->
+ </body>
+</html>

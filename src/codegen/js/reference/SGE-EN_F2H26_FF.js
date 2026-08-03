@@ -67,6 +67,11 @@ $(document).ready(function ()
         // HTML Language
         $("html").attr("lang", language.substring(0, language.indexOf("_")));
 
+        // HTML Direction (RTL/LTR)
+        var rtlLangs = ["ar", "he", "ku", "fa", "ur", "yi"];
+        var langSubtag = language.substring(0, language.indexOf("_"));
+        $("html").attr("dir", rtlLangs.indexOf(langSubtag) !== -1 ? "rtl" : "ltr");
+
         // Error page / section
         setErrorContent();
 

@@ -24,6 +24,13 @@ export function GenerateStep() {
       <ul className="summary-list">
         <li>Languages: {mapResult.form.locales.map((l) => l.code).join(", ")}</li>
         <li>Questions: {mapResult.form.questions.length}</li>
+        <li>
+          Required questions:{" "}
+          {mapResult.form.questions
+            .filter((q) => config.questionRequired?.[q.id] ?? true)
+            .map((q) => q.id)
+            .join(", ") || "none"}
+        </li>
         <li>Variants: {config.variants.join(", ")}</li>
         <li>Submission endpoint: {config.apiEndpoint || "(none — local validation only)"}</li>
         <li>Analytics: {config.analytics?.enabled ? "enabled" : "disabled"}</li>

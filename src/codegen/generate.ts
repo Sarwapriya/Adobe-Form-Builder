@@ -18,16 +18,29 @@ import type { BuilderConfig, GeneratedFile } from "./types.ts";
  */
 export function generateSolution(form: FormDefinition, config: BuilderConfig): GeneratedFile[] {
   const fileNames = resolveFileNames(form, config);
+
+  // Apply per-question required overrides from config
+  const effectiveForm = config.questionRequired
+    ? {
+        ...form,
+        questions: form.questions.map((q) => {
+          const override = config.questionRequired?.[q.id];
+          if (override === undefined) return q;
+          return { ...q, required: override };
+        }),
+      }
+    : form;
+
   const files: GeneratedFile[] = [];
   if (config.variants.includes("ff")) {
-    files.push(buildFfHtml(form, config, fileNames));
+    files.push(buildFfHtml(effectiveForm, config, fileNames));
     files.push(buildFfJs(fileNames));
   }
   if (config.variants.includes("oc")) {
-    files.push(buildOcHtml(form, config, fileNames));
+    files.push(buildOcHtml(effectiveForm, config, fileNames));
     files.push(buildOcJs(fileNames));
   }
-  files.push(buildDataJs(form, config, fileNames));
+  files.push(buildDataJs(effectiveForm, config, fileNames));
   files.push(buildStyleCss(fileNames));
   return files;
 }
