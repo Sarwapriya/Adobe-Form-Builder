@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Alert, Box, Button, Paper, TextField, Typography } from "@mui/material";
+import { Alert, Avatar, Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { useAuthStore } from "../auth/authStore";
 
 export function LoginPage() {
@@ -42,16 +43,28 @@ export function LoginPage() {
         justifyContent: "center",
         alignItems: "center",
         minHeight: "100vh",
-        bgcolor: "grey.100",
+        px: 2,
       }}
     >
-      <Paper elevation={3} sx={{ p: 4, width: 360 }}>
-        <Typography variant="h5" component="h1" gutterBottom>
-          Form Builder
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Sign in to upload workbooks and manage submissions.
-        </Typography>
+      <Paper
+        sx={{
+          p: 5,
+          width: 380,
+          borderRadius: 4,
+          boxShadow: "0 20px 50px rgba(20, 40, 160, 0.12)",
+        }}
+      >
+        <Stack alignItems="center" spacing={1.5} sx={{ mb: 3, textAlign: "center" }}>
+          <Avatar sx={{ bgcolor: "primary.main", width: 48, height: 48 }}>
+            <LockOutlinedIcon />
+          </Avatar>
+          <Typography variant="h5" component="h1">
+            Form Builder
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Sign in to upload workbooks and manage submissions.
+          </Typography>
+        </Stack>
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <TextField
@@ -76,12 +89,12 @@ export function LoginPage() {
           />
 
           {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
+            <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>
               {error}
             </Alert>
           )}
 
-          <Button type="submit" variant="contained" fullWidth size="large" sx={{ mt: 3 }} disabled={submitting}>
+          <Button type="submit" variant="contained" fullWidth size="large" sx={{ mt: 3, py: 1.2 }} disabled={submitting}>
             {submitting ? "Signing in..." : "Sign in"}
           </Button>
         </Box>

@@ -1,15 +1,20 @@
 import type { CSSProperties } from "react";
-import { AppBar, Box, Button, Toolbar, Typography } from "@mui/material";
+import { AppBar, Avatar, Box, Button, Chip, Toolbar, Typography } from "@mui/material";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../auth/authStore";
 
 function navLinkStyle({ isActive }: { isActive: boolean }): CSSProperties {
   return {
-    color: "inherit",
+    color: "#fff",
     textDecoration: "none",
-    fontWeight: isActive ? 700 : 400,
-    marginRight: 16,
+    fontWeight: isActive ? 700 : 500,
+    fontSize: 14,
+    padding: "6px 14px",
+    borderRadius: 999,
+    marginRight: 8,
+    background: isActive ? "rgba(255, 255, 255, 0.18)" : "transparent",
+    transition: "background 0.15s ease",
   };
 }
 
@@ -29,8 +34,8 @@ export function AppLayout() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 0, mr: 4 }}>
+        <Toolbar sx={{ gap: 1, py: 1 }}>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 0, mr: 4, fontWeight: 700 }}>
             Form Builder
           </Typography>
 
@@ -45,16 +50,32 @@ export function AppLayout() {
             )}
           </Box>
 
-          <Typography variant="body2" sx={{ mr: 2 }}>
-            {user?.username} ({user?.role})
-          </Typography>
-          <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>
+          <Chip
+            avatar={
+              <Avatar sx={{ bgcolor: "rgba(255,255,255,0.25)", color: "#fff" }}>
+                {user?.username?.[0]?.toUpperCase() ?? "?"}
+              </Avatar>
+            }
+            label={`${user?.username} · ${user?.role}`}
+            sx={{
+              color: "#fff",
+              bgcolor: "rgba(255,255,255,0.12)",
+              mr: 2,
+              "& .MuiChip-avatar": { ml: 0.5 },
+            }}
+          />
+          <Button
+            color="inherit"
+            startIcon={<LogoutIcon />}
+            onClick={handleLogout}
+            sx={{ bgcolor: "rgba(255,255,255,0.08)", "&:hover": { bgcolor: "rgba(255,255,255,0.16)" } }}
+          >
             Log out
           </Button>
         </Toolbar>
       </AppBar>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 3, maxWidth: 1280, width: "100%", mx: "auto" }}>
         <Outlet />
       </Box>
     </Box>

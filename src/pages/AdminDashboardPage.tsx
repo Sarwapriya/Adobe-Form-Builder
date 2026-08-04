@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, Chip, MenuItem, Paper, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { DataGrid, type GridColDef, type GridPaginationModel, type GridSortModel } from "@mui/x-data-grid";
 import { ApiError } from "../api/apiClient";
 import { downloadUploadZip, listUploadsForAdmin, type AdminListParams, type AdminUploadListItem } from "../api/adminApi";
@@ -129,11 +130,32 @@ export function AdminDashboardPage() {
 
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Admin Dashboard
-      </Typography>
+      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+        <Box
+          sx={{
+            width: 44,
+            height: 44,
+            borderRadius: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+          }}
+        >
+          <AdminPanelSettingsIcon />
+        </Box>
+        <Stack spacing={0.2}>
+          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
+            Admin Dashboard
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Search, filter, and manage uploads across every user.
+          </Typography>
+        </Stack>
+      </Stack>
 
-      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
+      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", borderRadius: 3 }}>
         <TextField
           label="Subsidiary"
           size="small"
@@ -146,6 +168,7 @@ export function AdminDashboardPage() {
           placeholder="Subsidiary, file name, or username"
           value={searchFilter}
           onChange={(e) => setSearchFilter(e.target.value)}
+          sx={{ minWidth: 260 }}
         />
         <TextField
           select
@@ -164,12 +187,12 @@ export function AdminDashboardPage() {
       </Paper>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
           {error}
         </Alert>
       )}
 
-      <Paper sx={{ height: 600 }}>
+      <Paper sx={{ height: 600, borderRadius: 3, overflow: "hidden" }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -183,6 +206,22 @@ export function AdminDashboardPage() {
           onSortModelChange={setSortModel}
           pageSizeOptions={[10, 20, 50, 100]}
           disableRowSelectionOnClick
+          sx={{
+            border: "none",
+            "& .MuiDataGrid-columnHeaders": {
+              bgcolor: "#f8f9fc",
+              borderBottom: "1px solid rgba(20, 22, 33, 0.08)",
+            },
+            "& .MuiDataGrid-columnHeaderTitle": {
+              fontWeight: 700,
+              fontSize: 12,
+              textTransform: "uppercase",
+              letterSpacing: 0.4,
+              color: "text.secondary",
+            },
+            "& .MuiDataGrid-cell": { borderColor: "rgba(20, 22, 33, 0.06)" },
+            "& .MuiDataGrid-row:hover": { bgcolor: "rgba(20, 40, 160, 0.04)" },
+          }}
         />
       </Paper>
     </Box>

@@ -9,18 +9,58 @@ import { EmailLog } from "../entities/EmailLog";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 
-export const AppDataSource = new DataSource({
-  type: "mssql",
-  url: process.env.SQL_CONNECTION_STRING,
-  synchronize: false,
-  logging: false,
-  entities: [Upload, AdminSetting, User, RefreshToken, GeneratedFile, EmailLog],
-  migrations: [InitSchema1700000000000, AddUsersAndVersioning1710000000000],
-  options: {
-    encrypt: true,
-    // Only for local/dev SQL Server instances presenting a self-signed
-    // certificate — disables certificate validation, so this must stay unset
-    // (false) in production (e.g. against Azure SQL, which has a valid cert).
-    trustServerCertificate: process.env.SQL_TRUST_SERVER_CERTIFICATE === "true",
-  },
-});
+const entities = [Upload, AdminSetting, User, RefreshToken, GeneratedFile, EmailLog];
+const migrations = [InitSchema1700000000000, AddUsersAndVersioning1710000000000];
+
+/**
+ * Windows/trusted-connection auth (local dev against a named instance, e.g.
+ * JANITHA-PC\SQLEXPRESS) needs the native msnodesqlv8 driver — tedious (the
+ * default mssql driver, used below for SQL_CONNECTION_STRING) has no concept
+ * of a real trusted connection, only NTLM with an explicit domain/user/password.
+ *
+ * mssql's own msnodesqlv8 connection-string builder hardcodes the ODBC driver
+ * name "SQL Server Native Client 11.0" on Windows, which isn't installed on
+ * most current machines (this one only has "ODBC Driver 17 for SQL Server") —
+ * so a raw `connectionString` is passed via `extra` instead of letting it
+ * auto-build one, naming the driver that's actually present.
+ */
+function buildTrustedConnectionDataSource(): DataSource {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const msnodesqlv8Driver = require("mssql/msnodesqlv8");
+  const server = process.env.SQL_SERVER ?? "localhost";
+  const instance = process.env.SQL_INSTANCE;
+  const database = process.env.SQL_DATABASE;
+  const serverSegment = instance ? `${server}\\${instance}` : server;
+
+  return new DataSource({
+    type: "mssql",
+    driver: msnodesqlv8Driver,
+    database,
+    synchronize: false,
+    logging: false,
+    entities,
+    migrations,
+    extra: {
+      connectionString: `Driver={ODBC Driver 17 for SQL Server};Server=${serverSegment};Database=${database};Trusted_Connection=Yes;Encrypt=yes;TrustServerCertificate=yes;`,
+    },
+  });
+}
+
+export const AppDataSource =
+  process.env.SQL_TRUSTED_CONNECTION === "true"
+    ? buildTrustedConnectionDataSource()
+    : new DataSource({
+        type: "mssql",
+        url: process.env.SQL_CONNECTION_STRING,
+        synchronize: false,
+        logging: false,
+        entities,
+        migrations,
+        options: {
+          encrypt: true,
+          // Only for local/dev SQL Server instances presenting a self-signed
+          // certificate — disables certificate validation, so this must stay unset
+          // (false) in production (e.g. against Azure SQL, which has a valid cert).
+          trustServerCertificate: process.env.SQL_TRUST_SERVER_CERTIFICATE === "true",
+        },
+      });

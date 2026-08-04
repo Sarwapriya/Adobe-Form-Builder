@@ -8,6 +8,7 @@ import {
   CircularProgress,
   IconButton,
   Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -22,6 +23,7 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SendIcon from "@mui/icons-material/Send";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { ApiError } from "../api/apiClient";
 import {
   deleteUpload,
@@ -129,11 +131,41 @@ export function UploadHistoryPage() {
 
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Upload a workbook
-      </Typography>
+      <Stack spacing={0.5} sx={{ mb: 3 }}>
+        <Typography variant="h4" component="h1">
+          Upload a workbook
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Submit an Excel workbook to generate a new campaign form, then track it below.
+        </Typography>
+      </Stack>
 
-      <Paper sx={{ p: 3, mb: 4 }}>
+      <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: 2,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: "primary.main",
+              color: "primary.contrastText",
+            }}
+          >
+            <UploadFileIcon fontSize="small" />
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2}>
+              New upload
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Generation runs automatically after upload
+            </Typography>
+          </Box>
+        </Stack>
+
         <Box
           component="form"
           onSubmit={handleUpload}
@@ -188,17 +220,17 @@ export function UploadHistoryPage() {
         )}
       </Paper>
 
-      <Typography variant="h5" component="h2" gutterBottom>
+      <Typography variant="h5" component="h2" gutterBottom fontWeight={700}>
         Your upload history
       </Typography>
 
       {actionError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
           {actionError}
         </Alert>
       )}
 
-      <Paper>
+      <Paper sx={{ borderRadius: 3, overflow: "hidden" }}>
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -215,20 +247,20 @@ export function UploadHistoryPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
                     <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    No uploads yet.
+                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                    <Typography color="text.secondary">No uploads yet — submit a workbook above to get started.</Typography>
                   </TableCell>
                 </TableRow>
               ) : (
                 rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>{row.subsidiaryId}</TableCell>
+                  <TableRow key={row.id} hover sx={{ "&:last-child td": { borderBottom: 0 } }}>
+                    <TableCell sx={{ fontWeight: 600 }}>{row.subsidiaryId}</TableCell>
                     <TableCell>{row.fileName}</TableCell>
                     <TableCell>v{row.version}</TableCell>
                     <TableCell>

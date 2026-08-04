@@ -1,17 +1,33 @@
-import sgMail from "@sendgrid/mail";
+import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 import { AppDataSource } from "../config/data-source";
 import { AdminSetting } from "../entities/AdminSetting";
 import { EmailLog } from "../entities/EmailLog";
 
+let transporter: Transporter | null = null;
 let initialized = false;
 
+/** Builds the SMTP transport once, lazily, from SMTP_HOST/PORT/SECURE/USER/
+ * PASSWORD. Left null (rather than throwing) when SMTP_HOST isn't set, so a
+ * missing config degrades to "skip and log" the same way a missing SendGrid
+ * key used to — this service must never be the reason an upload/submit
+ * request fails. */
 function ensureInitialized(): void {
   if (initialized) return;
-  const apiKey = process.env.SENDGRID_API_KEY;
-  if (apiKey) {
-    sgMail.setApiKey(apiKey);
-  }
   initialized = true;
+  const host = process.env.SMTP_HOST;
+  if (!host) return;
+
+  transporter = nodemailer.createTransport({
+    host,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } : undefined,
+  });
+}
+
+function resolveFrom(to: string): string {
+  return process.env.SMTP_FROM ?? process.env.SMTP_USER ?? to;
 }
 
 async function resolveRecipient(): Promise<string | null> {
@@ -61,22 +77,26 @@ function buildUploadMessage(to: string, details: UploadNotificationDetails) {
 
   return {
     to,
-    from: process.env.FORMBUILDER_NOTIFY_EMAIL ?? to,
+    from: resolveFrom(to),
     subject,
     text,
   };
 }
 
 /**
- * Sends the upload notification. Never throws — a missing recipient or a
- * SendGrid failure is logged and swallowed so it can't fail the upload
- * request itself.
+ * Sends the upload notification. Never throws — a missing recipient/SMTP
+ * config or a send failure is logged and swallowed so it can't fail the
+ * upload request itself.
  */
 export async function sendUploadNotification(
   details: UploadNotificationDetails
 ): Promise<void> {
   try {
     ensureInitialized();
+    if (!transporter) {
+      console.warn("SMTP not configured (SMTP_HOST) — skipping upload notification email");
+      return;
+    }
     const recipient = await resolveRecipient();
     if (!recipient) {
       console.warn(
@@ -84,7 +104,7 @@ export async function sendUploadNotification(
       );
       return;
     }
-    await sgMail.send(buildUploadMessage(recipient, details));
+    await transporter.sendMail(buildUploadMessage(recipient, details));
   } catch (err) {
     console.error("Failed to send upload notification email", err);
   }
@@ -113,7 +133,7 @@ function buildSubmissionMessage(to: string, details: SubmissionNotificationDetai
 
   return {
     to,
-    from: process.env.FORMBUILDER_NOTIFY_EMAIL ?? to,
+    from: resolveFrom(to),
     subject: "New Web Form Submission",
     text,
   };
@@ -124,13 +144,27 @@ function buildSubmissionMessage(to: string, details: SubmissionNotificationDetai
  * Unlike sendUploadNotification, submission is a first-class auditable event
  * per the product requirement ("record submission details... email the
  * Admin"), so every attempt — sent, failed, or skipped for lack of a
- * configured recipient — leaves a row. Never throws — same swallow-and-log
- * discipline as sendUploadNotification, so a notification failure can't fail
- * the submit request itself.
+ * configured recipient/SMTP setup — leaves a row. Never throws — same
+ * swallow-and-log discipline as sendUploadNotification, so a notification
+ * failure can't fail the submit request itself.
  */
 export async function sendSubmissionNotification(details: SubmissionNotificationDetails): Promise<void> {
   const emailLogRepo = AppDataSource.getRepository(EmailLog);
   ensureInitialized();
+
+  if (!transporter) {
+    console.warn("SMTP not configured (SMTP_HOST) — skipping submission notification email");
+    await emailLogRepo.save(
+      emailLogRepo.create({
+        uploadId: details.uploadId,
+        recipient: "(no recipient configured)",
+        status: "failed",
+        errorMessage: "SMTP not configured (SMTP_HOST)",
+      }),
+    );
+    return;
+  }
+
   const recipient = await resolveRecipient();
 
   if (!recipient) {
@@ -149,7 +183,7 @@ export async function sendSubmissionNotification(details: SubmissionNotification
   }
 
   try {
-    await sgMail.send(buildSubmissionMessage(recipient, details));
+    await transporter.sendMail(buildSubmissionMessage(recipient, details));
     await emailLogRepo.save(
       emailLogRepo.create({ uploadId: details.uploadId, recipient, status: "sent", errorMessage: null }),
     );
