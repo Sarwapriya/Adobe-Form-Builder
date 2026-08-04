@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from "fflate";
 import { downloadBlob } from "../utils/download.ts";
-import type { GeneratedFile } from "./types.ts";
+import type { GeneratedFile } from "@formbuilder/shared";
 
 /** Side-effect module: zips the generated files and triggers a browser download.
  * Called only from a UI action — `generate.ts` itself stays pure. */

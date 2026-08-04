@@ -1,10 +1,16 @@
 import { create } from "zustand";
-import { defaultBuilderConfig, type BuilderConfig } from "../codegen/types.ts";
-import { isSupportedExcelFile, parseWorkbook } from "../excel/parser.ts";
-import { mapWorkbook, type MapResult } from "../excel/mapper.ts";
-import { validateWorkbook } from "../excel/validator.ts";
-import type { Issue, ValidationResult } from "../excel/types.ts";
-import type { LocaleCode } from "../form/formDefinition.ts";
+import {
+  defaultBuilderConfig,
+  isSupportedExcelFile,
+  mapWorkbook,
+  parseWorkbook,
+  validateWorkbook,
+  type BuilderConfig,
+  type Issue,
+  type LocaleCode,
+  type MapResult,
+  type ValidationResult,
+} from "@formbuilder/shared";
 
 export type WizardStep = "upload" | "preview" | "configure" | "generate";
 

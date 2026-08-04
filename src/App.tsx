@@ -1,5 +1,48 @@
+import { useEffect } from "react";
+import { CssBaseline, ThemeProvider } from "@mui/material";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { theme } from "./app/theme.ts";
+import { AppLayout } from "./app/AppLayout.tsx";
 import { AppShell } from "./components/AppShell.tsx";
+import { AdminRoute } from "./auth/AdminRoute.tsx";
+import { ProtectedRoute } from "./auth/ProtectedRoute.tsx";
+import { useAuthStore } from "./auth/authStore.ts";
+import { AdminDashboardPage } from "./pages/AdminDashboardPage.tsx";
+import { LoginPage } from "./pages/LoginPage.tsx";
+import { UploadHistoryPage } from "./pages/UploadHistoryPage.tsx";
 
 export default function App() {
-  return <AppShell />;
+  const silentRefresh = useAuthStore((s) => s.silentRefresh);
+
+  useEffect(() => {
+    void silentRefresh();
+    // Runs exactly once at app startup — the Zustand action reference is
+    // stable across renders, so this effect never re-fires afterward.
+  }, [silentRefresh]);
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          {/* The original no-login, fully client-side wizard — kept as a
+              quick/offline generator alongside the authenticated flow below,
+              not gated behind a session. */}
+          <Route path="/local" element={<AppShell />} />
+
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AppLayout />}>
+              <Route index element={<UploadHistoryPage />} />
+              <Route element={<AdminRoute />}>
+                <Route path="admin" element={<AdminDashboardPage />} />
+              </Route>
+            </Route>
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
+  );
 }

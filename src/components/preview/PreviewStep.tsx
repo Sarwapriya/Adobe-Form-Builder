@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { resolveFileNames } from "../../codegen/fileNames.ts";
-import { generateSolution } from "../../codegen/generate.ts";
+import { generateSolution, resolveFileNames } from "@formbuilder/shared";
 import { buildPreviewDocument } from "../../codegen/previewDocument.ts";
 import { useBuilderStore } from "../../store/builderStore.ts";
 import { ValidationPanel } from "./ValidationPanel.tsx";

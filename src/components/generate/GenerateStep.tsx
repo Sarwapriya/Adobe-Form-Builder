@@ -1,5 +1,4 @@
-import { resolveFileNames } from "../../codegen/fileNames.ts";
-import { generateSolution } from "../../codegen/generate.ts";
+import { generateSolution, resolveFileNames } from "@formbuilder/shared";
 import { zipAndDownload } from "../../codegen/zipAndDownload.ts";
 import { useBuilderStore } from "../../store/builderStore.ts";
 

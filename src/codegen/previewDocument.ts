@@ -1,5 +1,4 @@
-import type { FileNames } from "./fileNames.ts";
-import type { FormVariant, GeneratedFile } from "./types.ts";
+import type { FileNames, FormVariant, GeneratedFile } from "@formbuilder/shared";
 
 /**
  * Inlines the generated CSS/data-JS/behavior-JS into a single self-contained HTML

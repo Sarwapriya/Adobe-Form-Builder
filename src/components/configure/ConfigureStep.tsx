@@ -1,4 +1,4 @@
-import type { FormVariant } from "../../codegen/types.ts";
+import type { FormVariant } from "@formbuilder/shared";
 import { useBuilderStore } from "../../store/builderStore.ts";
 
 export function ConfigureStep() {

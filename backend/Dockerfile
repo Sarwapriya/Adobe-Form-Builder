@@ -5,7 +5,10 @@ FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
-RUN npm ci --workspace=backend
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci --workspace=backend --workspace=packages/shared
+COPY packages/shared packages/shared
+RUN npm run build --workspace=packages/shared
 COPY backend backend
 RUN npm run build --workspace=backend
 
@@ -13,8 +16,10 @@ FROM node:20-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
-RUN npm ci --workspace=backend --omit=dev
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci --workspace=backend --workspace=packages/shared --omit=dev
 COPY --from=build /app/backend/dist backend/dist
+COPY --from=build /app/packages/shared/dist packages/shared/dist
 COPY backend/sql backend/sql
 
 ENV UPLOAD_DIR=/app/backend/uploads

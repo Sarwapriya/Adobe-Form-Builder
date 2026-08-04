@@ -6,11 +6,7 @@
  */
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { generateSolution } from "../src/codegen/generate.ts";
-import { defaultBuilderConfig } from "../src/codegen/types.ts";
-import { mapWorkbook } from "../src/excel/mapper.ts";
-import { parseWorkbook } from "../src/excel/parser.ts";
-import { validateWorkbook } from "../src/excel/validator.ts";
+import { defaultBuilderConfig, generateSolution, mapWorkbook, parseWorkbook, validateWorkbook } from "@formbuilder/shared";
 
 const DOCS_DIR = path.resolve(import.meta.dirname, "../Documents");
 const OUT_DIR = path.resolve(import.meta.dirname, "../dist-sample-solution");

@@ -1,9 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { resolveFileNames } from "../../src/codegen/fileNames.ts";
-import { generateSolution } from "../../src/codegen/generate.ts";
+import { defaultBuilderConfig, generateSolution, resolveFileNames, type FormVariant } from "@formbuilder/shared";
 import { buildPreviewDocument } from "../../src/codegen/previewDocument.ts";
-import { defaultBuilderConfig, type FormVariant } from "../../src/codegen/types.ts";
 import { sampleFormDefinition } from "./fixtures.ts";
 
 describe("buildPreviewDocument", () => {
