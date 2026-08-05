@@ -14,6 +14,7 @@ import {
   validateCredentials,
   REFRESH_TOKEN_TTL_MS,
 } from "../services/authService";
+import { cleanupUnsubmittedUploads } from "../services/uploadCleanupService";
 
 export const authRouter = Router();
 
@@ -56,6 +57,10 @@ authRouter.post(
       return;
     }
 
+    // Purge this user's never-submitted uploads from a previous session before
+    // they see their upload history again — see uploadCleanupService.ts.
+    await cleanupUnsubmittedUploads(user.id);
+
     const accessToken = issueAccessToken(user);
     const refreshToken = await issueRefreshToken(user, req.ip);
     setRefreshCookie(res, refreshToken);
@@ -63,7 +68,7 @@ authRouter.post(
 
     res.json({
       accessToken,
-      user: { id: user.id, username: user.username, role: user.role },
+      user: { id: user.id, username: user.username, role: user.role, subsidiaryId: user.subsidiaryId },
     });
   }),
 );

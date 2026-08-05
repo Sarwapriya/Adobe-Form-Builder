@@ -1,32 +1,103 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import HistoryIcon from "@mui/icons-material/History";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+import AutorenewIcon from "@mui/icons-material/Autorenew";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ErrorIcon from "@mui/icons-material/Error";
+import type { SvgIconComponent } from "@mui/icons-material";
 import { DataGrid, type GridColDef, type GridPaginationModel, type GridSortModel } from "@mui/x-data-grid";
 import { ApiError } from "../api/apiClient";
 import {
   downloadUploadZip,
+  getUploadHistorySummary,
   listAllProjectCodes,
-  listUploadsForAdmin,
+  listUploadHistoryForAdmin,
   previewUpload,
   type AdminListParams,
   type AdminUploadListItem,
   type ProjectCode,
+  type UploadHistorySummary,
 } from "../api/adminApi";
+import type { UploadStatus } from "../api/uploadsApi";
 import { downloadBlob } from "../utils/download";
-import { ProjectCodeManager } from "../components/admin/ProjectCodeManager";
+
+// Only these three statuses can ever appear here (the backend's
+// listUploadHistoryForAdmin filters to exactly this set) — a "generated" row
+// is still not-yet-submitted, so it's only guaranteed to show up here until
+// its owner's next login purges it if they never submit it (see
+// uploadCleanupService.ts); "uploaded" never lingers long enough to see.
+const STATUS_OPTIONS: Array<{ value: UploadStatus | ""; label: string }> = [
+  { value: "", label: "All statuses" },
+  { value: "generated", label: "Generated" },
+  { value: "submitted", label: "Submitted" },
+  { value: "failed", label: "Failed" },
+];
+
+const STATUS_COLOR: Record<UploadStatus, "default" | "success" | "error" | "warning"> = {
+  uploaded: "default",
+  generated: "success",
+  submitted: "success",
+  failed: "error",
+};
+
+interface SummaryTileConfig {
+  key: keyof UploadHistorySummary;
+  label: string;
+  icon: SvgIconComponent;
+  color: "primary" | "info" | "success" | "error";
+}
+
+// Status colors are reserved and paired with an icon + label here, never
+// color alone — total uses the neutral primary color since it isn't a status.
+const SUMMARY_TILES: SummaryTileConfig[] = [
+  { key: "total", label: "Total uploaded", icon: UploadFileIcon, color: "primary" },
+  { key: "generated", label: "Generated (pending submit)", icon: AutorenewIcon, color: "info" },
+  { key: "submitted", label: "Submitted", icon: CheckCircleIcon, color: "success" },
+  { key: "failed", label: "Failed", icon: ErrorIcon, color: "error" },
+];
+
+function SummaryTile({ config, value }: { config: SummaryTileConfig; value: number }) {
+  const Icon = config.icon;
+  return (
+    <Paper sx={{ p: 2, flex: "1 1 200px", display: "flex", alignItems: "center", gap: 1.5, borderRadius: 3 }}>
+      <Box
+        sx={{
+          width: 40,
+          height: 40,
+          borderRadius: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: `${config.color}.main`,
+          color: `${config.color}.contrastText`,
+          flexShrink: 0,
+        }}
+      >
+        <Icon fontSize="small" />
+      </Box>
+      <Box>
+        <Typography variant="h5" fontWeight={700} lineHeight={1.1}>
+          {value}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {config.label}
+        </Typography>
+      </Box>
+    </Paper>
+  );
+}
 
 /**
- * Admin-only view of every *submitted* upload across every user — an upload
- * only appears here once its uploader has submitted it (see
- * adminUploadService.listUploadsForAdmin, which hardcodes the submitted-only
- * filter server-side; not just a UI default). In-progress and failed uploads
- * live on the separate AdminHistoryPage. Search/filter/sort/pagination
- * handled server-side — the grid never fetches more than one page at a time,
- * even with thousands of uploads.
+ * The full audit trail: every generated, submitted, or failed upload across
+ * every user, including ones the admin dashboard doesn't show (submitted-only)
+ * or that get cleaned up once their owner logs in again without submitting.
+ * Preview/download work for generated and submitted rows; a failed upload
+ * never produced generated files.
  */
-export function AdminDashboardPage() {
+export function AdminHistoryPage() {
   const [rows, setRows] = useState<AdminUploadListItem[]>([]);
   const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -35,38 +106,45 @@ export function AdminDashboardPage() {
   const [subsidiaryFilter, setSubsidiaryFilter] = useState("");
   const [projectCodeFilter, setProjectCodeFilter] = useState("");
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
+  const [statusFilter, setStatusFilter] = useState<UploadStatus | "">("");
   const [searchFilter, setSearchFilter] = useState("");
+
+  const [summary, setSummary] = useState<UploadHistorySummary>({ total: 0, generated: 0, submitted: 0, failed: 0 });
 
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 20 });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: "uploadDate", sort: "desc" }]);
 
-  const params = useMemo<AdminListParams>(() => {
-    const sort = sortModel[0];
-    return {
+  // The subsidiary/projectCode/search slice of the filters, shared by both
+  // the grid query and the summary tiles below — kept separate from
+  // `params` so a status-only or pagination-only change doesn't refetch the
+  // summary for no reason.
+  const summaryFilters = useMemo<AdminListParams>(
+    () => ({
       subsidiaryId: subsidiaryFilter.trim() || undefined,
       projectCode: projectCodeFilter || undefined,
       search: searchFilter.trim() || undefined,
+    }),
+    [subsidiaryFilter, projectCodeFilter, searchFilter],
+  );
+
+  const params = useMemo<AdminListParams>(() => {
+    const sort = sortModel[0];
+    return {
+      ...summaryFilters,
+      status: statusFilter || undefined,
       page: paginationModel.page + 1,
       pageSize: paginationModel.pageSize,
       sortBy: (sort?.field as AdminListParams["sortBy"]) ?? "uploadDate",
       sortDir: sort?.sort === "asc" ? "ASC" : "DESC",
     };
-  }, [subsidiaryFilter, projectCodeFilter, searchFilter, paginationModel, sortModel]);
-
-  // All codes (not just open ones) — a submitted upload may have used a code
-  // that's since been closed, and it should still be filterable here.
-  useEffect(() => {
-    listAllProjectCodes()
-      .then(setProjectCodes)
-      .catch(() => undefined);
-  }, []);
+  }, [summaryFilters, statusFilter, paginationModel, sortModel]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    listUploadsForAdmin(params)
+    listUploadHistoryForAdmin(params)
       .then((result) => {
         if (cancelled) return;
         setRows(result.items);
@@ -74,7 +152,7 @@ export function AdminDashboardPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "Failed to load uploads");
+        setError(err instanceof ApiError ? err.message : "Failed to load upload history");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -85,29 +163,40 @@ export function AdminDashboardPage() {
     };
   }, [params]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getUploadHistorySummary(summaryFilters)
+      .then((result) => {
+        if (!cancelled) setSummary(result);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [summaryFilters]);
+
+  useEffect(() => {
+    listAllProjectCodes()
+      .then(setProjectCodes)
+      .catch(() => undefined);
+  }, []);
+
   async function handleDownload(uploadId: string, subsidiaryId: string, version: number | null) {
     try {
       const blob = await downloadUploadZip(uploadId);
-      // Mirrors adminUploadService.buildUploadZip's own fallback — a version
-      // is only ever assigned once submitted (see submissionService.ts).
+      // Mirrors adminUploadService.buildUploadZip's own fallback — a
+      // "generated" (not-yet-submitted) row has no version number yet.
       downloadBlob(blob, `${subsidiaryId}-${version != null ? `v${version}` : "draft"}.zip`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Download failed");
     }
   }
 
-  // Opens the generated Full Form in a new tab as a self-contained HTML blob
-  // (CSS/JS inlined server-side — see previewService.ts) rather than
-  // navigating there directly, since a plain link can't carry the
-  // Authorization header the admin API requires.
   async function handlePreview(uploadId: string) {
     try {
       const blob = await previewUpload(uploadId, "ff");
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank", "noopener,noreferrer");
-      // The new tab has already loaded the blob URL by the time it opens;
-      // revoke it shortly after rather than immediately, so it isn't yanked
-      // out from under a still-loading document.
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Preview failed");
@@ -126,6 +215,14 @@ export function AdminDashboardPage() {
       valueGetter: (_, row) => (row.version != null ? `v${row.version}` : "—"),
     },
     {
+      field: "status",
+      headerName: "Status",
+      width: 130,
+      renderCell: (cellParams) => (
+        <Chip label={cellParams.value} color={STATUS_COLOR[cellParams.value as UploadStatus]} size="small" />
+      ),
+    },
+    {
       field: "uploadDate",
       headerName: "Uploaded",
       flex: 1,
@@ -142,20 +239,29 @@ export function AdminDashboardPage() {
       headerName: "Actions",
       width: 180,
       sortable: false,
-      renderCell: (cellParams) => (
-        <Stack direction="row" spacing={0.5}>
-          <Button size="small" startIcon={<VisibilityIcon />} onClick={() => handlePreview(cellParams.row.id)}>
-            View
-          </Button>
-          <Button
-            size="small"
-            startIcon={<DownloadIcon />}
-            onClick={() => handleDownload(cellParams.row.id, cellParams.row.subsidiaryId, cellParams.row.version)}
-          >
-            Zip
-          </Button>
-        </Stack>
-      ),
+      renderCell: (cellParams) => {
+        const hasFiles = cellParams.row.status === "submitted" || cellParams.row.status === "generated";
+        return (
+          <Stack direction="row" spacing={0.5}>
+            <Button
+              size="small"
+              startIcon={<VisibilityIcon />}
+              disabled={!hasFiles}
+              onClick={() => handlePreview(cellParams.row.id)}
+            >
+              View
+            </Button>
+            <Button
+              size="small"
+              startIcon={<DownloadIcon />}
+              disabled={!hasFiles}
+              onClick={() => handleDownload(cellParams.row.id, cellParams.row.subsidiaryId, cellParams.row.version)}
+            >
+              Zip
+            </Button>
+          </Stack>
+        );
+      },
     },
   ];
 
@@ -174,19 +280,23 @@ export function AdminDashboardPage() {
             color: "primary.contrastText",
           }}
         >
-          <AdminPanelSettingsIcon />
+          <HistoryIcon />
         </Box>
         <Stack spacing={0.2}>
           <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            Admin Dashboard
+            All History
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Search, preview, and download every submitted campaign form.
+            Every generated, submitted, or failed upload across every user, regardless of subsidiary.
           </Typography>
         </Stack>
       </Stack>
 
-      <ProjectCodeManager />
+      <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 3 }}>
+        {SUMMARY_TILES.map((tile) => (
+          <SummaryTile key={tile.key} config={tile} value={summary[tile.key]} />
+        ))}
+      </Stack>
 
       <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", borderRadius: 3 }}>
         <TextField
@@ -218,6 +328,20 @@ export function AdminDashboardPage() {
           onChange={(e) => setSearchFilter(e.target.value)}
           sx={{ minWidth: 260 }}
         />
+        <TextField
+          select
+          label="Status"
+          size="small"
+          sx={{ minWidth: 160 }}
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as UploadStatus | "")}
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </TextField>
       </Paper>
 
       {error && (

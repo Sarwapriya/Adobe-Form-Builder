@@ -7,6 +7,10 @@ export interface AuthUser {
   id: string;
   username: string;
   role: UserRole;
+  /** Scopes a standard user to one subsidiary — the upload form auto-fills
+   * and locks its Subsidiary field to this value for them. Null for admins
+   * and for standard users not tied to one. */
+  subsidiaryId: string | null;
 }
 
 export type AuthStatus = "idle" | "loading" | "authenticated" | "unauthenticated";
@@ -36,10 +40,11 @@ function base64UrlDecode(input: string): string {
 }
 
 /** Decodes the (signed, not encrypted) access token's payload client-side to
- * recover the logged-in user's id/username/role — used after silentRefresh,
- * whose response body is just `{ accessToken }`. This is display-only trust:
- * every protected backend endpoint still independently verifies the token's
- * signature itself, so a tampered payload here can't grant any real access. */
+ * recover the logged-in user's id/username/role/subsidiaryId — used after
+ * silentRefresh, whose response body is just `{ accessToken }`. This is
+ * display-only trust: every protected backend endpoint still independently
+ * verifies the token's signature itself, so a tampered payload here can't
+ * grant any real access. */
 function decodeAccessToken(token: string): AuthUser | null {
   try {
     const payloadSegment = token.split(".")[1];
@@ -52,7 +57,12 @@ function decodeAccessToken(token: string): AuthUser | null {
     ) {
       return null;
     }
-    return { id: payload.sub, username: payload.username, role: payload.role };
+    return {
+      id: payload.sub,
+      username: payload.username,
+      role: payload.role,
+      subsidiaryId: typeof payload.subsidiaryId === "string" ? payload.subsidiaryId : null,
+    };
   } catch {
     return null;
   }

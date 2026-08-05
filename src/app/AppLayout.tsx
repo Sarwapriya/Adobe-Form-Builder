@@ -1,82 +1,228 @@
-import type { CSSProperties } from "react";
-import { AppBar, Avatar, Box, Button, Chip, Toolbar, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
+import {
+  Avatar,
+  Box,
+  Chip,
+  Divider,
+  Drawer,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import DescriptionIcon from "@mui/icons-material/Description";
 import LogoutIcon from "@mui/icons-material/Logout";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import HistoryIcon from "@mui/icons-material/History";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import type { ReactNode } from "react";
 import { useAuthStore } from "../auth/authStore";
 
-function navLinkStyle({ isActive }: { isActive: boolean }): CSSProperties {
-  return {
-    color: "#fff",
-    textDecoration: "none",
-    fontWeight: isActive ? 700 : 500,
-    fontSize: 14,
-    padding: "6px 14px",
-    borderRadius: 999,
-    marginRight: 8,
-    background: isActive ? "rgba(255, 255, 255, 0.18)" : "transparent",
-    transition: "background 0.15s ease",
-  };
+const EXPANDED_WIDTH = 260;
+const COLLAPSED_WIDTH = 76;
+const COLLAPSE_STORAGE_KEY = "sidebarCollapsed";
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: ReactNode;
+  /** Exact-match only — otherwise "/admin" would also read as active while on "/admin/history". */
+  exact: boolean;
 }
 
-/** Shell for every authenticated page: top nav (role-gated Admin Dashboard
- * link, username, logout) + the current route rendered via <Outlet/>. Mounted
- * once as the layout route wrapping "/" and "/admin" (see App.tsx). */
+/** Shell for every authenticated page: a collapsible left sidebar (nav +
+ * account) with the current route rendered via <Outlet/>. Mounted once as the
+ * layout route wrapping "/" and "/admin*" (see App.tsx). Collapsed state is
+ * remembered across reloads via localStorage, matching the polish of a
+ * typical SaaS admin shell rather than resetting every visit. */
 export function AppLayout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true");
+
+  useEffect(() => {
+    localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
+  }, [collapsed]);
 
   async function handleLogout() {
     await logout();
     navigate("/login", { replace: true });
   }
 
+  const navItems: NavItem[] = [
+    { to: "/", label: "Upload History", icon: <UploadFileIcon />, exact: true },
+    ...(user?.role === "admin"
+      ? [
+          { to: "/admin", label: "Admin Dashboard", icon: <AdminPanelSettingsIcon />, exact: true },
+          { to: "/admin/history", label: "All History", icon: <HistoryIcon />, exact: true },
+        ]
+      : []),
+  ];
+
+  const drawerWidth = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
+
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      <AppBar position="static">
-        <Toolbar sx={{ gap: 1, py: 1 }}>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 0, mr: 4, fontWeight: 700 }}>
-            Form Builder
-          </Typography>
-
-          <Box sx={{ flexGrow: 1, display: "flex" }}>
-            <NavLink to="/" end style={navLinkStyle}>
-              Upload History
-            </NavLink>
-            {user?.role === "admin" && (
-              <NavLink to="/admin" style={navLinkStyle}>
-                Admin Dashboard
-              </NavLink>
-            )}
+    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+      <Drawer
+        variant="permanent"
+        sx={{
+          width: drawerWidth,
+          flexShrink: 0,
+          whiteSpace: "nowrap",
+          transition: (t) => t.transitions.create("width", { duration: t.transitions.duration.shortest }),
+          "& .MuiDrawer-paper": {
+            width: drawerWidth,
+            overflowX: "hidden",
+            boxSizing: "border-box",
+            border: "none",
+            backgroundImage: "linear-gradient(180deg, #1428a0 0%, #16227a 100%)",
+            color: "#fff",
+            transition: (t) => t.transitions.create("width", { duration: t.transitions.duration.shortest }),
+          },
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, py: 2.5, minHeight: 72 }}>
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: 2,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: "rgba(255,255,255,0.14)",
+            }}
+          >
+            <DescriptionIcon fontSize="small" />
           </Box>
+          {!collapsed && (
+            <Typography variant="h6" fontWeight={700} noWrap sx={{ flexGrow: 1 }}>
+              Form Builder
+            </Typography>
+          )}
+        </Box>
 
-          <Chip
-            avatar={
-              <Avatar sx={{ bgcolor: "rgba(255,255,255,0.25)", color: "#fff" }}>
+        <Divider sx={{ borderColor: "rgba(255,255,255,0.12)" }} />
+
+        <List sx={{ px: 1.25, py: 1.5, flexGrow: 1 }}>
+          {navItems.map((item) => {
+            const selected = item.exact ? location.pathname === item.to : location.pathname.startsWith(item.to);
+            const button = (
+              <ListItemButton
+                key={item.to}
+                component={Link}
+                to={item.to}
+                selected={selected}
+                sx={{
+                  borderRadius: 2,
+                  mb: 0.5,
+                  minHeight: 44,
+                  justifyContent: collapsed ? "center" : "flex-start",
+                  color: "rgba(255,255,255,0.85)",
+                  "&.Mui-selected": {
+                    bgcolor: "rgba(255,255,255,0.16)",
+                    color: "#fff",
+                  },
+                  "&.Mui-selected:hover": { bgcolor: "rgba(255,255,255,0.20)" },
+                  "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+                }}
+              >
+                <ListItemIcon
+                  sx={{ minWidth: 0, mr: collapsed ? 0 : 1.5, justifyContent: "center", color: "inherit" }}
+                >
+                  {item.icon}
+                </ListItemIcon>
+                {!collapsed && (
+                  <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }} />
+                )}
+              </ListItemButton>
+            );
+            return collapsed ? (
+              <Tooltip key={item.to} title={item.label} placement="right">
+                {button}
+              </Tooltip>
+            ) : (
+              button
+            );
+          })}
+        </List>
+
+        <Divider sx={{ borderColor: "rgba(255,255,255,0.12)" }} />
+
+        <Box sx={{ p: 1.25 }}>
+          {collapsed ? (
+            <Tooltip title={`${user?.username} · ${user?.role}`} placement="right">
+              <Avatar sx={{ bgcolor: "rgba(255,255,255,0.18)", color: "#fff", mx: "auto", mb: 1 }}>
                 {user?.username?.[0]?.toUpperCase() ?? "?"}
               </Avatar>
-            }
-            label={`${user?.username} · ${user?.role}`}
-            sx={{
-              color: "#fff",
-              bgcolor: "rgba(255,255,255,0.12)",
-              mr: 2,
-              "& .MuiChip-avatar": { ml: 0.5 },
-            }}
-          />
-          <Button
-            color="inherit"
-            startIcon={<LogoutIcon />}
-            onClick={handleLogout}
-            sx={{ bgcolor: "rgba(255,255,255,0.08)", "&:hover": { bgcolor: "rgba(255,255,255,0.16)" } }}
-          >
-            Log out
-          </Button>
-        </Toolbar>
-      </AppBar>
+            </Tooltip>
+          ) : (
+            <Chip
+              avatar={
+                <Avatar sx={{ bgcolor: "rgba(255,255,255,0.25)", color: "#fff" }}>
+                  {user?.username?.[0]?.toUpperCase() ?? "?"}
+                </Avatar>
+              }
+              label={`${user?.username} · ${user?.role}`}
+              sx={{
+                width: "100%",
+                justifyContent: "flex-start",
+                color: "#fff",
+                bgcolor: "rgba(255,255,255,0.10)",
+                mb: 1,
+                "& .MuiChip-avatar": { ml: 0.5 },
+                "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" },
+              }}
+            />
+          )}
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3, maxWidth: 1280, width: "100%", mx: "auto" }}>
-        <Outlet />
+          <ListItemButton
+            onClick={handleLogout}
+            sx={{
+              borderRadius: 2,
+              minHeight: 40,
+              justifyContent: collapsed ? "center" : "flex-start",
+              color: "rgba(255,255,255,0.85)",
+              "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 0, mr: collapsed ? 0 : 1.5, justifyContent: "center", color: "inherit" }}>
+              <LogoutIcon fontSize="small" />
+            </ListItemIcon>
+            {!collapsed && <ListItemText primary="Log out" />}
+          </ListItemButton>
+
+          <IconButton
+            onClick={() => setCollapsed((c) => !c)}
+            size="small"
+            sx={{
+              display: "flex",
+              mx: "auto",
+              mt: 1,
+              color: "rgba(255,255,255,0.7)",
+              "&:hover": { bgcolor: "rgba(255,255,255,0.08)", color: "#fff" },
+            }}
+            aria-label={collapsed ? "Expand menu" : "Collapse menu"}
+          >
+            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          </IconButton>
+        </Box>
+      </Drawer>
+
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, p: 3 }}>
+        <Box sx={{ maxWidth: 1280, mx: "auto" }}>
+          <Outlet />
+        </Box>
       </Box>
     </Box>
   );

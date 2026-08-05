@@ -10,6 +10,13 @@ export class Upload {
   @Column({ type: "nvarchar", length: 50 })
   subsidiaryId!: string;
 
+  /** The project code selected from the upload form's dropdown (see
+   * projectCodeService.ts / ProjectCode entity) — a text snapshot taken at
+   * upload time, not a foreign key, mirroring subsidiaryId's own pattern.
+   * Nullable only because rows created before this feature existed have none. */
+  @Column({ type: "nvarchar", length: 100, nullable: true })
+  projectCode!: string | null;
+
   @Column({ type: "nvarchar", length: 255 })
   fileName!: string;
 
@@ -26,11 +33,14 @@ export class Upload {
   @Column({ type: "uniqueidentifier", nullable: true })
   userId!: string | null;
 
-  /** Global, per-subsidiary version counter — never overwrite a previous upload,
-   * always insert the next version. Enforced by a unique (subsidiaryId, version)
-   * constraint at the database level, not just this default. */
-  @Column({ type: "int", default: 1 })
-  version!: number;
+  /** Global, per-subsidiary version counter — assigned only once this upload is
+   * submitted (see submissionService.ts), scoped to *submitted* uploads for
+   * the subsidiary, so an upload that's merely generated, or that fails, never
+   * consumes a version number. Null until then. Enforced unique per
+   * subsidiary by a filtered database index (NULLs excluded), not just this
+   * column. */
+  @Column({ type: "int", nullable: true })
+  version!: number | null;
 
   /** Directory (relative to UPLOAD_DIR) holding this version's generated solution
    * files, once generation has run. Null until then. */
@@ -47,4 +57,12 @@ export class Upload {
    * it just hides it from listings. */
   @Column({ type: "bit", default: false })
   isDeleted!: boolean;
+
+  /** JSON-encoded `Record<questionId, boolean>` — which questions the uploader
+   * marked optional at upload time (see generationService.generateFromWorkbook's
+   * `requiredOverrides` param). Null if none were overridden. Persisted so
+   * regenerateUpload can re-apply the same choices instead of resetting every
+   * question back to its Excel-parsed default (required: true). */
+  @Column({ type: "nvarchar", length: "MAX", nullable: true })
+  questionOverrides!: string | null;
 }

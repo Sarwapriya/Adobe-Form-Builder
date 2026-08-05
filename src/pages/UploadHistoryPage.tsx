@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
 import {
   Alert,
   Box,
@@ -7,6 +6,7 @@ import {
   Chip,
   CircularProgress,
   IconButton,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -34,6 +34,9 @@ import {
   type UploadListItem,
   type ValidationResult,
 } from "../api/uploadsApi";
+import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
+import { UploadConfigurePanel } from "../components/upload/UploadConfigurePanel";
+import { useAuthStore } from "../auth/authStore";
 
 const STATUS_COLOR: Record<UploadListItem["status"], "default" | "success" | "error" | "warning"> = {
   uploaded: "default",
@@ -48,7 +51,19 @@ const STATUS_COLOR: Record<UploadListItem["status"], "default" | "success" | "er
  * /api/v1/uploads never takes a userId param) — the equivalent cross-user
  * view is AdminDashboardPage. */
 export function UploadHistoryPage() {
-  const [subsidiaryId, setSubsidiaryId] = useState("");
+  const user = useAuthStore((s) => s.user);
+  // A subsidiary-scoped standard user always uploads under their own
+  // assigned subsidiary — the field is auto-filled and locked for them, so
+  // there's nothing to pick. Admins (and standard users with no assigned
+  // subsidiary) keep the free-text field, since they may upload for any
+  // subsidiary — see upload.router.ts, which enforces this same rule
+  // server-side regardless of what this field shows.
+  const isSubsidiaryLocked = user?.role !== "admin" && !!user?.subsidiaryId;
+
+  const [subsidiaryId, setSubsidiaryId] = useState(() => user?.subsidiaryId ?? "");
+  const [projectCode, setProjectCode] = useState("");
+  const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
+  const [projectCodesError, setProjectCodesError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -78,18 +93,34 @@ export function UploadHistoryPage() {
     void refresh();
   }, [page, pageSize]);
 
-  async function handleUpload(e: FormEvent) {
-    e.preventDefault();
-    if (!file || !subsidiaryId.trim()) return;
+  useEffect(() => {
+    listOpenProjectCodes()
+      .then(setProjectCodes)
+      .catch((err) => setProjectCodesError(err instanceof ApiError ? err.message : "Failed to load project codes"));
+  }, []);
+
+  // Covers the case where `user` populates asynchronously (silentRefresh
+  // resolving after this page has already mounted once with `user` still null).
+  useEffect(() => {
+    if (user?.subsidiaryId) setSubsidiaryId(user.subsidiaryId);
+  }, [user?.subsidiaryId]);
+
+  // Confirming inside UploadConfigurePanel is what actually uploads — the
+  // subsidiary/project code/file pickers above it only build up to that
+  // point, so there's no separate top-level "Upload" submit action anymore.
+  async function handleConfirmUpload(requiredOverrides: Record<string, boolean>) {
+    if (!file || !subsidiaryId.trim() || !projectCode) return;
 
     setUploading(true);
     setUploadError(null);
     setLastValidation(null);
     try {
-      const response = await uploadWorkbook(subsidiaryId.trim(), file);
+      const response = await uploadWorkbook(subsidiaryId.trim(), projectCode, file, requiredOverrides);
       setLastValidation(response.validation);
       setFile(null);
-      setSubsidiaryId("");
+      // A locked field stays put — there's nothing else to reset it to.
+      if (!isSubsidiaryLocked) setSubsidiaryId("");
+      setProjectCode("");
       setPage(0);
       await refresh();
     } catch (err) {
@@ -131,13 +162,29 @@ export function UploadHistoryPage() {
 
   return (
     <Box>
-      <Stack spacing={0.5} sx={{ mb: 3 }}>
-        <Typography variant="h4" component="h1">
-          Upload a workbook
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Submit an Excel workbook to generate a new campaign form, then track it below.
-        </Typography>
+      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+        <Box
+          sx={{
+            width: 44,
+            height: 44,
+            borderRadius: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+          }}
+        >
+          <UploadFileIcon />
+        </Box>
+        <Stack spacing={0.2}>
+          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
+            Upload a workbook
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Submit an Excel workbook to generate a new campaign form, then track it below.
+          </Typography>
+        </Stack>
       </Stack>
 
       <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
@@ -161,31 +208,67 @@ export function UploadHistoryPage() {
               New upload
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Generation runs automatically after upload
+              Choose a file to configure mandatory questions, then confirm to generate
             </Typography>
           </Box>
         </Stack>
 
-        <Box
-          component="form"
-          onSubmit={handleUpload}
-          sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}
-        >
+        <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
           <TextField
             label="Subsidiary"
             value={subsidiaryId}
             onChange={(e) => setSubsidiaryId(e.target.value)}
             required
             size="small"
+            disabled={isSubsidiaryLocked}
+            helperText={isSubsidiaryLocked ? "Locked to your assigned subsidiary" : undefined}
           />
+          <TextField
+            select
+            label="Project Code"
+            value={projectCode}
+            onChange={(e) => setProjectCode(e.target.value)}
+            required
+            size="small"
+            sx={{ minWidth: 200 }}
+            disabled={projectCodes.length === 0}
+            helperText={projectCodes.length === 0 ? "No open project codes — contact an admin" : undefined}
+          >
+            {projectCodes.map((pc) => (
+              <MenuItem key={pc.id} value={pc.code}>
+                {pc.code}
+              </MenuItem>
+            ))}
+          </TextField>
           <Button variant="outlined" component="label">
             {file ? file.name : "Choose .xlsx/.xls file"}
-            <input type="file" accept=".xlsx,.xls" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          </Button>
-          <Button type="submit" variant="contained" disabled={!file || !subsidiaryId.trim() || uploading}>
-            {uploading ? "Uploading..." : "Upload & Generate"}
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              hidden
+              onChange={(e) => {
+                setFile(e.target.files?.[0] ?? null);
+                // Clear any error/result banner from a previous attempt —
+                // it describes the old file, not this new selection.
+                setUploadError(null);
+                setLastValidation(null);
+                // Reset the input's own value so picking a different file
+                // that happens to share the same filename still fires this
+                // handler — the browser treats an unchanged filename as an
+                // unchanged <input>, so without this a same-named re-pick
+                // (e.g. a corrected export of the same workbook) would
+                // silently do nothing until the page is refreshed.
+                e.target.value = "";
+              }}
+            />
           </Button>
         </Box>
+
+        {projectCodesError && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {projectCodesError}
+          </Alert>
+        )}
 
         {uploadError && (
           <Alert severity="error" sx={{ mt: 2 }}>
@@ -220,6 +303,21 @@ export function UploadHistoryPage() {
         )}
       </Paper>
 
+      {file && subsidiaryId.trim() && projectCode && (
+        <UploadConfigurePanel
+          file={file}
+          subsidiaryId={subsidiaryId}
+          projectCode={projectCode}
+          confirming={uploading}
+          onCancel={() => {
+            setFile(null);
+            setUploadError(null);
+            setLastValidation(null);
+          }}
+          onConfirm={handleConfirmUpload}
+        />
+      )}
+
       <Typography variant="h5" component="h2" gutterBottom fontWeight={700}>
         Your upload history
       </Typography>
@@ -236,6 +334,7 @@ export function UploadHistoryPage() {
             <TableHead>
               <TableRow>
                 <TableCell>Subsidiary</TableCell>
+                <TableCell>Project Code</TableCell>
                 <TableCell>File</TableCell>
                 <TableCell>Version</TableCell>
                 <TableCell>Status</TableCell>
@@ -247,13 +346,13 @@ export function UploadHistoryPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
                     <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
                     <Typography color="text.secondary">No uploads yet — submit a workbook above to get started.</Typography>
                   </TableCell>
                 </TableRow>
@@ -261,8 +360,9 @@ export function UploadHistoryPage() {
                 rows.map((row) => (
                   <TableRow key={row.id} hover sx={{ "&:last-child td": { borderBottom: 0 } }}>
                     <TableCell sx={{ fontWeight: 600 }}>{row.subsidiaryId}</TableCell>
+                    <TableCell>{row.projectCode ?? "—"}</TableCell>
                     <TableCell>{row.fileName}</TableCell>
-                    <TableCell>v{row.version}</TableCell>
+                    <TableCell>{row.version != null ? `v${row.version}` : "—"}</TableCell>
                     <TableCell>
                       <Chip label={row.status} color={STATUS_COLOR[row.status]} size="small" />
                     </TableCell>

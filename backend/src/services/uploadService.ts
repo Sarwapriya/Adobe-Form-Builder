@@ -1,22 +1,28 @@
 import fsp from "node:fs/promises";
+import crypto from "node:crypto";
 import type { ValidationResult } from "@formbuilder/shared";
 import { resolvePaging, type PagedResult } from "../utils/queryParsing";
-import { UnsupportedFileTypeError } from "../utils/errors";
+import { ProjectCodeMismatchError, SubsidiaryMismatchError, UnsupportedFileTypeError } from "../utils/errors";
 import { AppDataSource } from "../config/data-source";
 import { Upload, type UploadStatus } from "../entities/Upload";
 import { GeneratedFile as GeneratedFileEntity, type GeneratedFileType } from "../entities/GeneratedFile";
-import { absoluteFilePath, hasExcelFileSignature, saveGeneratedFiles, saveSourceFile, versionedGeneratedDir } from "./fileService";
-import { classifyFileType, generateFromWorkbook } from "./generationService";
+import { absoluteFilePath, hasExcelFileSignature, saveGeneratedFiles, saveSourceFile, uploadGeneratedDir } from "./fileService";
+import { classifyFileType, generateFromWorkbook, type GenerationResult } from "./generationService";
 import { sendUploadNotification } from "./emailService";
 import { getAdminSetting } from "./adminSettingsService";
+import { assertProjectCodeOpenForUpload } from "./projectCodeService";
 
 export interface UploadListItem {
   id: string;
   subsidiaryId: string;
+  /** Text snapshot of the ProjectCodes.code selected at upload time — see
+   * projectCodeService.ts. Null only for rows created before this feature
+   * existed. */
+  projectCode: string | null;
   fileName: string;
   uploadDate: Date;
   userId: string | null;
-  version: number;
+  version: number | null;
   status: UploadStatus;
   submittedAt: Date | null;
   submissionCount: number;
@@ -40,6 +46,7 @@ export function toListItem(upload: Upload): UploadListItem {
   return {
     id: upload.id,
     subsidiaryId: upload.subsidiaryId,
+    projectCode: upload.projectCode,
     fileName: upload.fileName,
     uploadDate: upload.uploadDate,
     userId: upload.userId,
@@ -88,40 +95,79 @@ export async function findOwnedUpload(uploadId: string, userId: string, isAdmin:
 }
 
 /**
- * Runs the Excel->Solution pipeline for an already-persisted upload and records
- * the outcome: either the generated files are saved and status becomes
- * "generated", or (blocking validation errors, or an unexpected failure) status
- * becomes "failed". Either outcome leaves the Upload row as a real, visible,
- * auditable record — never silently rolled back.
+ * Cross-checks the project code selected in the upload form against the
+ * workbook's own "Project Code" metadata row (parser.ts extracts it the same
+ * way it extracts Subsidiary/Language_Country). Case/whitespace-insensitive,
+ * since these workbooks drift in spelling the same way subsidiary names do.
+ * Thrown before anything is persisted — a wrong dropdown pick or a workbook
+ * missing the row entirely rejects the whole upload outright, rather than
+ * leaving a "failed" record behind for what's usually just a mistake.
  */
-async function runGeneration(upload: Upload, buffer: Buffer): Promise<ValidationResult> {
+function assertProjectCodeMatchesWorkbook(selected: string, fromWorkbook: string): void {
+  const normalize = (s: string) => s.trim().toLowerCase();
+  if (normalize(fromWorkbook) === normalize(selected)) return;
+
+  throw new ProjectCodeMismatchError(
+    fromWorkbook.trim()
+      ? `The workbook's Project Code ("${fromWorkbook}") does not match the selected project code ("${selected}")`
+      : `The workbook has no "Project Code" row matching the selected project code ("${selected}")`,
+  );
+}
+
+/**
+ * Cross-checks the Subsidiary field submitted with the upload against the
+ * workbook's own "Subsidiary" metadata row — the same check for every
+ * uploader, admin or subsidiary-scoped alike (a subsidiary-scoped user's
+ * field value comes from their own account, per upload.router.ts, but the
+ * workbook itself could still be the wrong one for that subsidiary).
+ */
+function assertSubsidiaryMatchesWorkbook(selected: string, fromWorkbook: string): void {
+  const normalize = (s: string) => s.trim().toLowerCase();
+  if (normalize(fromWorkbook) === normalize(selected)) return;
+
+  throw new SubsidiaryMismatchError(
+    fromWorkbook.trim()
+      ? `The workbook's Subsidiary ("${fromWorkbook}") does not match the selected subsidiary ("${selected}")`
+      : `The workbook has no "Subsidiary" row matching the selected subsidiary ("${selected}")`,
+  );
+}
+
+/**
+ * Persists an already-computed generation outcome for an upload: either the
+ * generated files are saved and status becomes "generated", or (blocking
+ * validation errors, or an unexpected failure) status becomes "failed".
+ * Either outcome leaves the Upload row as a real, visible, auditable record —
+ * never silently rolled back. Takes a pre-computed GenerationResult rather
+ * than re-parsing from a buffer, so createUpload can cross-check the
+ * workbook's project code (generateFromWorkbook's projectCodeFromWorkbook)
+ * before this ever runs, without parsing the workbook twice.
+ */
+async function persistGenerationOutcome(upload: Upload, generation: GenerationResult): Promise<ValidationResult> {
   const uploadRepo = AppDataSource.getRepository(Upload);
   try {
-    const result = generateFromWorkbook(toArrayBuffer(buffer), upload.fileName);
-
-    if (result.validation.errors.length > 0 || hasFormulaLikeWarning(result.validation)) {
+    if (generation.validation.errors.length > 0 || hasFormulaLikeWarning(generation.validation)) {
       await uploadRepo.update(upload.id, { status: "failed" });
-      return result.validation;
+      return generation.validation;
     }
 
-    const saved = await saveGeneratedFiles(upload.subsidiaryId, upload.version, result.files);
+    const saved = await saveGeneratedFiles(upload.subsidiaryId, upload.id, generation.files);
     const generatedFileRepo = AppDataSource.getRepository(GeneratedFileEntity);
     const rows = saved.map((f) =>
       generatedFileRepo.create({
         uploadId: upload.id,
         fileName: f.fileName,
         filePath: f.relativePath,
-        fileType: classifyFileType(f.fileName, result.fileNames),
+        fileType: classifyFileType(f.fileName, generation.fileNames),
       }),
     );
     await generatedFileRepo.save(rows);
 
     await uploadRepo.update(upload.id, {
       status: "generated",
-      generatedPath: versionedGeneratedDir(upload.subsidiaryId, upload.version),
+      generatedPath: uploadGeneratedDir(upload.subsidiaryId, upload.id),
     });
 
-    return result.validation;
+    return generation.validation;
   } catch (err) {
     await uploadRepo.update(upload.id, { status: "failed" });
     throw err;
@@ -130,9 +176,15 @@ async function runGeneration(upload: Upload, buffer: Buffer): Promise<Validation
 
 export interface CreateUploadInput {
   subsidiaryId: string;
+  projectCode: string;
   file: Express.Multer.File;
   userId: string;
   uploadedByUsername: string;
+  /** questionId -> required, from the upload form's mandatory-questions
+   * configure step (a client-side preview parse — see generateFromWorkbook's
+   * own doc comment). Omitted/empty means every question stays required,
+   * which is the Excel-parsed default. */
+  requiredOverrides?: Record<string, boolean>;
 }
 
 export interface CreateUploadResult {
@@ -141,43 +193,59 @@ export interface CreateUploadResult {
 }
 
 /**
- * Creates a new upload: reserves the next version number for this subsidiary
- * (a locked read inside a short transaction, so two concurrent uploads to the
- * same subsidiary can never collide on the same version number) and persists
- * the Upload row immediately with status "uploaded" — then, outside that
- * transaction, since generation is CPU/IO work that shouldn't hold a database
- * lock, runs the Excel->Solution pipeline and records the outcome.
+ * Creates a new upload: persists the Upload row immediately with status
+ * "uploaded" and no version — version numbers are only ever assigned at
+ * submission time (see submissionService.ts), scoped to *submitted* uploads
+ * for the subsidiary, so an upload that never gets submitted (including a
+ * failed one) never consumes one. Storage is keyed by this upload's own id
+ * (generated client-side so the source file can be written to its final path
+ * before the row exists), not a version number, so there's no locked
+ * transaction to reserve here the way there used to be.
+ *
+ * The workbook is parsed once, up front, before any of that persistence —
+ * both to apply `requiredOverrides` and so its own "Project Code"/"Subsidiary"
+ * rows can be cross-checked against the caller's `projectCode`/`subsidiaryId`
+ * before anything is saved (assertProjectCodeMatchesWorkbook /
+ * assertSubsidiaryMatchesWorkbook reject the whole request outright on a
+ * mismatch, same as an unsupported file type would). `subsidiaryId` itself is
+ * never trusted blindly for a subsidiary-scoped user — see
+ * upload.router.ts, which overrides it with that user's own assignment
+ * before this function ever sees it.
  */
 export async function createUpload(input: CreateUploadInput): Promise<CreateUploadResult> {
-  const { subsidiaryId, file, userId, uploadedByUsername } = input;
+  const { subsidiaryId, projectCode, file, userId, uploadedByUsername, requiredOverrides } = input;
+
+  // Checked before anything else — no point validating the file signature or
+  // parsing it if the selected project code has since been closed.
+  await assertProjectCodeOpenForUpload(projectCode);
 
   // Checked here (not just in fileService's multer fileFilter, which only
   // sees the extension/MIME before the full buffer exists) so a renamed
-  // non-Excel file is rejected before it ever consumes a version number.
+  // non-Excel file is rejected before anything is written to disk.
   if (!hasExcelFileSignature(file.buffer)) {
     throw new UnsupportedFileTypeError("File content does not match a valid .xlsx/.xls signature");
   }
 
-  const upload = await AppDataSource.transaction(async (manager) => {
-    const rows: Array<{ nextVersion: number }> = await manager.query(
-      `SELECT ISNULL(MAX(version), 0) + 1 AS nextVersion FROM Uploads WITH (UPDLOCK, HOLDLOCK) WHERE subsidiaryId = @0`,
-      [subsidiaryId],
-    );
-    const nextVersion = rows[0].nextVersion;
+  const generation = generateFromWorkbook(toArrayBuffer(file.buffer), file.originalname, requiredOverrides);
+  assertProjectCodeMatchesWorkbook(projectCode, generation.projectCodeFromWorkbook);
+  assertSubsidiaryMatchesWorkbook(subsidiaryId, generation.subsidiaryFromWorkbook);
 
-    const sourcePath = await saveSourceFile(subsidiaryId, nextVersion, file.originalname, file.buffer);
+  const uploadId = crypto.randomUUID();
+  const sourcePath = await saveSourceFile(subsidiaryId, uploadId, file.originalname, file.buffer);
 
-    const uploadRepo = manager.getRepository(Upload);
-    const created = uploadRepo.create({
-      subsidiaryId,
-      fileName: file.originalname,
-      filePath: sourcePath,
-      userId,
-      version: nextVersion,
-      status: "uploaded",
-    });
-    return uploadRepo.save(created);
+  const uploadRepo = AppDataSource.getRepository(Upload);
+  const created = uploadRepo.create({
+    id: uploadId,
+    subsidiaryId,
+    projectCode,
+    fileName: file.originalname,
+    filePath: sourcePath,
+    userId,
+    version: null,
+    status: "uploaded",
+    questionOverrides: requiredOverrides ? JSON.stringify(requiredOverrides) : null,
   });
+  const upload = await uploadRepo.save(created);
 
   await sendUploadNotification({
     subsidiaryId,
@@ -186,7 +254,7 @@ export async function createUpload(input: CreateUploadInput): Promise<CreateUplo
     uploadedBy: uploadedByUsername,
   });
 
-  const validation = await runGeneration(upload, file.buffer);
+  const validation = await persistGenerationOutcome(upload, generation);
   const refreshed = await AppDataSource.getRepository(Upload).findOneOrFail({ where: { id: upload.id } });
 
   return { upload: toListItem(refreshed), validation };
@@ -279,6 +347,12 @@ export interface RegenerateResult {
  * the admin-configurable lockGeneratedFilesOnSubmit setting is enabled
  * (defaults to locked/"true" — see the AddUsersAndVersioning migration —
  * fails safe if the setting row is ever missing).
+ *
+ * Re-applies the same requiredOverrides the uploader configured at upload
+ * time (stored on the row as questionOverrides) — otherwise every question
+ * would silently reset back to required on a regenerate. The project code
+ * cross-check isn't repeated here: subsidiaryId/projectCode don't change on
+ * regeneration, so it was already validated once at upload time.
  */
 export async function regenerateUpload(uploadId: string, userId: string, isAdmin: boolean): Promise<RegenerateResult> {
   const upload = await findOwnedUpload(uploadId, userId, isAdmin);
@@ -292,8 +366,12 @@ export async function regenerateUpload(uploadId: string, userId: string, isAdmin
   }
 
   const buffer = await fsp.readFile(absoluteFilePath(upload.filePath));
+  const requiredOverrides = upload.questionOverrides
+    ? (JSON.parse(upload.questionOverrides) as Record<string, boolean>)
+    : undefined;
+  const generation = generateFromWorkbook(toArrayBuffer(buffer), upload.fileName, requiredOverrides);
   await AppDataSource.getRepository(GeneratedFileEntity).delete({ uploadId });
-  const validation = await runGeneration(upload, buffer);
+  const validation = await persistGenerationOutcome(upload, generation);
   return { outcome: "ok", validation };
 }
 

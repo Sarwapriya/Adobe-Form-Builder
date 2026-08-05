@@ -87,7 +87,8 @@ function emptyMeta() {
   return {
     subsidiary: { C: "", D: "" },
     languageCountry: { C: "", D: "" },
-    country: { C: "", D: "" }
+    country: { C: "", D: "" },
+    projectCode: { C: "", D: "" }
   };
 }
 var ENGLISH_HEADER_HINTS = [
@@ -148,7 +149,7 @@ function locateColumns(grid, sheetName) {
 }
 function extractMeta(grid, sheetName, englishCol, translationCCol, translationDCol, issues) {
   const meta = emptyMeta();
-  const found = { subsidiary: false, languageCountry: false, country: false };
+  const found = { subsidiary: false, languageCountry: false, country: false, projectCode: false };
   for (let r = 0; r < Math.min(METADATA_SCAN_ROWS, grid.length); r++) {
     const line = grid[r] ?? [];
     const label = normalizeLoose(line[englishCol]);
@@ -163,6 +164,9 @@ function extractMeta(grid, sheetName, englishCol, translationCCol, translationDC
     } else if (label === "country") {
       meta.country = { C: c, D: d };
       found.country = true;
+    } else if (label === "projectcode") {
+      meta.projectCode = { C: c, D: d };
+      found.projectCode = true;
     }
   }
   if (!found.languageCountry) {

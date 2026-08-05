@@ -23,22 +23,31 @@ export function absoluteFilePath(relativePath: string): string {
   return path.join(getUploadDir(), relativePath);
 }
 
-/** Directory (relative to UPLOAD_DIR) holding everything for one subsidiary+version. */
-function versionedDir(subsidiaryId: string, version: number): string {
-  return path.join(sanitizeSubsidiaryId(subsidiaryId), `v${version}`);
+/**
+ * Directory (relative to UPLOAD_DIR) holding everything for one upload — keyed
+ * by the upload's own id, not its version number. Version numbers are only
+ * ever assigned at submission time (see submissionService.ts), scoped to
+ * *submitted* uploads for the subsidiary, so an in-progress or failed upload
+ * has no version to key storage off of in the first place; using the id
+ * instead means storage never has to be reorganized once/if a version number
+ * shows up later. Exported so uploadCleanupService.ts can remove it wholesale
+ * (source + generated files) when purging an upload that was never submitted.
+ */
+export function uploadStorageDir(subsidiaryId: string, uploadId: string): string {
+  return path.join(sanitizeSubsidiaryId(subsidiaryId), uploadId);
 }
 
-/** Relative path of the stored source workbook for one subsidiary+version,
- * preserving the original .xlsx/.xls extension. */
-export function versionedSourcePath(subsidiaryId: string, version: number, originalFileName: string): string {
+/** Relative path of the stored source workbook for one upload, preserving the
+ * original .xlsx/.xls extension. */
+export function uploadSourcePath(subsidiaryId: string, uploadId: string, originalFileName: string): string {
   const ext = path.extname(sanitizeFileName(originalFileName)).toLowerCase();
-  return path.join(versionedDir(subsidiaryId, version), `source${ext}`);
+  return path.join(uploadStorageDir(subsidiaryId, uploadId), `source${ext}`);
 }
 
-/** Directory (relative to UPLOAD_DIR) holding one subsidiary+version's generated
- * solution files. */
-export function versionedGeneratedDir(subsidiaryId: string, version: number): string {
-  return path.join(versionedDir(subsidiaryId, version), "generated");
+/** Directory (relative to UPLOAD_DIR) holding one upload's generated solution
+ * files. */
+export function uploadGeneratedDir(subsidiaryId: string, uploadId: string): string {
+  return path.join(uploadStorageDir(subsidiaryId, uploadId), "generated");
 }
 
 function fileFilter(_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
@@ -69,10 +78,10 @@ export function hasExcelFileSignature(buffer: Buffer): boolean {
 
 /**
  * Buffers the uploaded file in memory rather than writing it to disk during
- * multipart parsing — the file's final on-disk path depends on a version number
- * that's only known once uploadService.ts has run its locked version-assignment
- * transaction, which happens *after* multer has already finished parsing the
- * request. Files are capped at 10 MiB, so buffering in memory is not a concern.
+ * multipart parsing — the signature check (hasExcelFileSignature) needs the
+ * whole buffer before any Upload row (and therefore any id-derived storage
+ * path) exists yet. Files are capped at 10 MiB, so buffering in memory is not
+ * a concern.
  */
 export const uploadMiddleware = multer({
   storage: multer.memoryStorage(),
@@ -80,16 +89,16 @@ export const uploadMiddleware = multer({
   limits: { fileSize: MAX_FILE_SIZE_BYTES },
 });
 
-/** Writes the uploaded workbook's bytes to its versioned source path, creating
+/** Writes the uploaded workbook's bytes to its per-upload source path, creating
  * directories as needed. Returns the path relative to UPLOAD_DIR, as stored in
  * the Uploads.filePath column. */
 export async function saveSourceFile(
   subsidiaryId: string,
-  version: number,
+  uploadId: string,
   originalFileName: string,
   buffer: Buffer,
 ): Promise<string> {
-  const relativePath = versionedSourcePath(subsidiaryId, version, originalFileName);
+  const relativePath = uploadSourcePath(subsidiaryId, uploadId, originalFileName);
   const absolutePath = absoluteFilePath(relativePath);
   await fsp.mkdir(path.dirname(absolutePath), { recursive: true });
   await fsp.writeFile(absolutePath, buffer);
@@ -101,15 +110,15 @@ export interface SavedGeneratedFile {
   relativePath: string;
 }
 
-/** Writes every generated solution file to its versioned generated/ directory.
+/** Writes every generated solution file to one upload's generated/ directory.
  * Returns each file's original name (for GeneratedFiles.fileName) alongside the
  * path it was saved at, relative to UPLOAD_DIR (for GeneratedFiles.filePath). */
 export async function saveGeneratedFiles(
   subsidiaryId: string,
-  version: number,
+  uploadId: string,
   files: GeneratedFile[],
 ): Promise<SavedGeneratedFile[]> {
-  const generatedDir = versionedGeneratedDir(subsidiaryId, version);
+  const generatedDir = uploadGeneratedDir(subsidiaryId, uploadId);
   const absoluteDir = absoluteFilePath(generatedDir);
   await fsp.mkdir(absoluteDir, { recursive: true });
 

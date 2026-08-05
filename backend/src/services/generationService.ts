@@ -18,6 +18,16 @@ export interface GenerationResult {
   validation: ValidationResult;
   files: GeneratedFile[];
   fileNames: FileNames;
+  /** The workbook's own "Project Code" metadata row (parsed.meta.projectCode,
+   * C preferred over D, same resolution rule as subsidiary) — empty string if
+   * the row wasn't found. Used by uploadService.createUpload to cross-check
+   * against the project code the uploader picked in the upload form. */
+  projectCodeFromWorkbook: string;
+  /** The workbook's own "Subsidiary" metadata row — same value as
+   * `form.meta.subsidiary` (mapper.ts already resolves it identically), just
+   * surfaced here alongside projectCodeFromWorkbook for uploadService.ts's
+   * symmetrical cross-check against the upload form's Subsidiary field. */
+  subsidiaryFromWorkbook: string;
 }
 
 /**
@@ -27,21 +37,47 @@ export interface GenerationResult {
  * only do so once `validation.errors` is empty. `files` is empty whenever there
  * are blocking errors, since generating from an invalid form doesn't make sense.
  *
+ * `requiredOverrides` (questionId -> required) lets the uploader mark specific
+ * questions optional before generation — every question defaults to required
+ * (see QuestionDefinition.required's own doc comment), so this only ever needs
+ * to carry the questions the uploader flipped to optional.
+ *
  * Always generates both the Full Form and One-Click variants with the default
  * BuilderConfig — the server-side upload flow has no per-upload configuration UI
- * (that only exists in the client-side wizard), so this is the one sensible
- * default until/unless a future phase adds server-side config options.
+ * beyond required-question toggling (that's the client-side wizard's job), so
+ * this is the one sensible default until/unless a future phase adds more.
  */
-export function generateFromWorkbook(buffer: ArrayBuffer, sourceFileName: string): GenerationResult {
+export function generateFromWorkbook(
+  buffer: ArrayBuffer,
+  sourceFileName: string,
+  requiredOverrides?: Record<string, boolean>,
+): GenerationResult {
   const parsed = parseWorkbook(buffer, sourceFileName);
   const mapped = mapWorkbook(parsed);
+
+  if (requiredOverrides) {
+    for (const question of mapped.form.questions) {
+      if (Object.prototype.hasOwnProperty.call(requiredOverrides, question.id)) {
+        question.required = requiredOverrides[question.id];
+      }
+    }
+  }
+
   const validation = validateWorkbook(mapped, parsed.issues);
   const config: BuilderConfig = { ...defaultBuilderConfig(), variants: ["ff", "oc"] };
   const fileNames = resolveFileNames(mapped.form, config);
 
   const files = validation.errors.length === 0 ? generateSolution(mapped.form, config) : [];
+  const projectCodeFromWorkbook = parsed.meta.projectCode.C || parsed.meta.projectCode.D || "";
 
-  return { form: mapped.form, validation, files, fileNames };
+  return {
+    form: mapped.form,
+    validation,
+    files,
+    fileNames,
+    projectCodeFromWorkbook,
+    subsidiaryFromWorkbook: mapped.form.meta.subsidiary,
+  };
 }
 
 /**

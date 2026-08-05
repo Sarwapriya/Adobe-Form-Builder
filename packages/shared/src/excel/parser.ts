@@ -97,6 +97,7 @@ function emptyMeta(): WorkbookMeta {
     subsidiary: { C: "", D: "" },
     languageCountry: { C: "", D: "" },
     country: { C: "", D: "" },
+    projectCode: { C: "", D: "" },
   };
 }
 
@@ -192,7 +193,7 @@ function extractMeta(
   issues: Issue[],
 ): WorkbookMeta {
   const meta = emptyMeta();
-  const found = { subsidiary: false, languageCountry: false, country: false };
+  const found = { subsidiary: false, languageCountry: false, country: false, projectCode: false };
 
   for (let r = 0; r < Math.min(METADATA_SCAN_ROWS, grid.length); r++) {
     const line = grid[r] ?? [];
@@ -209,6 +210,9 @@ function extractMeta(
     } else if (label === "country") {
       meta.country = { C: c, D: d };
       found.country = true;
+    } else if (label === "projectcode") {
+      meta.projectCode = { C: c, D: d };
+      found.projectCode = true;
     }
   }
 

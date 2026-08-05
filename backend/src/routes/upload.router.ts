@@ -19,7 +19,30 @@ uploadRouter.use(requireAuth);
 
 const uploadBodySchema = z.object({
   subsidiaryId: z.string().trim().min(1),
+  projectCode: z.string().trim().min(1),
+  // Multipart fields are always strings — a JSON-encoded Record<questionId,
+  // boolean> from the upload form's mandatory-questions configure step.
+  requiredOverrides: z.string().optional(),
 });
+
+/** Best-effort parse of the requiredOverrides multipart field: malformed or
+ * absent input is treated as "no overrides" rather than a request error,
+ * since every question already defaults to required (QuestionDefinition's
+ * own default) with no overrides at all. */
+function parseRequiredOverrides(raw: string | undefined): Record<string, boolean> | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    const result: Record<string, boolean> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "boolean") result[key] = value;
+    }
+    return result;
+  } catch {
+    return undefined;
+  }
+}
 
 uploadRouter.post(
   "/",
@@ -31,13 +54,25 @@ uploadRouter.post(
       return;
     }
 
-    const { subsidiaryId } = req.body as z.infer<typeof uploadBodySchema>;
+    const { subsidiaryId, projectCode, requiredOverrides } = req.body as z.infer<typeof uploadBodySchema>;
+
+    // A subsidiary-scoped standard user's uploads always use their own
+    // assigned subsidiary — the client's Subsidiary field is locked to the
+    // same value for them (see UploadHistoryPage.tsx), but the server never
+    // trusts that alone: this overrides whatever the request body says,
+    // rather than merely validating it, so a tampered request still can't
+    // upload under a different subsidiary. Admins (and standard users with no
+    // assigned subsidiary) use whatever the request body says.
+    const effectiveSubsidiaryId =
+      req.auth!.role !== "admin" && req.auth!.subsidiaryId ? req.auth!.subsidiaryId : subsidiaryId;
 
     const { upload, validation } = await createUpload({
-      subsidiaryId,
+      subsidiaryId: effectiveSubsidiaryId,
+      projectCode,
       file: req.file,
       userId: req.auth!.sub,
       uploadedByUsername: req.auth!.username,
+      requiredOverrides: parseRequiredOverrides(requiredOverrides),
     });
 
     res.status(201).json({ upload, validation });

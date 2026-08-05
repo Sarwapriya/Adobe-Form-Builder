@@ -19,6 +19,9 @@ export interface AccessTokenPayload {
   sub: string;
   username: string;
   role: UserRole;
+  /** Null for admins and for standard users not tied to one subsidiary — see
+   * User.subsidiaryId's own doc comment. */
+  subsidiaryId: string | null;
 }
 
 /**
@@ -38,7 +41,12 @@ export async function validateCredentials(username: string, password: string): P
  * checked against the database. Carries the claims `requireAuth`/`requireAdmin`
  * read from `req.auth`. */
 export function issueAccessToken(user: User): string {
-  const payload: AccessTokenPayload = { sub: user.id, username: user.username, role: user.role };
+  const payload: AccessTokenPayload = {
+    sub: user.id,
+    username: user.username,
+    role: user.role,
+    subsidiaryId: user.subsidiaryId,
+  };
   return jwt.sign(payload, requireEnv("JWT_SECRET"), { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
 }
 
@@ -101,6 +109,10 @@ export interface CreateUserInput {
   email: string;
   password: string;
   role: UserRole;
+  /** Scopes a standard user to one subsidiary — see User.subsidiaryId's own
+   * doc comment. Meaningless (but harmless) on an admin account, since admins
+   * are never restricted to one subsidiary regardless of this value. */
+  subsidiaryId?: string;
 }
 
 /**
@@ -117,6 +129,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
     email: input.email,
     passwordHash,
     role: input.role,
+    subsidiaryId: input.subsidiaryId ?? null,
     isActive: true,
   });
   return repo.save(user);

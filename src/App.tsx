@@ -8,6 +8,7 @@ import { AdminRoute } from "./auth/AdminRoute.tsx";
 import { ProtectedRoute } from "./auth/ProtectedRoute.tsx";
 import { useAuthStore } from "./auth/authStore.ts";
 import { AdminDashboardPage } from "./pages/AdminDashboardPage.tsx";
+import { AdminHistoryPage } from "./pages/AdminHistoryPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { UploadHistoryPage } from "./pages/UploadHistoryPage.tsx";
 
@@ -36,6 +37,7 @@ export default function App() {
               <Route index element={<UploadHistoryPage />} />
               <Route element={<AdminRoute />}>
                 <Route path="admin" element={<AdminDashboardPage />} />
+                <Route path="admin/history" element={<AdminHistoryPage />} />
               </Route>
             </Route>
           </Route>

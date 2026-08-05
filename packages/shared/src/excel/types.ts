@@ -26,6 +26,12 @@ export interface WorkbookMeta {
   subsidiary: { C: string; D: string };
   languageCountry: { C: string; D: string };
   country: { C: string; D: string };
+  /** The workbook's own "Project Code" metadata row, if present — cross-checked
+   * server-side (uploadService.createUpload) against the project code the
+   * uploader selected in the upload form's dropdown; a mismatch or missing
+   * row blocks the upload outright. Not part of FormDefinition — this is
+   * upload-time governance data, not something the generated form needs. */
+  projectCode: { C: string; D: string };
 }
 
 export interface ParsedWorkbook {

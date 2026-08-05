@@ -19,6 +19,15 @@ export class User {
   @Column({ type: "nvarchar", length: 20, default: "standard" })
   role!: UserRole;
 
+  /** Scopes a standard user to one subsidiary — the upload form auto-fills
+   * and locks the Subsidiary field to this value for them (see
+   * upload.router.ts, which also overrides whatever the client sends with
+   * this value server-side, never trusting the request body alone). Null for
+   * admins (who may upload under any subsidiary) and for standard users not
+   * tied to one. */
+  @Column({ type: "nvarchar", length: 50, nullable: true })
+  subsidiaryId!: string | null;
+
   @Column({ type: "bit", default: true })
   isActive!: boolean;
 

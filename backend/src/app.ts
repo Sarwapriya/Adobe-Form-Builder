@@ -10,6 +10,7 @@ import { generateRouter } from "./routes/generate.router";
 import { submitRouter } from "./routes/submit.router";
 import { adminRouter } from "./routes/admin.router";
 import { downloadRouter } from "./routes/download.router";
+import { projectCodeRouter } from "./routes/projectCode.router";
 
 export const app = express();
 
@@ -31,5 +32,6 @@ app.use("/api/v1/generate", generateRouter);
 app.use("/api/v1/submit", submitRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/download", downloadRouter);
+app.use("/api/v1/project-codes", projectCodeRouter);
 
 app.use(errorHandler);
