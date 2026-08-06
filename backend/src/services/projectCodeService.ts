@@ -1,5 +1,6 @@
 import { AppDataSource } from "../config/data-source";
 import { ProjectCode } from "../entities/ProjectCode";
+import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
 import { ConflictError, NotFoundError, ProjectCodeClosedError } from "../utils/errors";
 
 /** Every project code, newest first — the admin management view (shows both
@@ -13,6 +14,23 @@ export function listProjectCodes(): Promise<ProjectCode[]> {
  * option, not just be rejected on submit). */
 export function listOpenProjectCodes(): Promise<ProjectCode[]> {
   return AppDataSource.getRepository(ProjectCode).find({ where: { isOpen: true }, order: { code: "ASC" } });
+}
+
+/**
+ * Only the open ones, minus any an admin has specifically blocked for this
+ * subsidiary (see subsidiaryProjectBlockService.ts) — what the upload form's
+ * "Project Code" dropdown offers once a subsidiary is selected. A project
+ * code closed globally never appears here regardless of subsidiary; one
+ * that's only blocked for *this* subsidiary is filtered out here but would
+ * still appear for any other.
+ */
+export async function listOpenProjectCodesForSubsidiary(subsidiaryName: string): Promise<ProjectCode[]> {
+  const [open, blocks] = await Promise.all([
+    listOpenProjectCodes(),
+    AppDataSource.getRepository(SubsidiaryProjectBlock).find({ where: { subsidiaryName } }),
+  ]);
+  const blockedCodes = new Set(blocks.map((b) => b.projectCode));
+  return open.filter((pc) => !blockedCodes.has(pc.code));
 }
 
 /** Creates a new project code, open by default. Rejects an exact-duplicate

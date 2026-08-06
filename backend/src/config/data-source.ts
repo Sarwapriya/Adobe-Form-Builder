@@ -7,14 +7,28 @@ import { RefreshToken } from "../entities/RefreshToken";
 import { GeneratedFile } from "../entities/GeneratedFile";
 import { EmailLog } from "../entities/EmailLog";
 import { ProjectCode } from "../entities/ProjectCode";
+import { Subsidiary } from "../entities/Subsidiary";
+import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 import { SubmittedOnlyVersioning1720000000000 } from "../migrations/1720000000000-SubmittedOnlyVersioning";
 import { AddProjectCodes1730000000000 } from "../migrations/1730000000000-AddProjectCodes";
 import { AddQuestionOverrides1740000000000 } from "../migrations/1740000000000-AddQuestionOverrides";
 import { AddUserSubsidiary1750000000000 } from "../migrations/1750000000000-AddUserSubsidiary";
+import { AddSubsidiaries1760000000000 } from "../migrations/1760000000000-AddSubsidiaries";
+import { AddSubsidiaryProjectBlocks1770000000000 } from "../migrations/1770000000000-AddSubsidiaryProjectBlocks";
 
-const entities = [Upload, AdminSetting, User, RefreshToken, GeneratedFile, EmailLog, ProjectCode];
+const entities = [
+  Upload,
+  AdminSetting,
+  User,
+  RefreshToken,
+  GeneratedFile,
+  EmailLog,
+  ProjectCode,
+  Subsidiary,
+  SubsidiaryProjectBlock,
+];
 const migrations = [
   InitSchema1700000000000,
   AddUsersAndVersioning1710000000000,
@@ -22,6 +36,8 @@ const migrations = [
   AddProjectCodes1730000000000,
   AddQuestionOverrides1740000000000,
   AddUserSubsidiary1750000000000,
+  AddSubsidiaries1760000000000,
+  AddSubsidiaryProjectBlocks1770000000000,
 ];
 
 /**

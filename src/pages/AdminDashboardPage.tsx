@@ -15,7 +15,6 @@ import {
   type ProjectCode,
 } from "../api/adminApi";
 import { downloadBlob } from "../utils/download";
-import { ProjectCodeManager } from "../components/admin/ProjectCodeManager";
 
 /**
  * Admin-only view of every *submitted* upload across every user — an upload
@@ -185,8 +184,6 @@ export function AdminDashboardPage() {
           </Typography>
         </Stack>
       </Stack>
-
-      <ProjectCodeManager />
 
       <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", borderRadius: 3 }}>
         <TextField

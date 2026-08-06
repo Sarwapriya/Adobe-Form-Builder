@@ -1,6 +1,14 @@
 import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
 
-export type UserRole = "admin" | "standard";
+export type UserRole = "admin" | "standard" | "superadmin";
+
+/** "admin" and "superadmin" both get full admin-panel access (requireAdmin,
+ * ownership-check bypasses, etc.) — "superadmin" is a strict superset, adding
+ * the ability to provision other admins/superadmins (see admin.router.ts's
+ * POST /users, the only place the two roles are treated differently). */
+export function isAdminRole(role: UserRole): boolean {
+  return role === "admin" || role === "superadmin";
+}
 
 @Entity("Users")
 export class User {

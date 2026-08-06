@@ -1,7 +1,13 @@
 import { create } from "zustand";
 import { apiClient, setAccessToken, ApiError } from "../api/apiClient";
 
-export type UserRole = "admin" | "standard";
+export type UserRole = "admin" | "standard" | "superadmin";
+
+/** "admin" and "superadmin" both get admin-panel access — "superadmin" is a
+ * strict superset (see backend User.isAdminRole, which this mirrors). */
+export function isAdminRole(role: UserRole | undefined): boolean {
+  return role === "admin" || role === "superadmin";
+}
 
 export interface AuthUser {
   id: string;
@@ -53,7 +59,7 @@ function decodeAccessToken(token: string): AuthUser | null {
     if (
       typeof payload.sub !== "string" ||
       typeof payload.username !== "string" ||
-      (payload.role !== "admin" && payload.role !== "standard")
+      (payload.role !== "admin" && payload.role !== "standard" && payload.role !== "superadmin")
     ) {
       return null;
     }

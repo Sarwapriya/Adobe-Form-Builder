@@ -11,6 +11,7 @@ import { submitRouter } from "./routes/submit.router";
 import { adminRouter } from "./routes/admin.router";
 import { downloadRouter } from "./routes/download.router";
 import { projectCodeRouter } from "./routes/projectCode.router";
+import { subsidiaryRouter } from "./routes/subsidiary.router";
 
 export const app = express();
 
@@ -33,5 +34,6 @@ app.use("/api/v1/submit", submitRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/download", downloadRouter);
 app.use("/api/v1/project-codes", projectCodeRouter);
+app.use("/api/v1/subsidiaries", subsidiaryRouter);
 
 app.use(errorHandler);

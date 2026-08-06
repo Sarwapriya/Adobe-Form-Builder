@@ -135,6 +135,14 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   return repo.save(user);
 }
 
+/** Every provisioned account, newest first, for the User Management page's
+ * list — never includes passwordHash. */
+export async function listUsers(): Promise<Omit<User, "passwordHash">[]> {
+  const repo = AppDataSource.getRepository(User);
+  const users = await repo.find({ order: { createdAt: "DESC" } });
+  return users.map(({ passwordHash: _passwordHash, ...rest }) => rest);
+}
+
 function hashToken(rawToken: string): string {
   return crypto.createHash("sha256").update(rawToken).digest("hex");
 }

@@ -1,8 +1,10 @@
 import { apiClient } from "./apiClient";
 import type { PagedResult, UploadListItem, UploadStatus } from "./uploadsApi";
 import type { ProjectCode } from "./projectCodesApi";
+import type { Subsidiary } from "./subsidiariesApi";
 
 export type { ProjectCode } from "./projectCodesApi";
+export type { Subsidiary } from "./subsidiariesApi";
 
 export interface AdminUploadListItem extends UploadListItem {
   username: string | null;
@@ -89,11 +91,13 @@ export function previewUpload(uploadId: string, variant: "ff" | "oc" = "ff"): Pr
   return apiClient.getBlob(`/api/v1/admin/preview/${uploadId}?variant=${variant}`);
 }
 
+export type AdminUserRole = "admin" | "standard" | "superadmin";
+
 export interface CreateUserInput {
   username: string;
   email: string;
   password: string;
-  role: "admin" | "standard";
+  role: AdminUserRole;
   /** Scopes a standard user to one subsidiary — see backend User.subsidiaryId's
    * own doc comment. Optional; meaningless (but harmless) on an admin account. */
   subsidiaryId?: string;
@@ -103,12 +107,28 @@ export interface CreatedUser {
   id: string;
   username: string;
   email: string;
-  role: "admin" | "standard";
+  role: AdminUserRole;
   subsidiaryId: string | null;
 }
 
 export function createUser(input: CreateUserInput): Promise<CreatedUser> {
   return apiClient.post<CreatedUser>("/api/v1/admin/users", input);
+}
+
+export interface AdminUserListItem {
+  id: string;
+  username: string;
+  email: string;
+  role: AdminUserRole;
+  subsidiaryId: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+/** GET /api/v1/admin/users — every provisioned account, for the User
+ * Management page's list. */
+export function listUsers(): Promise<AdminUserListItem[]> {
+  return apiClient.get<AdminUserListItem[]>("/api/v1/admin/users");
 }
 
 /** GET /api/v1/admin/project-codes — every project code, open and closed
@@ -127,4 +147,45 @@ export function createProjectCode(code: string): Promise<ProjectCode> {
  * under that code. */
 export function setProjectCodeOpen(id: string, isOpen: boolean): Promise<ProjectCode> {
   return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { isOpen });
+}
+
+/** GET /api/v1/admin/subsidiaries — every subsidiary (same list any
+ * authenticated user can already fetch via subsidiariesApi.listSubsidiaries
+ * — kept as its own admin route for symmetry with /project-codes). */
+export function listAllSubsidiaries(): Promise<Subsidiary[]> {
+  return apiClient.get<Subsidiary[]>("/api/v1/admin/subsidiaries");
+}
+
+export function createSubsidiary(name: string): Promise<Subsidiary> {
+  return apiClient.post<Subsidiary>("/api/v1/admin/subsidiaries", { name });
+}
+
+export interface SubsidiaryProjectBlock {
+  id: string;
+  subsidiaryName: string;
+  projectCode: string;
+  createdAt: string;
+}
+
+/** GET /api/v1/admin/subsidiary-project-blocks — every (subsidiary, project
+ * code) pair currently blocked from new uploads — e.g. "F2H26" closed for
+ * "SGE" specifically while every other subsidiary can still upload it.
+ * Independent of, and layered on top of, a project code's own global
+ * open/closed state (see ProjectCodeManager / setProjectCodeOpen above). */
+export function listSubsidiaryProjectBlocks(): Promise<SubsidiaryProjectBlock[]> {
+  return apiClient.get<SubsidiaryProjectBlock[]>("/api/v1/admin/subsidiary-project-blocks");
+}
+
+export function createSubsidiaryProjectBlock(subsidiaryName: string, projectCode: string): Promise<SubsidiaryProjectBlock> {
+  return apiClient.post<SubsidiaryProjectBlock>("/api/v1/admin/subsidiary-project-blocks", {
+    subsidiaryName,
+    projectCode,
+  });
+}
+
+/** Unblocking (deleting the row) is the only thing that lets that subsidiary
+ * upload that project code again (enforced server-side in
+ * uploadService.createUpload). */
+export function deleteSubsidiaryProjectBlock(id: string): Promise<void> {
+  return apiClient.delete(`/api/v1/admin/subsidiary-project-blocks/${id}`);
 }

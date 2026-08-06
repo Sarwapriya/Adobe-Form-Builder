@@ -20,9 +20,11 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import HistoryIcon from "@mui/icons-material/History";
+import SettingsIcon from "@mui/icons-material/Settings";
+import PeopleIcon from "@mui/icons-material/People";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
-import { useAuthStore } from "../auth/authStore";
+import { isAdminRole, useAuthStore } from "../auth/authStore";
 
 const EXPANDED_WIDTH = 260;
 const COLLAPSED_WIDTH = 76;
@@ -60,10 +62,12 @@ export function AppLayout() {
 
   const navItems: NavItem[] = [
     { to: "/", label: "Upload History", icon: <UploadFileIcon />, exact: true },
-    ...(user?.role === "admin"
+    ...(isAdminRole(user?.role)
       ? [
           { to: "/admin", label: "Admin Dashboard", icon: <AdminPanelSettingsIcon />, exact: true },
           { to: "/admin/history", label: "All History", icon: <HistoryIcon />, exact: true },
+          { to: "/admin/configuration", label: "Configuration", icon: <SettingsIcon />, exact: true },
+          { to: "/admin/users", label: "User Management", icon: <PeopleIcon />, exact: true },
         ]
       : []),
   ];

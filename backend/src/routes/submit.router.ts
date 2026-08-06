@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
 import { requireAuth } from "../middleware/authJwt";
 import { submitUpload } from "../services/submissionService";
+import { isAdminRole } from "../entities/User";
 
 export const submitRouter = Router();
 
@@ -10,7 +11,7 @@ submitRouter.use(requireAuth);
 submitRouter.post(
   "/:uploadId",
   asyncHandler(async (req, res) => {
-    const isAdmin = req.auth!.role === "admin";
+    const isAdmin = isAdminRole(req.auth!.role);
     const result = await submitUpload(req.params.uploadId, req.auth!.sub, isAdmin);
 
     if (result.outcome === "not_found") {

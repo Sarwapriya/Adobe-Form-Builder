@@ -35,8 +35,9 @@ import {
   type ValidationResult,
 } from "../api/uploadsApi";
 import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
+import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { UploadConfigurePanel } from "../components/upload/UploadConfigurePanel";
-import { useAuthStore } from "../auth/authStore";
+import { isAdminRole, useAuthStore } from "../auth/authStore";
 
 const STATUS_COLOR: Record<UploadListItem["status"], "default" | "success" | "error" | "warning"> = {
   uploaded: "default",
@@ -58,9 +59,11 @@ export function UploadHistoryPage() {
   // subsidiary) keep the free-text field, since they may upload for any
   // subsidiary — see upload.router.ts, which enforces this same rule
   // server-side regardless of what this field shows.
-  const isSubsidiaryLocked = user?.role !== "admin" && !!user?.subsidiaryId;
+  const isSubsidiaryLocked = !isAdminRole(user?.role) && !!user?.subsidiaryId;
 
   const [subsidiaryId, setSubsidiaryId] = useState(() => user?.subsidiaryId ?? "");
+  const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
+  const [subsidiariesError, setSubsidiariesError] = useState<string | null>(null);
   const [projectCode, setProjectCode] = useState("");
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [projectCodesError, setProjectCodesError] = useState<string | null>(null);
@@ -93,10 +96,35 @@ export function UploadHistoryPage() {
     void refresh();
   }, [page, pageSize]);
 
+  // Refetches whenever the selected subsidiary changes — a project code an
+  // admin has blocked specifically for this subsidiary (see
+  // SubsidiaryProjectBlockManager) is excluded here even though it's open
+  // globally, mirroring the upload button being effectively unavailable for
+  // that pair. Clears out a previously-picked project code that's no longer
+  // in the refreshed list (e.g. it just became blocked for the newly
+  // selected subsidiary), rather than silently submitting a stale pick.
   useEffect(() => {
-    listOpenProjectCodes()
-      .then(setProjectCodes)
+    if (!subsidiaryId.trim()) {
+      setProjectCodes([]);
+      return;
+    }
+    let cancelled = false;
+    listOpenProjectCodes(subsidiaryId.trim())
+      .then((codes) => {
+        if (cancelled) return;
+        setProjectCodes(codes);
+        setProjectCode((current) => (codes.some((c) => c.code === current) ? current : ""));
+      })
       .catch((err) => setProjectCodesError(err instanceof ApiError ? err.message : "Failed to load project codes"));
+    return () => {
+      cancelled = true;
+    };
+  }, [subsidiaryId]);
+
+  useEffect(() => {
+    listSubsidiaries()
+      .then(setSubsidiaries)
+      .catch((err) => setSubsidiariesError(err instanceof ApiError ? err.message : "Failed to load subsidiaries"));
   }, []);
 
   // Covers the case where `user` populates asynchronously (silentRefresh
@@ -214,15 +242,33 @@ export function UploadHistoryPage() {
         </Stack>
 
         <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-          <TextField
-            label="Subsidiary"
-            value={subsidiaryId}
-            onChange={(e) => setSubsidiaryId(e.target.value)}
-            required
-            size="small"
-            disabled={isSubsidiaryLocked}
-            helperText={isSubsidiaryLocked ? "Locked to your assigned subsidiary" : undefined}
-          />
+          {isSubsidiaryLocked ? (
+            <TextField
+              label="Subsidiary"
+              value={subsidiaryId}
+              disabled
+              size="small"
+              helperText="Locked to your assigned subsidiary"
+            />
+          ) : (
+            <TextField
+              select
+              label="Subsidiary"
+              value={subsidiaryId}
+              onChange={(e) => setSubsidiaryId(e.target.value)}
+              required
+              size="small"
+              sx={{ minWidth: 180 }}
+              disabled={subsidiaries.length === 0}
+              helperText={subsidiaries.length === 0 ? "No subsidiaries — contact an admin" : undefined}
+            >
+              {subsidiaries.map((s) => (
+                <MenuItem key={s.id} value={s.name}>
+                  {s.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
           <TextField
             select
             label="Project Code"
@@ -231,8 +277,14 @@ export function UploadHistoryPage() {
             required
             size="small"
             sx={{ minWidth: 200 }}
-            disabled={projectCodes.length === 0}
-            helperText={projectCodes.length === 0 ? "No open project codes — contact an admin" : undefined}
+            disabled={!subsidiaryId.trim() || projectCodes.length === 0}
+            helperText={
+              !subsidiaryId.trim()
+                ? "Choose a subsidiary first"
+                : projectCodes.length === 0
+                  ? "No project codes open for this subsidiary — contact an admin"
+                  : undefined
+            }
           >
             {projectCodes.map((pc) => (
               <MenuItem key={pc.id} value={pc.code}>
@@ -263,6 +315,12 @@ export function UploadHistoryPage() {
             />
           </Button>
         </Box>
+
+        {subsidiariesError && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {subsidiariesError}
+          </Alert>
+        )}
 
         {projectCodesError && (
           <Alert severity="error" sx={{ mt: 2 }}>

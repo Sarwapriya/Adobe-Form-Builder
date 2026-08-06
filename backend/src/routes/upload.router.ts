@@ -5,6 +5,7 @@ import { parsePositiveInt } from "../utils/queryParsing";
 import { requireAuth } from "../middleware/authJwt";
 import { validateBody } from "../middleware/validate";
 import { uploadMiddleware } from "../services/fileService";
+import { isAdminRole } from "../entities/User";
 import {
   createUpload,
   getUploadDetail,
@@ -64,7 +65,7 @@ uploadRouter.post(
     // upload under a different subsidiary. Admins (and standard users with no
     // assigned subsidiary) use whatever the request body says.
     const effectiveSubsidiaryId =
-      req.auth!.role !== "admin" && req.auth!.subsidiaryId ? req.auth!.subsidiaryId : subsidiaryId;
+      !isAdminRole(req.auth!.role) && req.auth!.subsidiaryId ? req.auth!.subsidiaryId : subsidiaryId;
 
     const { upload, validation } = await createUpload({
       subsidiaryId: effectiveSubsidiaryId,
@@ -97,7 +98,7 @@ uploadRouter.get(
 uploadRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const isAdmin = req.auth!.role === "admin";
+    const isAdmin = isAdminRole(req.auth!.role);
     const detail = await getUploadDetail(req.params.id, req.auth!.sub, isAdmin);
     if (!detail) {
       res.status(404).json({ error: "upload not found" });
@@ -110,7 +111,7 @@ uploadRouter.get(
 uploadRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    const isAdmin = req.auth!.role === "admin";
+    const isAdmin = isAdminRole(req.auth!.role);
     const result = await softDeleteUpload(req.params.id, req.auth!.sub, isAdmin);
 
     if (result === "not_found") {

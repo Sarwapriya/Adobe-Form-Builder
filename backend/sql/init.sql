@@ -98,6 +98,29 @@ CREATE TABLE ProjectCodes (
     createdAt DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
 
+-- The admin-managed picklist behind the upload form's "Subsidiary" dropdown
+-- and the user-creation form's subsidiary scoping. Just a named list — no
+-- blanket open/closed toggle here (see SubsidiaryProjectBlocks below for the
+-- actual per-subsidiary upload restriction, always scoped to one project
+-- code).
+CREATE TABLE Subsidiaries (
+    id        UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    name      NVARCHAR(100) NOT NULL UNIQUE,
+    createdAt DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+
+-- A specific (subsidiary, project code) pair blocked from new uploads — e.g.
+-- closing "F2H26" for "SGE" only, while every other subsidiary can still
+-- upload it. Row presence *is* the block (see uploadService.createUpload's
+-- assertNotBlocked); independent of, and layered on top of, ProjectCodes.isOpen.
+CREATE TABLE SubsidiaryProjectBlocks (
+    id             UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    subsidiaryName NVARCHAR(100) NOT NULL,
+    projectCode    NVARCHAR(100) NOT NULL,
+    createdAt      DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+CREATE UNIQUE INDEX UQ_SubsidiaryProjectBlocks_pair ON SubsidiaryProjectBlocks(subsidiaryName, projectCode);
+
 -- Admin-configurable toggle read by the submit endpoint to decide whether
 -- submitting an upload locks that version's generated files against further
 -- regeneration/re-upload.

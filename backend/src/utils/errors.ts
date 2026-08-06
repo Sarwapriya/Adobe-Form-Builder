@@ -28,6 +28,18 @@ export class ProjectCodeClosedError extends Error {
   }
 }
 
+/** Thrown when an upload is attempted for a (subsidiary, project code) pair
+ * an admin has specifically blocked — see
+ * subsidiaryProjectBlockService.assertNotBlocked. Independent of
+ * ProjectCodeClosedError above — either one blocks the upload; this one
+ * scopes the block to a single subsidiary rather than every uploader. */
+export class SubsidiaryProjectBlockedError extends Error {
+  constructor(message = "This project code is closed for new uploads from this subsidiary") {
+    super(message);
+    this.name = "SubsidiaryProjectBlockedError";
+  }
+}
+
 /** Thrown when the project code selected in the upload form doesn't match the
  * workbook's own "Project Code" metadata row (or that row is missing
  * entirely) — see uploadService.createUpload's cross-check against

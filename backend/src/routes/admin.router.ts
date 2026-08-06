@@ -14,9 +14,15 @@ import {
   type AdminListFilters,
 } from "../services/adminUploadService";
 import { computeDiff } from "../services/diffService";
-import { createUser } from "../services/authService";
+import { createUser, listUsers } from "../services/authService";
 import { buildUploadPreview, type PreviewVariant } from "../services/previewService";
 import { createProjectCode, listProjectCodes, setProjectCodeOpen } from "../services/projectCodeService";
+import { createSubsidiary, listSubsidiaries } from "../services/subsidiaryService";
+import {
+  createSubsidiaryProjectBlock,
+  deleteSubsidiaryProjectBlock,
+  listSubsidiaryProjectBlocks,
+} from "../services/subsidiaryProjectBlockService";
 import type { UploadStatus } from "../entities/Upload";
 
 export const adminRouter = Router();
@@ -202,24 +208,108 @@ adminRouter.patch(
   })
 );
 
+// Every subsidiary. Same list GET /api/v1/subsidiaries exposes to any
+// authenticated user (there's no open/closed distinction on a subsidiary
+// itself) — kept as its own admin route for symmetry with /project-codes.
+adminRouter.get(
+  "/subsidiaries",
+  asyncHandler(async (_req, res) => {
+    const subsidiaries = await listSubsidiaries();
+    res.json(subsidiaries);
+  })
+);
+
+const createSubsidiarySchema = z.object({
+  name: z.string().trim().min(1),
+});
+
+adminRouter.post(
+  "/subsidiaries",
+  validateBody(createSubsidiarySchema),
+  asyncHandler(async (req, res) => {
+    const { name } = req.body as z.infer<typeof createSubsidiarySchema>;
+    const created = await createSubsidiary(name);
+    res.status(201).json(created);
+  })
+);
+
+// Every (subsidiary, project code) pair currently blocked from new uploads —
+// e.g. "F2H26" closed for "SGE" specifically, while every other subsidiary
+// can still upload it. Independent of, and layered on top of, a project
+// code's own global open/closed state.
+adminRouter.get(
+  "/subsidiary-project-blocks",
+  asyncHandler(async (_req, res) => {
+    const blocks = await listSubsidiaryProjectBlocks();
+    res.json(blocks);
+  })
+);
+
+const createSubsidiaryProjectBlockSchema = z.object({
+  subsidiaryName: z.string().trim().min(1),
+  projectCode: z.string().trim().min(1),
+});
+
+adminRouter.post(
+  "/subsidiary-project-blocks",
+  validateBody(createSubsidiaryProjectBlockSchema),
+  asyncHandler(async (req, res) => {
+    const { subsidiaryName, projectCode } = req.body as z.infer<typeof createSubsidiaryProjectBlockSchema>;
+    const created = await createSubsidiaryProjectBlock(subsidiaryName, projectCode);
+    res.status(201).json(created);
+  })
+);
+
+// Unblocking (deleting the row) is the only thing that lets a subsidiary
+// upload that project code again — see uploadService.createUpload's call to
+// subsidiaryProjectBlockService.assertNotBlocked.
+adminRouter.delete(
+  "/subsidiary-project-blocks/:id",
+  asyncHandler(async (req, res) => {
+    const deleted = await deleteSubsidiaryProjectBlock(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: "block not found" });
+      return;
+    }
+    res.status(204).send();
+  })
+);
+
+// Every provisioned account (never includes passwordHash — see
+// authService.listUsers) for the User Management page's list.
+adminRouter.get(
+  "/users",
+  asyncHandler(async (_req, res) => {
+    const users = await listUsers();
+    res.json(users);
+  })
+);
+
 const createUserSchema = z.object({
   username: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
-  role: z.enum(["admin", "standard"]),
+  role: z.enum(["admin", "standard", "superadmin"]),
   // Scopes a standard user to one subsidiary — see User.subsidiaryId's own
   // doc comment. Optional: a standard user with none behaves as before
   // (free-text Subsidiary field), and it's meaningless on an admin account.
   subsidiaryId: z.string().trim().min(1).optional(),
 });
 
-// There is no self-service signup — admins provision every account, including
-// other admins, through this endpoint.
+// There is no self-service signup — admins provision every account through
+// this endpoint. A plain "admin" may only provision "standard" users; only a
+// "superadmin" may provision another "admin" or "superadmin" (requireAdmin
+// above already let both roles through, since this check is finer-grained
+// than route-level access).
 adminRouter.post(
   "/users",
   validateBody(createUserSchema),
   asyncHandler(async (req, res) => {
     const input = req.body as z.infer<typeof createUserSchema>;
+    if (req.auth!.role !== "superadmin" && input.role !== "standard") {
+      res.status(403).json({ error: "only a superadmin may provision an admin or superadmin account" });
+      return;
+    }
     const user = await createUser(input);
     res
       .status(201)
