@@ -131,6 +131,18 @@ export function listUsers(): Promise<AdminUserListItem[]> {
   return apiClient.get<AdminUserListItem[]>("/api/v1/admin/users");
 }
 
+/**
+ * Enables or disables an account (blocks new logins immediately — enforced
+ * server-side in authService.setUserActive). Same role-based restriction as
+ * account creation: a plain admin may only act on standard accounts, only a
+ * superadmin may act on an admin/superadmin account — and nobody may disable
+ * their own account. Does not touch anything that account has already
+ * uploaded/submitted.
+ */
+export function setUserActive(id: string, isActive: boolean): Promise<CreatedUser & { isActive: boolean }> {
+  return apiClient.patch<CreatedUser & { isActive: boolean }>(`/api/v1/admin/users/${id}`, { isActive });
+}
+
 /** GET /api/v1/admin/project-codes — every project code, open and closed
  * alike (the admin management list). The upload form's own dropdown uses the
  * open-only projectCodesApi.listOpenProjectCodes instead. */
@@ -149,15 +161,33 @@ export function setProjectCodeOpen(id: string, isOpen: boolean): Promise<Project
   return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { isOpen });
 }
 
-/** GET /api/v1/admin/subsidiaries — every subsidiary (same list any
- * authenticated user can already fetch via subsidiariesApi.listSubsidiaries
- * — kept as its own admin route for symmetry with /project-codes). */
+/** GET /api/v1/admin/subsidiaries — every subsidiary, active and inactive
+ * alike (the admin management list — needs to see disabled ones too, to
+ * re-enable them). The upload/user-creation forms' own dropdowns use the
+ * active-only subsidiariesApi.listSubsidiaries instead. */
 export function listAllSubsidiaries(): Promise<Subsidiary[]> {
   return apiClient.get<Subsidiary[]>("/api/v1/admin/subsidiaries");
 }
 
 export function createSubsidiary(name: string): Promise<Subsidiary> {
   return apiClient.post<Subsidiary>("/api/v1/admin/subsidiaries", { name });
+}
+
+/** Disabling a subsidiary blocks *every* project code for it in one step
+ * (enforced server-side in uploadService.createUpload), independent of any
+ * single (subsidiary, project code) block — the reversible option; see
+ * deleteSubsidiary below for the permanent one. Does not affect uploads
+ * already made under it. */
+export function setSubsidiaryActive(id: string, isActive: boolean): Promise<Subsidiary> {
+  return apiClient.patch<Subsidiary>(`/api/v1/admin/subsidiaries/${id}`, { isActive });
+}
+
+/** Permanently removes a subsidiary (and any subsidiary-project blocks
+ * naming it). Uploads/users already scoped to it keep their own
+ * (denormalized) subsidiary value regardless — see backend
+ * subsidiaryService.deleteSubsidiary. */
+export function deleteSubsidiary(id: string): Promise<void> {
+  return apiClient.delete(`/api/v1/admin/subsidiaries/${id}`);
 }
 
 export interface SubsidiaryProjectBlock {

@@ -20,7 +20,8 @@ import {
 } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
 import { ApiError } from "../api/apiClient";
-import { createUser, listAllSubsidiaries, listUsers, type AdminUserListItem, type AdminUserRole, type Subsidiary } from "../api/adminApi";
+import { createUser, listUsers, setUserActive, type AdminUserListItem, type AdminUserRole } from "../api/adminApi";
+import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { useAuthStore } from "../auth/authStore";
 
 const ROLE_COLOR: Record<AdminUserRole, "default" | "primary" | "secondary"> = {
@@ -39,14 +40,16 @@ const ROLE_COLOR: Record<AdminUserRole, "default" | "primary" | "secondary"> = {
  * a plain admin isn't allowed to submit).
  */
 export function UserManagementPage() {
-  const currentRole = useAuthStore((s) => s.user?.role);
-  const isSuperAdmin = currentRole === "superadmin";
+  const currentUser = useAuthStore((s) => s.user);
+  const isSuperAdmin = currentUser?.role === "superadmin";
   const assignableRoles: AdminUserRole[] = isSuperAdmin ? ["standard", "admin", "superadmin"] : ["standard"];
 
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -74,14 +77,23 @@ export function UserManagementPage() {
   }, []);
 
   useEffect(() => {
-    listAllSubsidiaries()
+    listSubsidiaries()
       .then(setSubsidiaries)
       .catch(() => undefined);
   }, []);
 
+  // A standard user must be scoped to a subsidiary at creation time — without
+  // one they'd fall back to the free-text Subsidiary field on every upload,
+  // defeating the point of scoping them. Admin/superadmin accounts aren't
+  // restricted to one subsidiary, so it stays optional for those. Mirrored
+  // authoritatively server-side in admin.router.ts's createUserSchema.
+  const subsidiaryRequired = role === "standard";
+  const canCreate =
+    !!username.trim() && !!email.trim() && !!password && (!subsidiaryRequired || !!subsidiaryId) && !creating;
+
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
-    if (!username.trim() || !email.trim() || !password) return;
+    if (!canCreate) return;
 
     setCreating(true);
     setCreateError(null);
@@ -105,6 +117,27 @@ export function UserManagementPage() {
       setCreateError(err instanceof ApiError ? err.message : "Failed to create user");
     } finally {
       setCreating(false);
+    }
+  }
+
+  // A plain admin can only toggle standard accounts (enforced authoritatively
+  // server-side too — see admin.router.ts's PATCH /users/:id); nobody can
+  // toggle their own row, to avoid locking themselves out of the admin panel.
+  function canToggle(target: AdminUserListItem): boolean {
+    if (target.id === currentUser?.id) return false;
+    return isSuperAdmin || target.role === "standard";
+  }
+
+  async function handleToggleActive(target: AdminUserListItem) {
+    setTogglingId(target.id);
+    setToggleError(null);
+    try {
+      await setUserActive(target.id, !target.isActive);
+      await refresh();
+    } catch (err) {
+      setToggleError(err instanceof ApiError ? err.message : "Failed to update user");
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -181,21 +214,27 @@ export function UserManagementPage() {
           </TextField>
           <TextField
             select
-            label="Subsidiary (optional)"
+            label={subsidiaryRequired ? "Subsidiary" : "Subsidiary (optional)"}
             size="small"
             sx={{ minWidth: 180 }}
             value={subsidiaryId}
             onChange={(e) => setSubsidiaryId(e.target.value)}
-            helperText="Locks this user's uploads to one subsidiary"
+            required={subsidiaryRequired}
+            error={subsidiaryRequired && !subsidiaryId}
+            helperText={
+              subsidiaryRequired && !subsidiaryId
+                ? "Required for a standard user"
+                : "Locks this user's uploads to one subsidiary"
+            }
           >
-            <MenuItem value="">No subsidiary</MenuItem>
+            {!subsidiaryRequired && <MenuItem value="">No subsidiary</MenuItem>}
             {subsidiaries.map((s) => (
               <MenuItem key={s.id} value={s.name}>
                 {s.name}
               </MenuItem>
             ))}
           </TextField>
-          <Button type="submit" variant="contained" disabled={creating}>
+          <Button type="submit" variant="contained" disabled={!canCreate}>
             {creating ? "Creating..." : "Create user"}
           </Button>
         </Box>
@@ -221,6 +260,11 @@ export function UserManagementPage() {
       {loadError && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
           {loadError}
+        </Alert>
+      )}
+      {toggleError && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+          {toggleError}
         </Alert>
       )}
 
@@ -260,7 +304,22 @@ export function UserManagementPage() {
                     </TableCell>
                     <TableCell>{u.subsidiaryId ?? "—"}</TableCell>
                     <TableCell>
-                      <Chip label={u.isActive ? "active" : "inactive"} color={u.isActive ? "success" : "default"} size="small" />
+                      <Chip
+                        label={u.isActive ? "active" : "inactive"}
+                        color={u.isActive ? "success" : "default"}
+                        size="small"
+                        onClick={canToggle(u) ? () => handleToggleActive(u) : undefined}
+                        disabled={togglingId === u.id}
+                        title={
+                          canToggle(u)
+                            ? u.isActive
+                              ? "Active — click to disable"
+                              : "Disabled — click to enable"
+                            : u.id === currentUser?.id
+                              ? "You cannot disable your own account"
+                              : "Only a superadmin can enable/disable this account"
+                        }
+                      />
                     </TableCell>
                     <TableCell>{new Date(u.createdAt).toLocaleString()}</TableCell>
                   </TableRow>

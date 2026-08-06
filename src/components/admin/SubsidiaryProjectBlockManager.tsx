@@ -19,24 +19,29 @@ import { ApiError } from "../../api/apiClient";
 import {
   createSubsidiaryProjectBlock,
   deleteSubsidiaryProjectBlock,
-  listAllSubsidiaries,
   listSubsidiaryProjectBlocks,
-  type Subsidiary,
   type SubsidiaryProjectBlock,
 } from "../../api/adminApi";
+import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesApi";
 
 /**
  * Blocks a specific (subsidiary, project code) pair from new uploads — e.g.
  * closing "F2H26" for "SGE" only, while every other subsidiary can still
  * upload it. Independent of, and layered on top of, ProjectCodeManager's own
- * global open/closed toggle above: a project code closed there never appears
- * in this panel's own dropdown either (it's already blocked for everyone, so
- * blocking it again per-subsidiary would be meaningless) — the dropdown
- * always reflects the *current* open project codes, so a newly-added one
- * shows up immediately and a since-closed one disappears.
+ * global open/closed toggle and SubsidiaryManager's own active/inactive
+ * toggle, both above: a project code closed there, or a subsidiary disabled
+ * there, never appears in this panel's own dropdowns either (blocking it
+ * again per-pair would be meaningless when it's already blocked entirely) —
+ * both dropdowns always reflect the *current* open codes/active
+ * subsidiaries, so a newly-added one shows up immediately and a since-closed
+ * one disappears.
+ *
+ * `refreshSignal` is bumped by ConfigurationPage whenever ProjectCodeManager
+ * or SubsidiaryManager change something — this component has no other way to
+ * find out, since each panel keeps its own independent list in state.
  */
-export function SubsidiaryProjectBlockManager() {
+export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal?: number } = {}) {
   const [blocks, setBlocks] = useState<SubsidiaryProjectBlock[]>([]);
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
@@ -53,12 +58,17 @@ export function SubsidiaryProjectBlockManager() {
     try {
       const [blockRows, subsidiaryRows, codeRows] = await Promise.all([
         listSubsidiaryProjectBlocks(),
-        listAllSubsidiaries(),
+        listSubsidiaries(),
         listOpenProjectCodes(),
       ]);
       setBlocks(blockRows);
       setSubsidiaries(subsidiaryRows);
       setProjectCodes(codeRows);
+      // Clear a pending selection that's no longer valid (e.g. the project
+      // code it pointed at was just closed globally) rather than letting the
+      // form silently submit a stale pick.
+      setSubsidiaryName((current) => (subsidiaryRows.some((s) => s.name === current) ? current : ""));
+      setProjectCode((current) => (codeRows.some((c) => c.code === current) ? current : ""));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load subsidiary restrictions");
     } finally {
@@ -68,7 +78,11 @@ export function SubsidiaryProjectBlockManager() {
 
   useEffect(() => {
     void refresh();
-  }, []);
+    // refresh is stable across renders (redefined each render, but doesn't
+    // need to be a dep — it closes over nothing that changes independently
+    // of refreshSignal); refetching is exactly what refreshSignal is for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();

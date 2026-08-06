@@ -1,23 +1,33 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, Paper, Stack, TextField, Typography } from "@mui/material";
+import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
 import DomainIcon from "@mui/icons-material/Domain";
 import { ApiError } from "../../api/apiClient";
-import { createSubsidiary, listAllSubsidiaries, type Subsidiary } from "../../api/adminApi";
+import {
+  createSubsidiary,
+  deleteSubsidiary,
+  listAllSubsidiaries,
+  setSubsidiaryActive,
+  type Subsidiary,
+} from "../../api/adminApi";
 
 /**
- * Inline admin panel for creating subsidiaries — just a named picklist, no
- * open/closed toggle here. Per-subsidiary upload restrictions are always
- * scoped to a specific project code — see SubsidiaryProjectBlockManager
- * below, which this list feeds (its Subsidiary dropdown). Lives on
- * ConfigurationPage.
+ * Inline admin panel for managing subsidiaries: create new ones, disable one
+ * (blocks every project code for it in one step — reversible, click to
+ * re-enable) or delete one outright (permanent — the chip's own "x"). Lives
+ * on ConfigurationPage; per-project restrictions that don't need the whole
+ * subsidiary blocked are SubsidiaryProjectBlockManager below.
  */
-export function SubsidiaryManager() {
+export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) {
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -44,10 +54,39 @@ export function SubsidiaryManager() {
       await createSubsidiary(newName.trim());
       setNewName("");
       await refresh();
+      onChange?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create subsidiary");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleToggle(subsidiary: Subsidiary) {
+    setTogglingId(subsidiary.id);
+    setError(null);
+    try {
+      await setSubsidiaryActive(subsidiary.id, !subsidiary.isActive);
+      await refresh();
+      onChange?.();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update subsidiary");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  async function handleDelete(subsidiary: Subsidiary) {
+    setDeletingId(subsidiary.id);
+    setError(null);
+    try {
+      await deleteSubsidiary(subsidiary.id);
+      await refresh();
+      onChange?.();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete subsidiary");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -85,11 +124,25 @@ export function SubsidiaryManager() {
           No subsidiaries yet — add one above so users can select it when uploading.
         </Typography>
       ) : (
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          {subsidiaries.map((s) => (
-            <Chip key={s.id} label={s.name} />
-          ))}
-        </Stack>
+        <>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Click a chip to enable/disable it (blocks every project for that subsidiary); click its "x" to delete it permanently.
+          </Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {subsidiaries.map((s) => (
+              <Chip
+                key={s.id}
+                label={s.name}
+                color={s.isActive ? "success" : "default"}
+                icon={s.isActive ? <LockOpenIcon /> : <LockIcon />}
+                onClick={() => handleToggle(s)}
+                onDelete={() => handleDelete(s)}
+                disabled={togglingId === s.id || deletingId === s.id}
+                title={s.isActive ? "Active — click to disable" : "Disabled — click to enable"}
+              />
+            ))}
+          </Stack>
+        </>
       )}
     </Paper>
   );

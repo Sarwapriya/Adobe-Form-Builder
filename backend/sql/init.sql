@@ -99,13 +99,14 @@ CREATE TABLE ProjectCodes (
 );
 
 -- The admin-managed picklist behind the upload form's "Subsidiary" dropdown
--- and the user-creation form's subsidiary scoping. Just a named list — no
--- blanket open/closed toggle here (see SubsidiaryProjectBlocks below for the
--- actual per-subsidiary upload restriction, always scoped to one project
--- code).
+-- and the user-creation form's subsidiary scoping. isActive blocks *every*
+-- project for it in one step (independent of, and layered above,
+-- SubsidiaryProjectBlocks below, which scopes a restriction to one project
+-- code); deleting the row is the permanent alternative to disabling it.
 CREATE TABLE Subsidiaries (
     id        UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
     name      NVARCHAR(100) NOT NULL UNIQUE,
+    isActive  BIT NOT NULL DEFAULT 1,
     createdAt DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
 

@@ -6,6 +6,7 @@ import {
   NotFoundError,
   ConflictError,
   ProjectCodeClosedError,
+  SubsidiaryInactiveError,
   SubsidiaryProjectBlockedError,
   ProjectCodeMismatchError,
   SubsidiaryMismatchError,
@@ -38,7 +39,12 @@ export function errorHandler(
     return;
   }
 
-  if (err instanceof ConflictError || err instanceof ProjectCodeClosedError || err instanceof SubsidiaryProjectBlockedError) {
+  if (
+    err instanceof ConflictError ||
+    err instanceof ProjectCodeClosedError ||
+    err instanceof SubsidiaryInactiveError ||
+    err instanceof SubsidiaryProjectBlockedError
+  ) {
     res.status(409).json({ error: err.message });
     return;
   }

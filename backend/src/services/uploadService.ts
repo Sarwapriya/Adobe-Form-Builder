@@ -11,6 +11,7 @@ import { classifyFileType, generateFromWorkbook, type GenerationResult } from ".
 import { sendUploadNotification } from "./emailService";
 import { getAdminSetting } from "./adminSettingsService";
 import { assertProjectCodeOpenForUpload } from "./projectCodeService";
+import { assertSubsidiaryActiveForUpload } from "./subsidiaryService";
 import { assertNotBlocked } from "./subsidiaryProjectBlockService";
 
 export interface UploadListItem {
@@ -217,10 +218,12 @@ export async function createUpload(input: CreateUploadInput): Promise<CreateUplo
   const { subsidiaryId, projectCode, file, userId, uploadedByUsername, requiredOverrides } = input;
 
   // Checked before anything else — no point validating the file signature or
-  // parsing it if the project code is closed globally, or specifically
-  // blocked for this subsidiary (see subsidiaryProjectBlockService.ts). Two
-  // independent gates — either one blocks the upload, regardless of the other.
+  // parsing it if the project code is closed globally, the subsidiary is
+  // disabled outright, or this specific pair is blocked (see
+  // subsidiaryService.ts / subsidiaryProjectBlockService.ts). Three
+  // independent gates — any one blocks the upload, regardless of the others.
   await assertProjectCodeOpenForUpload(projectCode);
+  await assertSubsidiaryActiveForUpload(subsidiaryId);
   await assertNotBlocked(subsidiaryId, projectCode);
 
   // Checked here (not just in fileService's multer fileFilter, which only

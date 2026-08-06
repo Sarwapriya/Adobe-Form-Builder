@@ -17,6 +17,7 @@ import { AddQuestionOverrides1740000000000 } from "../migrations/1740000000000-A
 import { AddUserSubsidiary1750000000000 } from "../migrations/1750000000000-AddUserSubsidiary";
 import { AddSubsidiaries1760000000000 } from "../migrations/1760000000000-AddSubsidiaries";
 import { AddSubsidiaryProjectBlocks1770000000000 } from "../migrations/1770000000000-AddSubsidiaryProjectBlocks";
+import { AddSubsidiaryIsActive1780000000000 } from "../migrations/1780000000000-AddSubsidiaryIsActive";
 
 const entities = [
   Upload,
@@ -38,6 +39,7 @@ const migrations = [
   AddUserSubsidiary1750000000000,
   AddSubsidiaries1760000000000,
   AddSubsidiaryProjectBlocks1770000000000,
+  AddSubsidiaryIsActive1780000000000,
 ];
 
 /**

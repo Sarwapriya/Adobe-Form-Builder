@@ -28,6 +28,18 @@ export class ProjectCodeClosedError extends Error {
   }
 }
 
+/** Thrown when an upload is attempted for a subsidiary an admin has disabled
+ * outright — see subsidiaryService.assertSubsidiaryActiveForUpload. Blocks
+ * every project code for that subsidiary in one step, independent of (and
+ * layered above) SubsidiaryProjectBlockedError below, which scopes a block
+ * to a single project code. */
+export class SubsidiaryInactiveError extends Error {
+  constructor(message = "This subsidiary is disabled for new uploads") {
+    super(message);
+    this.name = "SubsidiaryInactiveError";
+  }
+}
+
 /** Thrown when an upload is attempted for a (subsidiary, project code) pair
  * an admin has specifically blocked — see
  * subsidiaryProjectBlockService.assertNotBlocked. Independent of

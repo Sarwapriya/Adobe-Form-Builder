@@ -14,10 +14,10 @@ import {
   type AdminListFilters,
 } from "../services/adminUploadService";
 import { computeDiff } from "../services/diffService";
-import { createUser, listUsers } from "../services/authService";
+import { createUser, findUserById, listUsers, setUserActive } from "../services/authService";
 import { buildUploadPreview, type PreviewVariant } from "../services/previewService";
 import { createProjectCode, listProjectCodes, setProjectCodeOpen } from "../services/projectCodeService";
-import { createSubsidiary, listSubsidiaries } from "../services/subsidiaryService";
+import { createSubsidiary, deleteSubsidiary, listSubsidiaries, setSubsidiaryActive } from "../services/subsidiaryService";
 import {
   createSubsidiaryProjectBlock,
   deleteSubsidiaryProjectBlock,
@@ -208,9 +208,9 @@ adminRouter.patch(
   })
 );
 
-// Every subsidiary. Same list GET /api/v1/subsidiaries exposes to any
-// authenticated user (there's no open/closed distinction on a subsidiary
-// itself) — kept as its own admin route for symmetry with /project-codes.
+// Every subsidiary, active and inactive alike — the admin management list.
+// The upload/user-creation forms' own dropdowns use the active-only
+// GET /api/v1/subsidiaries instead.
 adminRouter.get(
   "/subsidiaries",
   asyncHandler(async (_req, res) => {
@@ -230,6 +230,45 @@ adminRouter.post(
     const { name } = req.body as z.infer<typeof createSubsidiarySchema>;
     const created = await createSubsidiary(name);
     res.status(201).json(created);
+  })
+);
+
+const updateSubsidiarySchema = z.object({
+  isActive: z.boolean(),
+});
+
+// Disabling a subsidiary here is the reversible way to block *every* project
+// for it in one step — see uploadService.createUpload's call to
+// assertSubsidiaryActiveForUpload. Independent of, and layered above,
+// /subsidiary-project-blocks below (a single project-scoped restriction). It
+// does not affect uploads already made under that subsidiary.
+adminRouter.patch(
+  "/subsidiaries/:id",
+  validateBody(updateSubsidiarySchema),
+  asyncHandler(async (req, res) => {
+    const { isActive } = req.body as z.infer<typeof updateSubsidiarySchema>;
+    const updated = await setSubsidiaryActive(req.params.id, isActive);
+    if (!updated) {
+      res.status(404).json({ error: "subsidiary not found" });
+      return;
+    }
+    res.json(updated);
+  })
+);
+
+// Permanently removes a subsidiary (and any restrictions naming it) — the
+// irreversible alternative to disabling it above. Uploads/users already
+// scoped to it keep their own (denormalized) subsidiary value regardless —
+// see subsidiaryService.deleteSubsidiary.
+adminRouter.delete(
+  "/subsidiaries/:id",
+  asyncHandler(async (req, res) => {
+    const deleted = await deleteSubsidiary(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: "subsidiary not found" });
+      return;
+    }
+    res.status(204).send();
   })
 );
 
@@ -285,16 +324,25 @@ adminRouter.get(
   })
 );
 
-const createUserSchema = z.object({
-  username: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(8),
-  role: z.enum(["admin", "standard", "superadmin"]),
-  // Scopes a standard user to one subsidiary — see User.subsidiaryId's own
-  // doc comment. Optional: a standard user with none behaves as before
-  // (free-text Subsidiary field), and it's meaningless on an admin account.
-  subsidiaryId: z.string().trim().min(1).optional(),
-});
+const createUserSchema = z
+  .object({
+    username: z.string().min(1),
+    email: z.string().email(),
+    password: z.string().min(8),
+    role: z.enum(["admin", "standard", "superadmin"]),
+    // Scopes a standard user to one subsidiary — see User.subsidiaryId's own
+    // doc comment. Required for "standard" (below) — meaningless (an admin
+    // is never restricted to one subsidiary) and so left optional for
+    // "admin"/"superadmin".
+    subsidiaryId: z.string().trim().min(1).optional(),
+  })
+  // A standard user with no subsidiary would fall back to the free-text
+  // Subsidiary field on every upload, defeating the point of subsidiary
+  // scoping — so it's required at creation time, not just optional metadata.
+  .refine((data) => data.role !== "standard" || !!data.subsidiaryId, {
+    message: "Subsidiary is required for a standard user",
+    path: ["subsidiaryId"],
+  });
 
 // There is no self-service signup — admins provision every account through
 // this endpoint. A plain "admin" may only provision "standard" users; only a
@@ -314,5 +362,49 @@ adminRouter.post(
     res
       .status(201)
       .json({ id: user.id, username: user.username, email: user.email, role: user.role, subsidiaryId: user.subsidiaryId });
+  })
+);
+
+const updateUserActiveSchema = z.object({
+  isActive: z.boolean(),
+});
+
+// Disabling an account blocks new logins immediately (enforced server-side —
+// see authService.setUserActive); it does not touch anything that account
+// has already uploaded/submitted. Same role-based restriction as account
+// creation: a plain "admin" may only enable/disable "standard" accounts,
+// only a "superadmin" may act on an "admin" or "superadmin" account — and
+// nobody may disable their own account, to avoid locking themselves out of
+// the admin panel with no other admin present.
+adminRouter.patch(
+  "/users/:id",
+  validateBody(updateUserActiveSchema),
+  asyncHandler(async (req, res) => {
+    const { isActive } = req.body as z.infer<typeof updateUserActiveSchema>;
+
+    if (req.params.id === req.auth!.sub) {
+      res.status(403).json({ error: "you cannot disable your own account" });
+      return;
+    }
+
+    const target = await findUserById(req.params.id);
+    if (!target) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+    if (req.auth!.role !== "superadmin" && target.role !== "standard") {
+      res.status(403).json({ error: "only a superadmin may enable/disable an admin or superadmin account" });
+      return;
+    }
+
+    const updated = await setUserActive(req.params.id, isActive);
+    res.json({
+      id: updated!.id,
+      username: updated!.username,
+      email: updated!.email,
+      role: updated!.role,
+      subsidiaryId: updated!.subsidiaryId,
+      isActive: updated!.isActive,
+    });
   })
 );

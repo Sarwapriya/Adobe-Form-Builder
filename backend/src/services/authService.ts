@@ -6,6 +6,7 @@ import { AppDataSource } from "../config/data-source";
 import { User, type UserRole } from "../entities/User";
 import { RefreshToken } from "../entities/RefreshToken";
 import { requireEnv } from "../utils/env";
+import { ConflictError } from "../utils/errors";
 
 const ACCESS_TOKEN_EXPIRES_IN = "15m";
 /** Exported so auth.router.ts can set the refresh cookie's `maxAge` to the same
@@ -120,10 +121,26 @@ export interface CreateUserInput {
  * accounts are provisioned by an admin via POST /api/v1/admin/users — so this is
  * the only place a User row is ever inserted outside the one-time seed script.
  * The plaintext password is hashed here and never persisted or logged.
+ *
+ * Rejects a duplicate username or email (case-insensitive) with a 409 before
+ * ever hashing the password, rather than letting the table's own unique
+ * constraints surface as a raw, unhandled DB error — same convention as
+ * projectCodeService/subsidiaryService's own duplicate checks.
  */
 export async function createUser(input: CreateUserInput): Promise<User> {
-  const passwordHash = await bcrypt.hash(input.password, BCRYPT_SALT_ROUNDS);
   const repo = AppDataSource.getRepository(User);
+
+  const existing = await repo
+    .createQueryBuilder("user")
+    .where("LOWER(user.username) = LOWER(:username)", { username: input.username })
+    .orWhere("LOWER(user.email) = LOWER(:email)", { email: input.email })
+    .getOne();
+  if (existing) {
+    const field = existing.username.toLowerCase() === input.username.toLowerCase() ? "username" : "email";
+    throw new ConflictError(`A user with this ${field} already exists`);
+  }
+
+  const passwordHash = await bcrypt.hash(input.password, BCRYPT_SALT_ROUNDS);
   const user = repo.create({
     username: input.username,
     email: input.email,
@@ -141,6 +158,30 @@ export async function listUsers(): Promise<Omit<User, "passwordHash">[]> {
   const repo = AppDataSource.getRepository(User);
   const users = await repo.find({ order: { createdAt: "DESC" } });
   return users.map(({ passwordHash: _passwordHash, ...rest }) => rest);
+}
+
+/** Looked up by admin.router.ts's PATCH /users/:id before toggling isActive,
+ * to check the *target's* role against the caller's own permissions (same
+ * admin-vs-superadmin split as account creation) before setUserActive runs. */
+export function findUserById(id: string): Promise<User | null> {
+  return AppDataSource.getRepository(User).findOne({ where: { id } });
+}
+
+/**
+ * Enables or disables an account — validateCredentials only ever matches an
+ * active user, so disabling one immediately blocks new logins (an existing
+ * session's access token still works until it expires, since access tokens
+ * are stateless; refreshing it fails once RefreshToken.userId points at a
+ * now-inactive user, since rotateRefreshToken re-checks isActive too).
+ * Returns null if the id doesn't exist — callers map that to a 404.
+ */
+export async function setUserActive(id: string, isActive: boolean): Promise<User | null> {
+  const repo = AppDataSource.getRepository(User);
+  const existing = await repo.findOne({ where: { id } });
+  if (!existing) return null;
+
+  existing.isActive = isActive;
+  return repo.save(existing);
 }
 
 function hashToken(rawToken: string): string {

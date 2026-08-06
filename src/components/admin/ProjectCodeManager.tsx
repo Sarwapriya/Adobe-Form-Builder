@@ -15,7 +15,7 @@ import { createProjectCode, listAllProjectCodes, setProjectCodeOpen, type Projec
  * form's own dropdown (any user, open codes only) is a separate endpoint —
  * see projectCodesApi.ts.
  */
-export function ProjectCodeManager() {
+export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {}) {
   const [codes, setCodes] = useState<ProjectCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +48,7 @@ export function ProjectCodeManager() {
       await createProjectCode(newCode.trim());
       setNewCode("");
       await refresh();
+      onChange?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create project code");
     } finally {
@@ -61,6 +62,7 @@ export function ProjectCodeManager() {
     try {
       await setProjectCodeOpen(code.id, !code.isOpen);
       await refresh();
+      onChange?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to update project code");
     } finally {
