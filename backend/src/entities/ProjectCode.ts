@@ -24,6 +24,19 @@ export class ProjectCode {
   @Column({ type: "bit", default: true })
   isOpen!: boolean;
 
+  /** Informational campaign date range (e.g. "this campaign runs Jun 1 -
+   * Jun 30") — purely descriptive, shown in the admin UI. Neither bound is
+   * enforced against new uploads; `isOpen` above is the only thing that
+   * actually gates upload eligibility, so a code doesn't silently stop
+   * accepting uploads just because "today" drifted past `endDate` — an
+   * admin closes it explicitly instead. Both nullable: a code can exist
+   * with no set dates at all. */
+  @Column({ type: "date", nullable: true })
+  startDate!: Date | null;
+
+  @Column({ type: "date", nullable: true })
+  endDate!: Date | null;
+
   @Column({ type: "datetimeoffset", default: () => "SYSDATETIMEOFFSET()" })
   createdAt!: Date;
 }

@@ -1,27 +1,54 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Paper, Stack, TextField, Typography } from "@mui/material";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import BadgeIcon from "@mui/icons-material/Badge";
 import { ApiError } from "../../api/apiClient";
-import { createProjectCode, listAllProjectCodes, setProjectCodeOpen, type ProjectCode } from "../../api/adminApi";
+import {
+  createProjectCode,
+  listAllProjectCodes,
+  setProjectCodeDateRange,
+  setProjectCodeOpen,
+  type ProjectCode,
+} from "../../api/adminApi";
+
+/** Backend returns Date columns as full ISO datetime strings ("2026-06-01T00:00:00.000Z")
+ * once serialized to JSON — an <input type="date"> needs exactly "YYYY-MM-DD". */
+function toDateInputValue(value: string | null): string {
+  return value ? value.slice(0, 10) : "";
+}
 
 /**
- * Inline admin panel for managing project codes (campaigns): create new ones
- * and toggle a code open/closed. Closing one blocks new uploads against it
+ * Inline admin panel for managing project codes (campaigns): create new
+ * ones, toggle a code open/closed, and set/edit each one's descriptive
+ * campaign date range. Closing a code blocks new uploads against it
  * (enforced server-side — see uploadService.createUpload) without touching
- * uploads already made under it. Lives on AdminDashboardPage; the upload
- * form's own dropdown (any user, open codes only) is a separate endpoint —
- * see projectCodesApi.ts.
+ * uploads already made under it; the date range is purely informational and
+ * never enforced (see backend ProjectCode entity's own doc comment). Lives
+ * on ConfigurationPage; the upload form's own dropdown (any user, open
+ * codes only) is a separate endpoint — see projectCodesApi.ts.
  */
 export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {}) {
   const [codes, setCodes] = useState<ProjectCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newCode, setNewCode] = useState("");
+  const [newStartDate, setNewStartDate] = useState("");
+  const [newEndDate, setNewEndDate] = useState("");
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -45,8 +72,10 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
     setCreating(true);
     setError(null);
     try {
-      await createProjectCode(newCode.trim());
+      await createProjectCode(newCode.trim(), newStartDate || undefined, newEndDate || undefined);
       setNewCode("");
+      setNewStartDate("");
+      setNewEndDate("");
       await refresh();
       onChange?.();
     } catch (err) {
@@ -70,21 +99,50 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
     }
   }
 
+  async function handleSaveDateRange(id: string, startDate: string, endDate: string) {
+    setSavingId(id);
+    setError(null);
+    try {
+      await setProjectCodeDateRange(id, startDate || null, endDate || null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update campaign dates");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   return (
     <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
         <BadgeIcon fontSize="small" color="primary" />
         <Typography variant="subtitle1" fontWeight={700}>
-          Project codes
+          Campaign - Project Code
         </Typography>
       </Stack>
 
-      <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", gap: 1.5, mb: 1.5, flexWrap: "wrap" }}>
+      <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", gap: 1.5, mb: 1.5, flexWrap: "wrap", alignItems: "center" }}>
         <TextField
           label="New project code"
           size="small"
           value={newCode}
           onChange={(e) => setNewCode(e.target.value)}
+        />
+        <TextField
+          label="Start date"
+          type="date"
+          size="small"
+          value={newStartDate}
+          onChange={(e) => setNewStartDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+        <TextField
+          label="End date"
+          type="date"
+          size="small"
+          value={newEndDate}
+          onChange={(e) => setNewEndDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
         />
         <Button type="submit" variant="outlined" disabled={!newCode.trim() || creating}>
           {creating ? "Adding..." : "Add"}
@@ -104,20 +162,84 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
           No project codes yet — add one above so users can select it when uploading.
         </Typography>
       ) : (
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Stack spacing={1}>
           {codes.map((code) => (
-            <Chip
+            <ProjectCodeRow
               key={code.id}
-              label={code.code}
-              color={code.isOpen ? "success" : "default"}
-              icon={code.isOpen ? <LockOpenIcon /> : <LockIcon />}
-              onClick={() => handleToggle(code)}
-              disabled={togglingId === code.id}
-              title={code.isOpen ? "Open — click to close" : "Closed — click to reopen"}
+              code={code}
+              toggling={togglingId === code.id}
+              saving={savingId === code.id}
+              onToggle={() => handleToggle(code)}
+              onSaveDateRange={(startDate, endDate) => handleSaveDateRange(code.id, startDate, endDate)}
             />
           ))}
         </Stack>
       )}
     </Paper>
+  );
+}
+
+function ProjectCodeRow({
+  code,
+  toggling,
+  saving,
+  onToggle,
+  onSaveDateRange,
+}: {
+  code: ProjectCode;
+  toggling: boolean;
+  saving: boolean;
+  onToggle: () => void;
+  onSaveDateRange: (startDate: string, endDate: string) => void;
+}) {
+  const [startDate, setStartDate] = useState(toDateInputValue(code.startDate));
+  const [endDate, setEndDate] = useState(toDateInputValue(code.endDate));
+
+  // Re-sync local edits if the underlying row changes from elsewhere (e.g.
+  // after a refresh following a successful save).
+  useEffect(() => {
+    setStartDate(toDateInputValue(code.startDate));
+    setEndDate(toDateInputValue(code.endDate));
+  }, [code.startDate, code.endDate]);
+
+  const isDirty = startDate !== toDateInputValue(code.startDate) || endDate !== toDateInputValue(code.endDate);
+
+  return (
+    <Stack
+      direction="row"
+      spacing={1.5}
+      alignItems="center"
+      flexWrap="wrap"
+      sx={{ px: 1.5, py: 1, borderRadius: 2, bgcolor: "rgba(20, 22, 33, 0.03)" }}
+    >
+      <Chip
+        label={code.code}
+        color={code.isOpen ? "success" : "default"}
+        icon={code.isOpen ? <LockOpenIcon /> : <LockIcon />}
+        onClick={onToggle}
+        disabled={toggling}
+        title={code.isOpen ? "Open — click to close" : "Closed — click to reopen"}
+        sx={{ minWidth: 140 }}
+      />
+      <TextField
+        label="Start date"
+        type="date"
+        size="small"
+        value={startDate}
+        onChange={(e) => setStartDate(e.target.value)}
+        InputLabelProps={{ shrink: true }}
+      />
+      <TextField
+        label="End date"
+        type="date"
+        size="small"
+        value={endDate}
+        onChange={(e) => setEndDate(e.target.value)}
+        InputLabelProps={{ shrink: true }}
+      />
+      <Button size="small" variant="text" disabled={!isDirty || saving} onClick={() => onSaveDateRange(startDate, endDate)}>
+        {saving ? "Saving..." : "Save dates"}
+      </Button>
+    </Stack>
   );
 }

@@ -4,6 +4,10 @@ export interface ProjectCode {
   id: string;
   code: string;
   isOpen: boolean;
+  /** Purely descriptive campaign date range ("YYYY-MM-DD"), never enforced
+   * against uploads — see backend ProjectCode entity's own doc comment. */
+  startDate: string | null;
+  endDate: string | null;
   createdAt: string;
 }
 

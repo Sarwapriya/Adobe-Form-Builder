@@ -21,6 +21,7 @@ import { AddSubsidiaries1760000000000 } from "../migrations/1760000000000-AddSub
 import { AddSubsidiaryProjectBlocks1770000000000 } from "../migrations/1770000000000-AddSubsidiaryProjectBlocks";
 import { AddSubsidiaryIsActive1780000000000 } from "../migrations/1780000000000-AddSubsidiaryIsActive";
 import { AddQaRuns1790000000000 } from "../migrations/1790000000000-AddQaRuns";
+import { AddProjectCodeDateRange1800000000000 } from "../migrations/1800000000000-AddProjectCodeDateRange";
 
 const entities = [
   Upload,
@@ -46,6 +47,7 @@ const migrations = [
   AddSubsidiaryProjectBlocks1770000000000,
   AddSubsidiaryIsActive1780000000000,
   AddQaRuns1790000000000,
+  AddProjectCodeDateRange1800000000000,
 ];
 
 /**

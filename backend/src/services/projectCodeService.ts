@@ -33,10 +33,20 @@ export async function listOpenProjectCodesForSubsidiary(subsidiaryName: string):
   return open.filter((pc) => !blockedCodes.has(pc.code));
 }
 
+export interface ProjectCodeDateRange {
+  /** ISO date strings ("YYYY-MM-DD") from the admin UI's <input type="date">
+   * fields, or null to clear a bound. Undefined leaves the existing value
+   * untouched (see updateProjectCode below) — distinct from null. */
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
 /** Creates a new project code, open by default. Rejects an exact-duplicate
  * code (case-insensitive) with a 409 rather than a raw DB unique-constraint
- * error, so the admin UI can show a meaningful message. */
-export async function createProjectCode(code: string): Promise<ProjectCode> {
+ * error, so the admin UI can show a meaningful message. `startDate`/`endDate`
+ * are purely descriptive (see ProjectCode entity's own doc comment) — never
+ * enforced against uploads. */
+export async function createProjectCode(code: string, dateRange: ProjectCodeDateRange = {}): Promise<ProjectCode> {
   const trimmed = code.trim();
   const repo = AppDataSource.getRepository(ProjectCode);
 
@@ -48,7 +58,14 @@ export async function createProjectCode(code: string): Promise<ProjectCode> {
     throw new ConflictError(`Project code "${trimmed}" already exists`);
   }
 
-  return repo.save(repo.create({ code: trimmed, isOpen: true }));
+  return repo.save(
+    repo.create({
+      code: trimmed,
+      isOpen: true,
+      startDate: dateRange.startDate ? new Date(dateRange.startDate) : null,
+      endDate: dateRange.endDate ? new Date(dateRange.endDate) : null,
+    }),
+  );
 }
 
 /** Toggles a project code open/closed. Returns null if the id doesn't exist —
@@ -59,6 +76,24 @@ export async function setProjectCodeOpen(id: string, isOpen: boolean): Promise<P
   if (!existing) return null;
 
   existing.isOpen = isOpen;
+  return repo.save(existing);
+}
+
+/** Updates a project code's campaign date range. Each field is applied only
+ * if present in `dateRange` (an explicit `null` clears that bound; an
+ * omitted key leaves it as-is) — lets the admin UI save just the field that
+ * changed. Returns null if the id doesn't exist. */
+export async function setProjectCodeDateRange(id: string, dateRange: ProjectCodeDateRange): Promise<ProjectCode | null> {
+  const repo = AppDataSource.getRepository(ProjectCode);
+  const existing = await repo.findOne({ where: { id } });
+  if (!existing) return null;
+
+  if ("startDate" in dateRange) {
+    existing.startDate = dateRange.startDate ? new Date(dateRange.startDate) : null;
+  }
+  if ("endDate" in dateRange) {
+    existing.endDate = dateRange.endDate ? new Date(dateRange.endDate) : null;
+  }
   return repo.save(existing);
 }
 

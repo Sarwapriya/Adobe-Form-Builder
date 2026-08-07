@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Box, Button, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryIcon from "@mui/icons-material/History";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
@@ -21,7 +22,7 @@ import {
   type ProjectCode,
   type UploadHistorySummary,
 } from "../api/adminApi";
-import type { UploadStatus } from "../api/uploadsApi";
+import { deleteUpload, type UploadStatus } from "../api/uploadsApi";
 import { downloadBlob } from "../utils/download";
 
 // Only these three statuses can ever appear here (the backend's
@@ -139,6 +140,11 @@ export function AdminHistoryPage() {
     };
   }, [summaryFilters, statusFilter, paginationModel, sortModel]);
 
+  // Bumped after a successful delete to trigger a refetch below — a plain
+  // state dependency is simpler here than pulling the fetch into a
+  // standalone callback ref just for this one refresh path.
+  const [refreshSignal, setRefreshSignal] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -161,7 +167,7 @@ export function AdminHistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [params]);
+  }, [params, refreshSignal]);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,6 +209,22 @@ export function AdminHistoryPage() {
     }
   }
 
+  // Soft-delete only (see uploadService.softDeleteUpload) — hides the record
+  // from every listing but never removes the row itself. Blocked server-side
+  // once an upload is submitted regardless of role, so the button is never
+  // even offered for those rows below.
+  async function handleDelete(uploadId: string, fileName: string) {
+    if (!window.confirm(`Delete the upload record for "${fileName}"? It will be hidden from all history views.`)) {
+      return;
+    }
+    try {
+      await deleteUpload(uploadId);
+      setRefreshSignal((n) => n + 1);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Delete failed");
+    }
+  }
+
   const columns: GridColDef<AdminUploadListItem>[] = [
     { field: "subsidiaryId", headerName: "Subsidiary", flex: 1 },
     { field: "projectCode", headerName: "Project Code", flex: 1, valueGetter: (_, row) => row.projectCode ?? "—" },
@@ -237,10 +259,13 @@ export function AdminHistoryPage() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 180,
+      width: 230,
       sortable: false,
       renderCell: (cellParams) => {
         const hasFiles = cellParams.row.status === "submitted" || cellParams.row.status === "generated";
+        // Mirrors uploadService.softDeleteUpload's own rule — a submitted
+        // record is never deletable, by anyone, regardless of role.
+        const canDelete = cellParams.row.status !== "submitted";
         return (
           <Stack direction="row" spacing={0.5}>
             <Button
@@ -259,6 +284,16 @@ export function AdminHistoryPage() {
             >
               Zip
             </Button>
+            {canDelete && (
+              <Button
+                size="small"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={() => handleDelete(cellParams.row.id, cellParams.row.fileName)}
+              >
+                Delete
+              </Button>
+            )}
           </Stack>
         );
       },

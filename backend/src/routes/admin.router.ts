@@ -16,7 +16,7 @@ import {
 import { computeDiff } from "../services/diffService";
 import { createUser, findUserById, listUsers, setUserActive } from "../services/authService";
 import { buildUploadPreview, type PreviewVariant } from "../services/previewService";
-import { createProjectCode, listProjectCodes, setProjectCodeOpen } from "../services/projectCodeService";
+import { createProjectCode, listProjectCodes, setProjectCodeDateRange, setProjectCodeOpen } from "../services/projectCodeService";
 import { createSubsidiary, deleteSubsidiary, listSubsidiaries, setSubsidiaryActive } from "../services/subsidiaryService";
 import {
   createSubsidiaryProjectBlock,
@@ -173,34 +173,53 @@ adminRouter.get(
   })
 );
 
+// "YYYY-MM-DD", matching <input type="date">'s own value format.
+const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected an ISO date string (YYYY-MM-DD)");
+
 const createProjectCodeSchema = z.object({
   code: z.string().trim().min(1),
+  // Purely descriptive campaign dates — see ProjectCode entity's own doc
+  // comment; never enforced against uploads.
+  startDate: dateStringSchema.nullable().optional(),
+  endDate: dateStringSchema.nullable().optional(),
 });
 
 adminRouter.post(
   "/project-codes",
   validateBody(createProjectCodeSchema),
   asyncHandler(async (req, res) => {
-    const { code } = req.body as z.infer<typeof createProjectCodeSchema>;
-    const created = await createProjectCode(code);
+    const { code, startDate, endDate } = req.body as z.infer<typeof createProjectCodeSchema>;
+    const created = await createProjectCode(code, { startDate, endDate });
     res.status(201).json(created);
   })
 );
 
 const updateProjectCodeSchema = z.object({
-  isOpen: z.boolean(),
+  isOpen: z.boolean().optional(),
+  startDate: dateStringSchema.nullable().optional(),
+  endDate: dateStringSchema.nullable().optional(),
 });
 
 // Closing a project code here is the only thing that blocks new uploads
 // against it — see uploadService.createUpload's call to
 // assertProjectCodeOpenForUpload. It does not affect uploads already made
-// under that code.
+// under that code. startDate/endDate are purely descriptive (see
+// ProjectCode entity) and applied independently of isOpen — either can be
+// sent alone (e.g. the "click a chip to toggle" UI only ever sends isOpen;
+// the date-range editor only ever sends the dates).
 adminRouter.patch(
   "/project-codes/:id",
   validateBody(updateProjectCodeSchema),
   asyncHandler(async (req, res) => {
-    const { isOpen } = req.body as z.infer<typeof updateProjectCodeSchema>;
-    const updated = await setProjectCodeOpen(req.params.id, isOpen);
+    const { isOpen, ...dateRange } = req.body as z.infer<typeof updateProjectCodeSchema>;
+
+    let updated = null;
+    if (isOpen !== undefined) {
+      updated = await setProjectCodeOpen(req.params.id, isOpen);
+    }
+    if ("startDate" in dateRange || "endDate" in dateRange) {
+      updated = await setProjectCodeDateRange(req.params.id, dateRange);
+    }
     if (!updated) {
       res.status(404).json({ error: "project code not found" });
       return;

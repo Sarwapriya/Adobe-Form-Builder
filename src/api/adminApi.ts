@@ -150,8 +150,11 @@ export function listAllProjectCodes(): Promise<ProjectCode[]> {
   return apiClient.get<ProjectCode[]>("/api/v1/admin/project-codes");
 }
 
-export function createProjectCode(code: string): Promise<ProjectCode> {
-  return apiClient.post<ProjectCode>("/api/v1/admin/project-codes", { code });
+/** `startDate`/`endDate` are "YYYY-MM-DD" strings (an <input type="date">'s
+ * own value format) or omitted — purely descriptive, never enforced against
+ * uploads (see backend ProjectCode entity's own doc comment). */
+export function createProjectCode(code: string, startDate?: string, endDate?: string): Promise<ProjectCode> {
+  return apiClient.post<ProjectCode>("/api/v1/admin/project-codes", { code, startDate, endDate });
 }
 
 /** Closing a project code blocks new uploads against it (enforced server-side
@@ -159,6 +162,17 @@ export function createProjectCode(code: string): Promise<ProjectCode> {
  * under that code. */
 export function setProjectCodeOpen(id: string, isOpen: boolean): Promise<ProjectCode> {
   return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { isOpen });
+}
+
+/** Updates just the campaign date range — `null` clears a bound, `undefined`
+ * (simply omit the key) leaves it as-is. Independent of setProjectCodeOpen
+ * above; the two are never sent in the same request from this UI. */
+export function setProjectCodeDateRange(
+  id: string,
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): Promise<ProjectCode> {
+  return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { startDate, endDate });
 }
 
 /** GET /api/v1/admin/subsidiaries — every subsidiary, active and inactive
