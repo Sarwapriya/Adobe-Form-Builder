@@ -23,6 +23,7 @@ import {
   deleteSubsidiaryProjectBlock,
   listSubsidiaryProjectBlocks,
 } from "../services/subsidiaryProjectBlockService";
+import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
 import type { UploadStatus } from "../entities/Upload";
 
 export const adminRouter = Router();
@@ -406,5 +407,85 @@ adminRouter.patch(
       subsidiaryId: updated!.subsidiaryId,
       isActive: updated!.isActive,
     });
+  })
+);
+
+const createQaRunSchema = z.object({
+  uploadId: z.string().trim().min(1),
+  variant: z.enum(["ff", "oc"]),
+});
+
+// Kicks off a Playwright QA run for one upload's generated variant — see
+// qaRunService.createQaRun. Returns immediately with a "pending" run; the
+// actual browser automation happens in the background (no job queue, just a
+// fire-and-forget async call in this same process — see runQaJob's own doc
+// comment for why that's an acceptable tradeoff here). The frontend polls
+// GET /qa-runs/:id until status leaves "pending"/"running".
+adminRouter.post(
+  "/qa-runs",
+  validateBody(createQaRunSchema),
+  asyncHandler(async (req, res) => {
+    const { uploadId, variant } = req.body as z.infer<typeof createQaRunSchema>;
+    const result = await createQaRun(uploadId, variant, req.auth!.sub);
+
+    if (result.outcome === "not_found") {
+      res.status(404).json({ error: "upload not found" });
+      return;
+    }
+    if (result.outcome === "no_files") {
+      res.status(409).json({ error: "this upload has no generated files for that variant yet" });
+      return;
+    }
+    res.status(201).json(result.qaRun);
+  })
+);
+
+// Every QA run ever triggered for one upload, newest first — the admin
+// dashboard's QA panel history for that upload.
+adminRouter.get(
+  "/qa-runs",
+  asyncHandler(async (req, res) => {
+    const uploadId = typeof req.query.uploadId === "string" ? req.query.uploadId : undefined;
+    if (!uploadId) {
+      res.status(400).json({ error: "uploadId query param is required" });
+      return;
+    }
+    const runs = await listQaRunsForUpload(uploadId);
+    res.json(runs);
+  })
+);
+
+// One run's full detail — status/counts plus every individual test case
+// result (name/status/fieldId/message), what the "which fields should be
+// fixed" view in the admin dashboard reads.
+adminRouter.get(
+  "/qa-runs/:id",
+  asyncHandler(async (req, res) => {
+    const detail = await getQaRunDetail(req.params.id);
+    if (!detail) {
+      res.status(404).json({ error: "QA run not found" });
+      return;
+    }
+    res.json({ run: detail.run, results: detail.results });
+  })
+);
+
+// The same run, as a standalone downloadable HTML report — see
+// qaRunService.buildQaReportDownload / writeQaReport.
+adminRouter.get(
+  "/qa-runs/:id/download",
+  asyncHandler(async (req, res) => {
+    const result = await buildQaReportDownload(req.params.id);
+    if (result.outcome === "not_found") {
+      res.status(404).json({ error: "QA run not found" });
+      return;
+    }
+    if (result.outcome === "not_ready") {
+      res.status(409).json({ error: "this QA run has no report yet — it may still be running, or it errored before completing" });
+      return;
+    }
+    res.set("Content-Type", "text/html");
+    res.set("Content-Disposition", `attachment; filename="qa-report-${req.params.id}.html"`);
+    res.send(result.html);
   })
 );

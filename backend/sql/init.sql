@@ -122,6 +122,42 @@ CREATE TABLE SubsidiaryProjectBlocks (
 );
 CREATE UNIQUE INDEX UQ_SubsidiaryProjectBlocks_pair ON SubsidiaryProjectBlocks(subsidiaryName, projectCode);
 
+-- One QA automation run (admin-triggered, Playwright-driven) against one
+-- generated form variant of one upload — see qaRunService.ts. status starts
+-- 'pending', flips to 'running', lands on 'passed'/'failed' (test outcome) or
+-- 'error' (the run itself couldn't complete).
+CREATE TABLE QaRuns (
+    id                UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    uploadId          UNIQUEIDENTIFIER NOT NULL REFERENCES Uploads(id),
+    variant           NVARCHAR(10) NOT NULL,
+    status            NVARCHAR(20) NOT NULL DEFAULT 'pending',
+    triggeredByUserId UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
+    totalTests        INT NOT NULL DEFAULT 0,
+    passedTests       INT NOT NULL DEFAULT 0,
+    failedTests       INT NOT NULL DEFAULT 0,
+    errorMessage      NVARCHAR(MAX) NULL,
+    reportPath        NVARCHAR(2000) NULL,
+    createdAt         DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET(),
+    startedAt         DATETIMEOFFSET(7) NULL,
+    completedAt       DATETIMEOFFSET(7) NULL
+);
+CREATE INDEX IX_QaRuns_uploadId ON QaRuns(uploadId);
+
+-- One individual assertion within a QaRun — fieldId (when set) is the
+-- generated form's own DOM id for the field the check concerns, which is
+-- what lets the admin dashboard answer "which fields should be fixed".
+CREATE TABLE QaTestCaseResults (
+    id        UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    qaRunId   UNIQUEIDENTIFIER NOT NULL REFERENCES QaRuns(id),
+    category  NVARCHAR(40) NOT NULL,
+    name      NVARCHAR(255) NOT NULL,
+    status    NVARCHAR(10) NOT NULL,
+    fieldId   NVARCHAR(100) NULL,
+    message   NVARCHAR(2000) NULL,
+    createdAt DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+CREATE INDEX IX_QaTestCaseResults_qaRunId ON QaTestCaseResults(qaRunId);
+
 -- Admin-configurable toggle read by the submit endpoint to decide whether
 -- submitting an upload locks that version's generated files against further
 -- regeneration/re-upload.

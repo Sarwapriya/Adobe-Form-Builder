@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Box, Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import ScienceIcon from "@mui/icons-material/Science";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { DataGrid, type GridColDef, type GridPaginationModel, type GridSortModel } from "@mui/x-data-grid";
 import { ApiError } from "../api/apiClient";
@@ -15,6 +16,7 @@ import {
   type ProjectCode,
 } from "../api/adminApi";
 import { downloadBlob } from "../utils/download";
+import { QaRunDialog } from "../components/admin/QaRunDialog";
 
 /**
  * Admin-only view of every *submitted* upload across every user — an upload
@@ -30,6 +32,8 @@ export function AdminDashboardPage() {
   const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [qaDialogUploadId, setQaDialogUploadId] = useState<string | null>(null);
 
   const [subsidiaryFilter, setSubsidiaryFilter] = useState("");
   const [projectCodeFilter, setProjectCodeFilter] = useState("");
@@ -139,7 +143,7 @@ export function AdminDashboardPage() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 180,
+      width: 240,
       sortable: false,
       renderCell: (cellParams) => (
         <Stack direction="row" spacing={0.5}>
@@ -152,6 +156,9 @@ export function AdminDashboardPage() {
             onClick={() => handleDownload(cellParams.row.id, cellParams.row.subsidiaryId, cellParams.row.version)}
           >
             Zip
+          </Button>
+          <Button size="small" startIcon={<ScienceIcon />} onClick={() => setQaDialogUploadId(cellParams.row.id)}>
+            QA
           </Button>
         </Stack>
       ),
@@ -255,6 +262,10 @@ export function AdminDashboardPage() {
           }}
         />
       </Paper>
+
+      {qaDialogUploadId && (
+        <QaRunDialog uploadId={qaDialogUploadId} open={!!qaDialogUploadId} onClose={() => setQaDialogUploadId(null)} />
+      )}
     </Box>
   );
 }

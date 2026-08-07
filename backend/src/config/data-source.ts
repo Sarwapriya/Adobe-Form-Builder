@@ -9,6 +9,8 @@ import { EmailLog } from "../entities/EmailLog";
 import { ProjectCode } from "../entities/ProjectCode";
 import { Subsidiary } from "../entities/Subsidiary";
 import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
+import { QaRun } from "../entities/QaRun";
+import { QaTestCaseResult } from "../entities/QaTestCaseResult";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 import { SubmittedOnlyVersioning1720000000000 } from "../migrations/1720000000000-SubmittedOnlyVersioning";
@@ -18,6 +20,7 @@ import { AddUserSubsidiary1750000000000 } from "../migrations/1750000000000-AddU
 import { AddSubsidiaries1760000000000 } from "../migrations/1760000000000-AddSubsidiaries";
 import { AddSubsidiaryProjectBlocks1770000000000 } from "../migrations/1770000000000-AddSubsidiaryProjectBlocks";
 import { AddSubsidiaryIsActive1780000000000 } from "../migrations/1780000000000-AddSubsidiaryIsActive";
+import { AddQaRuns1790000000000 } from "../migrations/1790000000000-AddQaRuns";
 
 const entities = [
   Upload,
@@ -29,6 +32,8 @@ const entities = [
   ProjectCode,
   Subsidiary,
   SubsidiaryProjectBlock,
+  QaRun,
+  QaTestCaseResult,
 ];
 const migrations = [
   InitSchema1700000000000,
@@ -40,6 +45,7 @@ const migrations = [
   AddSubsidiaries1760000000000,
   AddSubsidiaryProjectBlocks1770000000000,
   AddSubsidiaryIsActive1780000000000,
+  AddQaRuns1790000000000,
 ];
 
 /**

@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typeorm": "ts-node-dev --transpile-only ./node_modules/typeorm/cli.js -d src/config/data-source.ts",
-    "seed:admin": "ts-node-dev --transpile-only scripts/seedAdmin.ts"
+    "seed:admin": "ts-node-dev --transpile-only scripts/seedAdmin.ts",
+    "playwright:install": "playwright install chromium"
   },
   "dependencies": {
     "@formbuilder/shared": "*",
@@ -29,6 +30,7 @@
     "mssql": "^11.0.1",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^9.0.4",
+    "playwright": "^1.62.1",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.20",
     "uuid": "^14.0.1",
