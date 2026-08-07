@@ -14,9 +14,20 @@ import type { Issue, ParsedWorkbook, RawRow } from "./types";
 
 const SHEET_NAME = "Complete Translations";
 const ANSWER_MARKER_RE = /^\(\s*(single|multiple)\s+answers?\s*\)/i;
-const QUESTION_KEY_RE = /^q\d+$/i;
-const ANSWER_KEY_RE = /^a\d+$/i;
+// Trailing "." tolerated (e.g. "Q2.", "A1.") — a common data-entry slip in
+// real campaign workbooks (someone types the row key like a numbered-list
+// item) that would otherwise silently drop the whole question and cascade
+// into a blocking "no preceding question row" error for every one of its
+// answer rows. stripTrailingDot below removes it again before the value is
+// used as the actual question/answer id, so the punctuation never leaks
+// into the generated form's DOM ids or data.js lookups.
+const QUESTION_KEY_RE = /^q\d+\.?$/i;
+const ANSWER_KEY_RE = /^a\d+\.?$/i;
 const ERROR_MESSAGES_MARKER = normalizeLoose("Error Messages");
+
+function stripTrailingDot(key: string): string {
+  return key.replace(/\.$/, "");
+}
 
 type Section = "fields" | "pageError" | "thankYou" | "validation";
 
@@ -186,6 +197,14 @@ export function mapWorkbook(parsed: ParsedWorkbook): MapResult {
 
     if (QUESTION_KEY_RE.test(key)) {
       flushQuestion();
+      if (key.endsWith(".")) {
+        issues.push({
+          severity: "warning",
+          sheet: SHEET_NAME,
+          row: row.rowNumber,
+          message: `Row key "${key}" has a trailing "." — treated as "${stripTrailingDot(key)}".`,
+        });
+      }
       if (seenQuestionIds.has(keyLoose)) {
         issues.push({
           severity: "error",
@@ -196,7 +215,7 @@ export function mapWorkbook(parsed: ParsedWorkbook): MapResult {
       }
       seenQuestionIds.add(keyLoose);
       current = {
-        id: key,
+        id: stripTrailingDot(key),
         startRow: row.rowNumber,
         headingByLocale: textMap(row),
         subheadingByLocale: {},
@@ -216,8 +235,16 @@ export function mapWorkbook(parsed: ParsedWorkbook): MapResult {
         });
         continue;
       }
+      if (key.endsWith(".")) {
+        issues.push({
+          severity: "warning",
+          sheet: SHEET_NAME,
+          row: row.rowNumber,
+          message: `Row key "${key}" has a trailing "." — treated as "${stripTrailingDot(key)}".`,
+        });
+      }
       current.answers.push({
-        id: key,
+        id: stripTrailingDot(key),
         order: current.answers.length + 1,
         textByLocale: textMap(row),
       });

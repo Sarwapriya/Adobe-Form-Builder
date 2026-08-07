@@ -249,9 +249,12 @@ function resolveLocales(meta, rows) {
 // src/excel/mapper.ts
 var SHEET_NAME = "Complete Translations";
 var ANSWER_MARKER_RE = /^\(\s*(single|multiple)\s+answers?\s*\)/i;
-var QUESTION_KEY_RE = /^q\d+$/i;
-var ANSWER_KEY_RE = /^a\d+$/i;
+var QUESTION_KEY_RE = /^q\d+\.?$/i;
+var ANSWER_KEY_RE = /^a\d+\.?$/i;
 var ERROR_MESSAGES_MARKER = normalizeLoose("Error Messages");
+function stripTrailingDot(key) {
+  return key.replace(/\.$/, "");
+}
 function simpleField(name) {
   return (fields, textByLocale) => {
     fields[name] = { labelByLocale: textByLocale };
@@ -379,6 +382,14 @@ function mapWorkbook(parsed) {
     const keyLoose = normalizeLoose(key);
     if (QUESTION_KEY_RE.test(key)) {
       flushQuestion();
+      if (key.endsWith(".")) {
+        issues.push({
+          severity: "warning",
+          sheet: SHEET_NAME,
+          row: row.rowNumber,
+          message: `Row key "${key}" has a trailing "." \u2014 treated as "${stripTrailingDot(key)}".`
+        });
+      }
       if (seenQuestionIds.has(keyLoose)) {
         issues.push({
           severity: "error",
@@ -389,7 +400,7 @@ function mapWorkbook(parsed) {
       }
       seenQuestionIds.add(keyLoose);
       current = {
-        id: key,
+        id: stripTrailingDot(key),
         startRow: row.rowNumber,
         headingByLocale: textMap(row),
         subheadingByLocale: {},
@@ -408,8 +419,16 @@ function mapWorkbook(parsed) {
         });
         continue;
       }
+      if (key.endsWith(".")) {
+        issues.push({
+          severity: "warning",
+          sheet: SHEET_NAME,
+          row: row.rowNumber,
+          message: `Row key "${key}" has a trailing "." \u2014 treated as "${stripTrailingDot(key)}".`
+        });
+      }
       current.answers.push({
-        id: key,
+        id: stripTrailingDot(key),
         order: current.answers.length + 1,
         textByLocale: textMap(row)
       });

@@ -75,6 +75,19 @@ describe("mapWorkbook against real sample files", () => {
     expect(unresolvedLocales).toEqual([{ column: "C", rawValue: "Language / Country" }]);
   });
 
+  it('SUBS-LN-F1H26: a trailing "." on a question key ("Q2.", "Q3.") is tolerated, not a blocking error', () => {
+    const { form, issues } = mapFile("SUBS-LN-F1H26-Translated.xlsx");
+    // Before the fix, "Q2."/"Q3." failed to match the question-key regex, so
+    // Q2 and Q3 were silently dropped and every one of their answer rows
+    // became a blocking "no preceding question row" error instead.
+    expect(form.questions.map((q) => q.id)).toEqual(["Q1", "Q2", "Q3", "Q4", "Q5"]);
+    expect(form.questions.find((q) => q.id === "Q2")?.answers).toHaveLength(9);
+    expect(form.questions.find((q) => q.id === "Q3")?.answers).toHaveLength(4);
+    expect(issues.filter((i) => i.severity === "error")).toEqual([]);
+    const trailingDotWarnings = issues.filter((i) => /trailing "\."/.test(i.message));
+    expect(trailingDotWarnings).toHaveLength(2);
+  });
+
   for (const file of [
     "SEIL-country-F2H26-Translation Document.xlsx",
     "SETK-tr-TR-F2H26-Translation Document(1).xlsx",
