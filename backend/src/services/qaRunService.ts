@@ -24,9 +24,15 @@ export type CreateQaRunOutcome =
  * (deliberately not awaited here) so the request returns immediately — see
  * runQaJob below and admin.router.ts's POST /qa-runs, which the frontend
  * polls GET /qa-runs/:id against until status leaves "pending"/"running".
+ *
+ * Uses buildUploadPreview's `strict` mode — unlike the "Preview" button, a
+ * QA run must never silently substitute the other variant: the uploader may
+ * have only ever generated Full Form (see Upload.variants), and running (and
+ * labeling) a QA report against One-Click in that case would misreport which
+ * form was actually checked.
  */
 export async function createQaRun(uploadId: string, variant: QaRunVariant, triggeredByUserId: string): Promise<CreateQaRunOutcome> {
-  const preview = await buildUploadPreview(uploadId, variant);
+  const preview = await buildUploadPreview(uploadId, variant, true);
   if (preview.outcome === "not_found") return { outcome: "not_found" };
   if (preview.outcome === "no_files") return { outcome: "no_files" };
 

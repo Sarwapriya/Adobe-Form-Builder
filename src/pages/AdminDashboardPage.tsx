@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import ScienceIcon from "@mui/icons-material/Science";
@@ -33,7 +33,7 @@ export function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [qaDialogUploadId, setQaDialogUploadId] = useState<string | null>(null);
+  const [qaDialogRow, setQaDialogRow] = useState<AdminUploadListItem | null>(null);
 
   const [subsidiaryFilter, setSubsidiaryFilter] = useState("");
   const [projectCodeFilter, setProjectCodeFilter] = useState("");
@@ -129,6 +129,19 @@ export function AdminDashboardPage() {
       valueGetter: (_, row) => (row.version != null ? `v${row.version}` : "—"),
     },
     {
+      field: "variants",
+      headerName: "Form type",
+      flex: 1,
+      sortable: false,
+      renderCell: (cellParams) => (
+        <Stack direction="row" spacing={0.5}>
+          {cellParams.row.variants.map((v) => (
+            <Chip key={v} label={v === "ff" ? "Full Form" : "One-Click"} size="small" variant="outlined" />
+          ))}
+        </Stack>
+      ),
+    },
+    {
       field: "uploadDate",
       headerName: "Uploaded",
       flex: 1,
@@ -157,7 +170,7 @@ export function AdminDashboardPage() {
           >
             Zip
           </Button>
-          <Button size="small" startIcon={<ScienceIcon />} onClick={() => setQaDialogUploadId(cellParams.row.id)}>
+          <Button size="small" startIcon={<ScienceIcon />} onClick={() => setQaDialogRow(cellParams.row)}>
             QA
           </Button>
         </Stack>
@@ -263,8 +276,13 @@ export function AdminDashboardPage() {
         />
       </Paper>
 
-      {qaDialogUploadId && (
-        <QaRunDialog uploadId={qaDialogUploadId} open={!!qaDialogUploadId} onClose={() => setQaDialogUploadId(null)} />
+      {qaDialogRow && (
+        <QaRunDialog
+          uploadId={qaDialogRow.id}
+          availableVariants={qaDialogRow.variants}
+          open={!!qaDialogRow}
+          onClose={() => setQaDialogRow(null)}
+        />
       )}
     </Box>
   );

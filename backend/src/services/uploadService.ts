@@ -1,6 +1,6 @@
 import fsp from "node:fs/promises";
 import crypto from "node:crypto";
-import type { ValidationResult } from "@formbuilder/shared";
+import type { FormVariant, ValidationResult } from "@formbuilder/shared";
 import { resolvePaging, type PagedResult } from "../utils/queryParsing";
 import { ProjectCodeMismatchError, SubsidiaryMismatchError, UnsupportedFileTypeError } from "../utils/errors";
 import { AppDataSource } from "../config/data-source";
@@ -28,6 +28,28 @@ export interface UploadListItem {
   status: UploadStatus;
   submittedAt: Date | null;
   submissionCount: number;
+  /** Which generated-output variant(s) the uploader chose — see
+   * Upload.variants's own doc comment. Always a real array here (never
+   * null) — a row with no stored preference defaults to both. */
+  variants: FormVariant[];
+}
+
+const DEFAULT_VARIANTS: FormVariant[] = ["ff", "oc"];
+
+/** Parses Upload.variants' JSON-encoded FormVariant[] back out, falling back
+ * to both variants for a null/malformed value (covers every row created
+ * before this feature existed, and is a safe default regardless). */
+function parseStoredVariants(raw: string | null): FormVariant[] {
+  if (!raw) return DEFAULT_VARIANTS;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((v) => v === "ff" || v === "oc") && parsed.length > 0) {
+      return parsed as FormVariant[];
+    }
+  } catch {
+    // fall through to default
+  }
+  return DEFAULT_VARIANTS;
 }
 
 export interface GeneratedFileSummary {
@@ -56,6 +78,7 @@ export function toListItem(upload: Upload): UploadListItem {
     status: upload.status,
     submittedAt: upload.submittedAt,
     submissionCount: upload.submissionCount,
+    variants: parseStoredVariants(upload.variants),
   };
 }
 
@@ -187,6 +210,10 @@ export interface CreateUploadInput {
    * own doc comment). Omitted/empty means every question stays required,
    * which is the Excel-parsed default. */
   requiredOverrides?: Record<string, boolean>;
+  /** Which generated-output variant(s) to produce — from the upload form's
+   * own variant picker. Omitted means both (see generateFromWorkbook's own
+   * default), same as before this feature existed. */
+  variants?: FormVariant[];
 }
 
 export interface CreateUploadResult {
@@ -215,7 +242,7 @@ export interface CreateUploadResult {
  * before this function ever sees it.
  */
 export async function createUpload(input: CreateUploadInput): Promise<CreateUploadResult> {
-  const { subsidiaryId, projectCode, file, userId, uploadedByUsername, requiredOverrides } = input;
+  const { subsidiaryId, projectCode, file, userId, uploadedByUsername, requiredOverrides, variants } = input;
 
   // Checked before anything else — no point validating the file signature or
   // parsing it if the project code is closed globally, the subsidiary is
@@ -233,7 +260,7 @@ export async function createUpload(input: CreateUploadInput): Promise<CreateUplo
     throw new UnsupportedFileTypeError("File content does not match a valid .xlsx/.xls signature");
   }
 
-  const generation = generateFromWorkbook(toArrayBuffer(file.buffer), file.originalname, requiredOverrides);
+  const generation = generateFromWorkbook(toArrayBuffer(file.buffer), file.originalname, requiredOverrides, variants);
   assertProjectCodeMatchesWorkbook(projectCode, generation.projectCodeFromWorkbook);
   assertSubsidiaryMatchesWorkbook(subsidiaryId, generation.subsidiaryFromWorkbook);
 
@@ -251,6 +278,7 @@ export async function createUpload(input: CreateUploadInput): Promise<CreateUplo
     version: null,
     status: "uploaded",
     questionOverrides: requiredOverrides ? JSON.stringify(requiredOverrides) : null,
+    variants: variants ? JSON.stringify(variants) : null,
   });
   const upload = await uploadRepo.save(created);
 
@@ -326,14 +354,16 @@ export async function getUploadDetail(uploadId: string, userId: string, isAdmin:
 export type SoftDeleteResult = "deleted" | "not_found" | "locked";
 
 /** Soft-deletes an upload (hides it from listings, never removes the row) —
- * ownership-checked via findOwnedUpload, and unconditionally blocked once the
+ * ownership-checked via findOwnedUpload. A standard user is blocked once the
  * upload has been submitted (this rule doesn't depend on the
  * lockGeneratedFilesOnSubmit toggle — a submitted record should never
- * disappear from an admin's view, regardless of that setting). */
+ * disappear from a standard user's own history just because they deleted it).
+ * Admins/superadmins are exempt from that lock entirely — the All History
+ * page needs to be able to remove any row, submitted or not. */
 export async function softDeleteUpload(uploadId: string, userId: string, isAdmin: boolean): Promise<SoftDeleteResult> {
   const upload = await findOwnedUpload(uploadId, userId, isAdmin);
   if (!upload) return "not_found";
-  if (upload.status === "submitted") return "locked";
+  if (upload.status === "submitted" && !isAdmin) return "locked";
 
   await AppDataSource.getRepository(Upload).update(uploadId, { isDeleted: true });
   return "deleted";
@@ -355,9 +385,11 @@ export interface RegenerateResult {
  * (defaults to locked/"true" — see the AddUsersAndVersioning migration —
  * fails safe if the setting row is ever missing).
  *
- * Re-applies the same requiredOverrides the uploader configured at upload
- * time (stored on the row as questionOverrides) — otherwise every question
- * would silently reset back to required on a regenerate. The project code
+ * Re-applies the same requiredOverrides *and* variants the uploader
+ * configured at upload time (stored on the row as questionOverrides/
+ * variants) — otherwise every question would silently reset back to
+ * required, and both variants would silently regenerate even if the
+ * uploader only ever wanted one, on a regenerate. The project code
  * cross-check isn't repeated here: subsidiaryId/projectCode don't change on
  * regeneration, so it was already validated once at upload time.
  */
@@ -376,7 +408,12 @@ export async function regenerateUpload(uploadId: string, userId: string, isAdmin
   const requiredOverrides = upload.questionOverrides
     ? (JSON.parse(upload.questionOverrides) as Record<string, boolean>)
     : undefined;
-  const generation = generateFromWorkbook(toArrayBuffer(buffer), upload.fileName, requiredOverrides);
+  const generation = generateFromWorkbook(
+    toArrayBuffer(buffer),
+    upload.fileName,
+    requiredOverrides,
+    parseStoredVariants(upload.variants),
+  );
   await AppDataSource.getRepository(GeneratedFileEntity).delete({ uploadId });
   const validation = await persistGenerationOutcome(upload, generation);
   return { outcome: "ok", validation };

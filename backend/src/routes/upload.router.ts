@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { FormVariant } from "@formbuilder/shared";
 import { asyncHandler } from "../utils/asyncHandler";
 import { parsePositiveInt } from "../utils/queryParsing";
 import { requireAuth } from "../middleware/authJwt";
@@ -24,6 +25,9 @@ const uploadBodySchema = z.object({
   // Multipart fields are always strings — a JSON-encoded Record<questionId,
   // boolean> from the upload form's mandatory-questions configure step.
   requiredOverrides: z.string().optional(),
+  // JSON-encoded FormVariant[] (e.g. '["ff"]') from the upload form's own
+  // variant picker.
+  variants: z.string().optional(),
 });
 
 /** Best-effort parse of the requiredOverrides multipart field: malformed or
@@ -45,6 +49,23 @@ function parseRequiredOverrides(raw: string | undefined): Record<string, boolean
   }
 }
 
+/** Best-effort parse of the variants multipart field: malformed, absent, or
+ * empty input is treated as "no preference" (createUpload/generateFromWorkbook
+ * both default that to both variants) rather than a request error — this is
+ * a convenience picker, not something worth failing an otherwise-valid
+ * upload over. */
+function parseVariants(raw: string | undefined): FormVariant[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return undefined;
+    if (!parsed.every((v) => v === "ff" || v === "oc")) return undefined;
+    return parsed as FormVariant[];
+  } catch {
+    return undefined;
+  }
+}
+
 uploadRouter.post(
   "/",
   uploadMiddleware.single("file"),
@@ -55,7 +76,7 @@ uploadRouter.post(
       return;
     }
 
-    const { subsidiaryId, projectCode, requiredOverrides } = req.body as z.infer<typeof uploadBodySchema>;
+    const { subsidiaryId, projectCode, requiredOverrides, variants } = req.body as z.infer<typeof uploadBodySchema>;
 
     // A subsidiary-scoped standard user's uploads always use their own
     // assigned subsidiary — the client's Subsidiary field is locked to the
@@ -74,6 +95,7 @@ uploadRouter.post(
       userId: req.auth!.sub,
       uploadedByUsername: req.auth!.username,
       requiredOverrides: parseRequiredOverrides(requiredOverrides),
+      variants: parseVariants(variants),
     });
 
     res.status(201).json({ upload, validation });

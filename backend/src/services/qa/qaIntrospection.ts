@@ -16,20 +16,31 @@ import type { QaCheckResult } from "./types";
  *    the only Parsley-validated inputs — attributes read directly off the
  *    DOM (`data-parsley-required`, `data-parsley-type`, `data-parsley-pattern`)
  *    rather than hardcoded per field name.
- *  - Question/answer inputs (Q<n>/Q<n>A<n>) carry NO Parsley validation at
- *    all, regardless of the question's "required" star marker — the
- *    reference's own `enableDisableSubmit()` only ever gates the Submit
- *    button on Q1's first three answers (plus #privacyPolicy on the FF
- *    variant only; the OC variant has no privacy checkbox at all). A
- *    required-starred question with no enforcement is flagged as its own
- *    failed check (see checkRequiredEnforcement) — a real, verifiable defect
- *    in what ships, not a false positive.
+ *  - Question/answer inputs (Q<n>/Q<n>A<n>) carry NO Parsley validation —
+ *    "required" enforcement for a starred question is entirely the reference
+ *    JS's own `enableDisableSubmit()`, which (as of the codegen change that
+ *    replaced its old Q1-only hardcoding) walks every `.form_check_module`
+ *    that renders a `.star` and keeps Submit disabled until each one has an
+ *    answer, on top of #privacyPolicy on the FF variant (the OC variant has
+ *    no privacy checkbox at all). checkRequiredEnforcement verifies this
+ *    dynamically, per question, by actually clearing and restoring each
+ *    starred question's answer and watching Submit's disabled state react —
+ *    not by asserting a fixed question id.
  *  - Parsley toggles a `parsley-error` class directly on the field element
  *    itself on failed validation (core Parsley behavior, unaffected by the
  *    reference script's own custom repositioning of the *message* element) —
  *    that class is what every field-validation check below reads, rather
  *    than hunting for the message text's DOM position.
  */
+
+/** checkSubmitGating (unlike checkRequiredEnforcement) still needs one
+ * concrete, always-present required question to drive its own privacy-
+ * checkbox-focused assertions — Q1 is guaranteed present in every generated
+ * form and, in practice, always required, so it's used as that fixed probe.
+ * Not a claim that only Q1 is enforced (checkRequiredEnforcement is what
+ * verifies every required question is). */
+const GATING_QUESTION_ID = "Q1";
+const GATING_ANSWER_IDS = [`${GATING_QUESTION_ID}A1`, `${GATING_QUESTION_ID}A2`, `${GATING_QUESTION_ID}A3`];
 
 export interface FormManifest {
   /** `param.fallbackLanguage` from the embedded data.js — the locale the
@@ -71,6 +82,23 @@ async function setCheckedViaLabel(page: Page, id: string, desired: boolean): Pro
   // to be genuinely visible/stable, but this avoids a hard failure if a
   // particular form's CSS styles it in some unusual way.
   await page.locator(`label[for="${id}"]`).click({ force: true });
+}
+
+/** Forces a radio/checkbox input to unchecked, bypassing native click
+ * semantics, then dispatches a real `change` event so the reference JS's own
+ * `.on("change", enableDisableSubmit)` listener (bound directly to the
+ * element, so bubbling doesn't matter) still reacts to it. Needed because an
+ * already-checked *radio*'s own `<label>` can't be used to uncheck it —
+ * unlike a checkbox, clicking an already-selected radio is a native no-op in
+ * every browser; the only way a real user clears one is by selecting a
+ * different radio in the same group, which isn't an option once every
+ * answer has already been exercised by checkQuestionInteraction. */
+async function forceUncheck(page: Page, id: string): Promise<void> {
+  const input = page.locator(`#${id}`);
+  await input.evaluate((el) => {
+    (el as HTMLInputElement).checked = false;
+  });
+  await input.dispatchEvent("change");
 }
 
 /** Waits for jQuery + ParsleyJS (loaded from CDN — see pageTemplate.ts's
@@ -217,6 +245,64 @@ function pickInvalidSample(type: string | null, pattern: string | null): string 
   return "###";
 }
 
+/**
+ * #mobileNumber can't use pickValidSample's generic "digits" fallback — the
+ * reference JS registers its own `mobileNumberByCountry` Parsley validator
+ * (attachEvent() in the reference FF/OC.js) that requires
+ * libphonenumber-js's own `parsePhoneNumberFromString(...).isValid()` to
+ * accept the result for whichever calling code is currently selected — a
+ * fixed 7-digit string like "5551234" fails outright regardless of country,
+ * which is exactly what the QA report this was fixing showed. Rather than
+ * reimplementing libphonenumber-js's own numbering-plan rules (including its
+ * per-country digit-length rules — the validator itself no longer
+ * hardcodes a length, after a real generated-form bug was found where a
+ * hardcoded "9 digits for UAE, 8 for everyone else" rejected every valid
+ * Saudi Arabia number, which needs 9 digits too), this asks the page's own
+ * already-loaded copy (the same CDN script —
+ * cdnjs.cloudflare.com/.../libphonenumber-js.min.js — the reference HTML
+ * itself loads) to confirm a candidate is genuinely valid, trying a short
+ * list of plausible mobile prefixes across a range of digit counts rather
+ * than assuming one hardcoded number/length works for every country's
+ * numbering plan. Returns null if #callingCode has no real value selected
+ * yet, or if none of the tried candidates validate — callers should fall
+ * back to the generic sample in that case rather than fail outright.
+ */
+async function pickValidMobileNumber(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const win = window as unknown as {
+      jQuery: (sel: string) => { val: () => string | undefined };
+      libphonenumber?: { parsePhoneNumberFromString: (n: string) => { isValid: () => boolean } | undefined };
+    };
+    const callingCode = win.jQuery("#callingCode").val();
+    if (!callingCode || callingCode === "0" || !win.libphonenumber) return null;
+
+    // No fixed digit count is assumed — different countries this dropdown
+    // offers genuinely need different lengths (see this function's doc
+    // comment), so this tries a range of plausible lengths, each with a
+    // handful of leading-digit/filler variations, and lets libphonenumber-js
+    // itself decide which (if any) is a real number for the selected country.
+    const digitPool = "123456789012345678";
+    const candidates: string[] = [];
+    for (const digitCount of [7, 8, 9, 10]) {
+      for (const firstDigit of ["5", "6", "7", "9"]) {
+        for (const offset of [0, 3, 6]) {
+          candidates.push(firstDigit + digitPool.slice(offset, offset + digitCount - 1));
+        }
+      }
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const phoneNumber = win.libphonenumber.parsePhoneNumberFromString(`+${callingCode}${candidate}`);
+        if (phoneNumber?.isValid()) return candidate;
+      } catch {
+        // Try the next candidate.
+      }
+    }
+    return null;
+  });
+}
+
 /** Triggers Parsley's real validation API for one field (not a simulated
  * blur — this is Parsley's own documented programmatic entry point, so it
  * behaves identically to what the reference script's blur-triggered
@@ -245,6 +331,10 @@ export async function checkProfileFields(page: Page): Promise<QaCheckResult[]> {
     const attrs = await readParsleyAttrs(page, id);
     if (attrs.tag !== "input") continue; // e.g. callingCode is a <select>, not directly required itself
 
+    // #mobileNumber needs a country-aware sample (see pickValidMobileNumber's
+    // own doc comment) — every other field is fine with the generic one.
+    const validSample = id === "mobileNumber" ? ((await pickValidMobileNumber(page)) ?? pickValidSample(attrs.type)) : pickValidSample(attrs.type);
+
     if (attrs.required) {
       await page.locator(`#${id}`).fill("");
       const hasError = await validateFieldViaParsley(page, id);
@@ -256,7 +346,6 @@ export async function checkProfileFields(page: Page): Promise<QaCheckResult[]> {
     }
 
     if (attrs.required || attrs.type || attrs.pattern) {
-      const validSample = pickValidSample(attrs.type);
       await page.locator(`#${id}`).fill(validSample);
       const stillHasError = await validateFieldViaParsley(page, id);
       results.push(
@@ -288,7 +377,7 @@ export async function checkProfileFields(page: Page): Promise<QaCheckResult[]> {
       // Leave the field valid again for any later checks (submit-gating/flow)
       // that share this same page — a lingering invalid value would make an
       // unrelated later check fail for the wrong reason.
-      await page.locator(`#${id}`).fill(pickValidSample(attrs.type));
+      await page.locator(`#${id}`).fill(validSample);
       await validateFieldViaParsley(page, id);
     }
   }
@@ -339,47 +428,111 @@ export async function checkQuestionInteraction(page: Page, manifest: FormManifes
   return results;
 }
 
-/** The reference codegen never emits any Parsley validation on question
- * inputs (see this file's module doc comment) — so a question whose "*"
- * required-marker is shown to the user is, in reality, not enforced at all
- * before the Submit button can be enabled. That's a genuine, user-visible
- * gap between what the form *looks* like it requires and what it actually
- * requires, so it's reported as a failed check per starred question rather
- * than silently accepted as "working as designed". */
+/**
+ * For every starred (required) question, actually exercises the reference
+ * JS's `enableDisableSubmit()` rather than assuming what it does: clears
+ * that question's answer and confirms Submit disables, then restores an
+ * answer and confirms Submit re-enables. Runs after checkQuestionInteraction
+ * has already given every question *some* answer, so at the start of each
+ * iteration only the current question needs to be touched — every other
+ * required question (processed earlier in this same loop, or not yet
+ * reached) stays answered throughout, isolating each result to that one
+ * question's own effect on Submit.
+ *
+ * The FF-only #privacyPolicy checkbox is checked for the duration of this
+ * function (so an unanswered *question* is what's actually being measured,
+ * not the separate privacy gate) and explicitly unchecked again at the end —
+ * checkSubmitGating, which shares this same page next, assumes privacy
+ * starts unchecked when it runs.
+ */
 export async function checkRequiredEnforcement(page: Page, manifest: FormManifest): Promise<QaCheckResult[]> {
   const results: QaCheckResult[] = [];
+  const submitLocator = page.locator("#btnSubmit");
+  if ((await submitLocator.count()) === 0) return results;
+
+  const hasPrivacyCheckbox = (await page.locator("#privacyPolicy").count()) > 0;
+  if (hasPrivacyCheckbox) await setCheckedViaLabel(page, "privacyPolicy", true);
 
   for (const questionId of manifest.questionIds) {
-    const starCount = await page.locator(`.form_check_module#${questionId} .form_check_title .star`).count();
-    if (starCount === 0) continue;
+    const moduleLocator = page.locator(`.form_check_module#${questionId}`);
+    if ((await moduleLocator.count()) === 0) continue;
+    if ((await moduleLocator.locator(".form_check_title .star").count()) === 0) continue;
 
+    const textarea = moduleLocator.locator("textarea");
+    const isTextarea = (await textarea.count()) > 0;
+
+    if (isTextarea) {
+      await textarea.fill("");
+      await textarea.dispatchEvent("change");
+    } else {
+      const checkedInputs = await moduleLocator.locator('input[type="radio"]:checked, input[type="checkbox"]:checked').all();
+      for (const checkedInput of checkedInputs) {
+        const id = await checkedInput.getAttribute("id");
+        if (id) await forceUncheck(page, id);
+      }
+    }
+
+    const disabledWhenBlank = await submitLocator.isDisabled();
     results.push(
-      fail(
-        "required-enforcement",
-        `${questionId}: required marker is backed by real submit-blocking validation`,
-        `${questionId} is shown as required ("*") but the generated form applies no client-side validation to question ` +
-          "inputs at all (only the Submit button's Q1-answer/privacy gating, and Parsley on profile fields) — a user can " +
-          `submit without answering ${questionId}.`,
-        questionId,
-      ),
+      disabledWhenBlank
+        ? pass("required-enforcement", `${questionId}: required marker is backed by real submit-blocking validation`, questionId)
+        : fail(
+            "required-enforcement",
+            `${questionId}: required marker is backed by real submit-blocking validation`,
+            `${questionId} is shown as required ("*") but the Submit button did not disable after clearing its answer — ` +
+              `a user can submit without answering ${questionId}.`,
+            questionId,
+          ),
+    );
+
+    // Restore an answer — both so the next question's iteration isn't
+    // skewed by this one being left blank, and so checkSubmitGating/
+    // checkSubmitFlow (which share this same page afterward) see a
+    // fully-answerable form.
+    if (isTextarea) {
+      await textarea.fill("QA automated test answer");
+      await textarea.dispatchEvent("change");
+    } else {
+      const firstOptionId = await moduleLocator.locator('input[type="radio"], input[type="checkbox"]').first().getAttribute("id");
+      if (firstOptionId) await setCheckedViaLabel(page, firstOptionId, true);
+    }
+
+    const enabledAfterRestoring = !(await submitLocator.isDisabled());
+    results.push(
+      enabledAfterRestoring
+        ? pass("required-enforcement", `${questionId}: answering it re-enables Submit once every other requirement is also met`, questionId)
+        : fail(
+            "required-enforcement",
+            `${questionId}: answering it re-enables Submit once every other requirement is also met`,
+            `Submit stayed disabled after answering ${questionId} again, even though every other required question ` +
+              "and the privacy checkbox (if present) are already satisfied.",
+            questionId,
+          ),
     );
   }
+
+  if (hasPrivacyCheckbox) await setCheckedViaLabel(page, "privacyPolicy", false);
 
   return results;
 }
 
-/** Mirrors the reference's own `enableDisableSubmit()` exactly: the FF
- * variant requires #privacyPolicy checked AND one of Q1's first three
- * answers checked; the OC variant (which never renders #privacyPolicy at
- * all) requires only the Q1 answer. Verified by reading both variants'
- * reference JS directly rather than assumed identical between them. */
+/**
+ * Focuses specifically on the FF-only #privacyPolicy gate (checkRequiredEnforcement
+ * already covers every required question's own gating individually). Uses
+ * GATING_QUESTION_ID (Q1) purely as a fixed, always-present answer to toggle
+ * while testing that gate — by the time this runs, every other required
+ * question is already answered (checkQuestionInteraction answered all of
+ * them; checkRequiredEnforcement, which ran just before this on the same
+ * page, restored each one after testing it and left privacy unchecked
+ * again), so privacy is the only remaining variable this exercises.
+ */
 export async function checkSubmitGating(page: Page): Promise<QaCheckResult[]> {
   const results: QaCheckResult[] = [];
   const submitLocator = page.locator("#btnSubmit");
   if ((await submitLocator.count()) === 0) return results;
 
   const hasPrivacyCheckbox = (await page.locator("#privacyPolicy").count()) > 0;
-  const gatingAnswerIds = ["Q1A1", "Q1A2", "Q1A3"];
+  const gatingAnswerIds = GATING_ANSWER_IDS;
   const existingCounts = await Promise.all(gatingAnswerIds.map((id) => page.locator(`#${id}`).count()));
   const firstGatingAnswer = existingCounts.findIndex((c) => c > 0);
 
@@ -438,10 +591,19 @@ export async function checkSubmitGating(page: Page): Promise<QaCheckResult[]> {
 }
 
 /** Fills every currently-invalid required profile field with a valid sample
- * and satisfies submit-gating, without asserting anything itself — shared
- * setup for both submit-flow scenarios below, each of which needs a fresh
- * page (submit success empties `.container`, so the two scenarios can't
- * share a page). */
+ * and answers every starred (required) question, without asserting anything
+ * itself — shared setup for both submit-flow scenarios below, each of which
+ * needs a fresh page (submit success empties `.container`, so the two
+ * scenarios can't share a page) and therefore starts with nothing answered.
+ *
+ * Must cover *every* required question, not just one — #btnSubmit stays
+ * `disabled` under the reference JS's `enableDisableSubmit()` until they all
+ * have an answer, and Playwright's `.click()` on a genuinely disabled button
+ * fails its actionability check and hangs until timeout (this is exactly
+ * what caused the real "locator.click: Timeout 30000ms exceeded" failure
+ * this QA tool used to hit before that was root-caused) — so leaving any
+ * required question unanswered here would reintroduce that same failure
+ * mode for checkSubmitFlowSuccess/Failure below. */
 export async function satisfySubmitPreconditions(page: Page): Promise<void> {
   for (const id of PROFILE_FIELD_IDS) {
     const locator = page.locator(`#${id}`);
@@ -456,11 +618,19 @@ export async function satisfySubmitPreconditions(page: Page): Promise<void> {
   const hasPrivacyCheckbox = (await page.locator("#privacyPolicy").count()) > 0;
   if (hasPrivacyCheckbox) await setCheckedViaLabel(page, "privacyPolicy", true);
 
-  for (const answerId of ["Q1A1", "Q1A2", "Q1A3"]) {
-    if ((await page.locator(`#${answerId}`).count()) > 0) {
-      await setCheckedViaLabel(page, answerId, true);
-      break;
+  const modules = await page.locator("div.form_check_group > div.form_check_module").all();
+  for (const moduleLocator of modules) {
+    if ((await moduleLocator.locator(".form_check_title .star").count()) === 0) continue;
+
+    const textarea = moduleLocator.locator("textarea");
+    if ((await textarea.count()) > 0) {
+      await textarea.fill("QA automated test answer");
+      await textarea.dispatchEvent("change");
+      continue;
     }
+
+    const firstOptionId = await moduleLocator.locator('input[type="radio"], input[type="checkbox"]').first().getAttribute("id");
+    if (firstOptionId) await setCheckedViaLabel(page, firstOptionId, true);
   }
 }
 

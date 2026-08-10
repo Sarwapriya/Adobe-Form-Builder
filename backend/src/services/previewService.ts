@@ -36,8 +36,22 @@ function inlineScript(html: string, file: GeneratedFileEntity | undefined, conte
  * reimplemented here against on-disk GeneratedFiles rows rather than an
  * in-memory GeneratedFile[], since the admin dashboard previews an upload
  * that was generated server-side, possibly in a previous request entirely.
+ *
+ * Falls back to whichever variant *was* actually generated if the requested
+ * one wasn't — the uploader may have only requested Full Form or only
+ * One-Click (see Upload.variants), and the "View" button doesn't know which
+ * up front, so this is friendlier than a flat 409 for the common case.
+ *
+ * `strict: true` disables that fallback and returns `no_files` outright if
+ * the exact requested variant wasn't generated — used by qaRunService, where
+ * silently substituting the other variant would run (and label) a QA report
+ * against the wrong form entirely.
  */
-export async function buildUploadPreview(uploadId: string, variant: PreviewVariant): Promise<PreviewResult> {
+export async function buildUploadPreview(
+  uploadId: string,
+  variant: PreviewVariant,
+  strict = false,
+): Promise<PreviewResult> {
   const upload = await AppDataSource.getRepository(Upload).findOne({ where: { id: uploadId, isDeleted: false } });
   if (!upload) {
     return { outcome: "not_found" };
@@ -48,11 +62,17 @@ export async function buildUploadPreview(uploadId: string, variant: PreviewVaria
     return { outcome: "no_files" };
   }
 
-  const suffix = variant === "ff" ? "_FF" : "_OC";
-  const htmlFile = files.find((f) => f.fileType === "html" && f.fileName.endsWith(`${suffix}.html`));
+  const suffixFor = (v: PreviewVariant) => (v === "ff" ? "_FF" : "_OC");
+  const findHtml = (v: PreviewVariant) => files.find((f) => f.fileType === "html" && f.fileName.endsWith(`${suffixFor(v)}.html`));
+
+  const requestedHtml = findHtml(variant);
+  const fallbackVariant: PreviewVariant = variant === "ff" ? "oc" : "ff";
+  const htmlFile = requestedHtml ?? (strict ? undefined : findHtml(fallbackVariant));
+  const resolvedVariant = requestedHtml ? variant : fallbackVariant;
   if (!htmlFile) {
     return { outcome: "no_files" };
   }
+  const suffix = suffixFor(resolvedVariant);
   const jsFile = files.find((f) => f.fileType === "js" && f.fileName.endsWith(`${suffix}.js`));
   const cssFile = files.find((f) => f.fileType === "css");
   const dataJsFile = files.find((f) => f.fileType === "data-js");

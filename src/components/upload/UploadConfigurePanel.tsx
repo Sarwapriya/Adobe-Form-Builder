@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   CircularProgress,
   Divider,
   FormControlLabel,
@@ -17,6 +18,7 @@ import {
   resolveLocalizedText,
   validateWorkbook,
   type FormDefinition,
+  type FormVariant,
   type ValidationResult,
 } from "@formbuilder/shared";
 
@@ -32,7 +34,7 @@ interface Props {
    * cross-check treatment as subsidiaryId above. */
   projectCode: string;
   onCancel: () => void;
-  onConfirm: (requiredOverrides: Record<string, boolean>) => void;
+  onConfirm: (requiredOverrides: Record<string, boolean>, variants: FormVariant[]) => void;
   confirming: boolean;
 }
 
@@ -66,6 +68,17 @@ export function UploadConfigurePanel({ file, subsidiaryId, projectCode, onCancel
   const [parseError, setParseError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [requiredById, setRequiredById] = useState<Record<string, boolean>>({});
+  const [variants, setVariants] = useState<FormVariant[]>(["ff", "oc"]);
+
+  function toggleVariant(variant: FormVariant, checked: boolean) {
+    setVariants((prev) => {
+      if (checked) return prev.includes(variant) ? prev : [...prev, variant];
+      // At least one variant must always stay selected — unchecking the last
+      // one is simply ignored rather than needing its own disabled-state
+      // juggling per checkbox.
+      return prev.length > 1 ? prev.filter((v) => v !== variant) : prev;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +166,30 @@ export function UploadConfigurePanel({ file, subsidiaryId, projectCode, onCancel
         isMatch={projectCodeMatches}
       />
 
+      <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+        Form type to generate
+      </Typography>
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={variants.includes("ff")}
+              onChange={(e) => toggleVariant("ff", e.target.checked)}
+            />
+          }
+          label="Full Form"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={variants.includes("oc")}
+              onChange={(e) => toggleVariant("oc", e.target.checked)}
+            />
+          }
+          label="One-Click"
+        />
+      </Stack>
+
       {validation.errors.length > 0 && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {validation.errors.length} blocking error(s) — this file can't be uploaded until they're fixed:
@@ -209,7 +246,7 @@ export function UploadConfigurePanel({ file, subsidiaryId, projectCode, onCancel
       )}
 
       <Stack direction="row" spacing={1.5} sx={{ mt: 3 }}>
-        <Button variant="contained" disabled={!canConfirm} onClick={() => onConfirm(requiredById)}>
+        <Button variant="contained" disabled={!canConfirm} onClick={() => onConfirm(requiredById, variants)}>
           {confirming ? "Uploading..." : "Confirm & Upload"}
         </Button>
         <Button variant="text" onClick={onCancel} disabled={confirming}>

@@ -112,7 +112,7 @@ describe("generated bundle (ff.html + data file + FF js) wired together", () => 
     }
   });
 
-  it("leaves the submit button disabled until privacyPolicy + Q1's first answer are checked", async () => {
+  it("leaves the submit button disabled until privacyPolicy + every required question (Q1 AND Q2 — see fixtures.ts) has an answer", async () => {
     const form = sampleFormDefinition();
     form.fields.privacyPolicy = { textByLocale: { en_GB: "I agree" }, linkUrlByLocale: { en_GB: "https://x" } };
     const config = defaultBuilderConfig();
@@ -131,6 +131,16 @@ describe("generated bundle (ff.html + data file + FF js) wired together", () => 
     document.getElementById("privacyPolicy")!.dispatchEvent(new Event("change", { bubbles: true }));
     document.getElementById("Q1A1")!.dispatchEvent(new Event("change", { bubbles: true }));
 
+    // Q2 is also required but still unanswered — Submit must stay disabled
+    // (this is exactly the gap that used to ship: only Q1 actually gated
+    // Submit, regardless of what else was starred as required).
+    expect(btn.disabled).toBe(true);
+
+    (document.getElementById("Q2A1") as HTMLInputElement).checked = true;
+    document.getElementById("Q2A1")!.dispatchEvent(new Event("change", { bubbles: true }));
+
+    // Every required question (Q1, Q2) plus privacy are now satisfied — Q3
+    // is optional (required: false), so it's irrelevant to this gate.
     expect(btn.disabled).toBe(false);
   });
 

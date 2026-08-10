@@ -8,6 +8,7 @@ import {
   type BuilderConfig,
   type FileNames,
   type FormDefinition,
+  type FormVariant,
   type GeneratedFile,
   type ValidationResult,
 } from "@formbuilder/shared";
@@ -42,15 +43,15 @@ export interface GenerationResult {
  * (see QuestionDefinition.required's own doc comment), so this only ever needs
  * to carry the questions the uploader flipped to optional.
  *
- * Always generates both the Full Form and One-Click variants with the default
- * BuilderConfig — the server-side upload flow has no per-upload configuration UI
- * beyond required-question toggling (that's the client-side wizard's job), so
- * this is the one sensible default until/unless a future phase adds more.
+ * `variants` lets the uploader choose which generated-output variant(s) they
+ * actually want (Full Form, One-Click, or both) — defaults to both, matching
+ * this function's original hardcoded behavior, for callers that don't pass it.
  */
 export function generateFromWorkbook(
   buffer: ArrayBuffer,
   sourceFileName: string,
   requiredOverrides?: Record<string, boolean>,
+  variants: FormVariant[] = ["ff", "oc"],
 ): GenerationResult {
   const parsed = parseWorkbook(buffer, sourceFileName);
   const mapped = mapWorkbook(parsed);
@@ -64,7 +65,7 @@ export function generateFromWorkbook(
   }
 
   const validation = validateWorkbook(mapped, parsed.issues);
-  const config: BuilderConfig = { ...defaultBuilderConfig(), variants: ["ff", "oc"] };
+  const config: BuilderConfig = { ...defaultBuilderConfig(), variants };
   const fileNames = resolveFileNames(mapped.form, config);
 
   const files = validation.errors.length === 0 ? generateSolution(mapped.form, config) : [];

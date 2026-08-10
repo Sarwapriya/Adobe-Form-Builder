@@ -48,7 +48,11 @@ CREATE TABLE Uploads (
     -- JSON-encoded Record<questionId, boolean> of which questions the
     -- uploader marked optional at upload time — see
     -- generationService.generateFromWorkbook's requiredOverrides param.
-    questionOverrides NVARCHAR(MAX) NULL
+    questionOverrides NVARCHAR(MAX) NULL,
+    -- JSON-encoded FormVariant[] (e.g. '["ff"]') the uploader chose to
+    -- generate — NULL means both (the default, and the implicit value for
+    -- every row created before this feature existed).
+    variants NVARCHAR(50) NULL
 );
 CREATE UNIQUE INDEX UQ_Uploads_subsidiary_version ON Uploads(subsidiaryId, version) WHERE version IS NOT NULL;
 

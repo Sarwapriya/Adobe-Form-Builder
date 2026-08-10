@@ -2,6 +2,8 @@ import { apiClient } from "./apiClient";
 
 export type UploadStatus = "uploaded" | "generated" | "submitted" | "failed";
 
+export type FormVariant = "ff" | "oc";
+
 export interface UploadListItem {
   id: string;
   subsidiaryId: string;
@@ -21,6 +23,10 @@ export interface UploadListItem {
   status: UploadStatus;
   submittedAt: string | null;
   submissionCount: number;
+  /** Which generated-output variant(s) the uploader chose — see backend
+   * Upload.variants's own doc comment. Always a real (non-empty) array; a
+   * row with no stored preference defaults to both. */
+  variants: FormVariant[];
 }
 
 export type GeneratedFileType = "html" | "js" | "css" | "data-js";
@@ -87,12 +93,15 @@ function buildQuery(params: Record<string, string | number | undefined>): string
  * a closed/unknown code (409/404) or a workbook/dropdown mismatch (400)
  * regardless of what the client-side preview already checked.
  * `requiredOverrides` (questionId -> required) comes from the upload form's
- * mandatory-questions configure step — see UploadConfigurePanel.tsx. */
+ * mandatory-questions configure step — see UploadConfigurePanel.tsx.
+ * `variants` (Full Form / One-Click / both) comes from the same step's
+ * variant picker; omitted means both, same as before that picker existed. */
 export function uploadWorkbook(
   subsidiaryId: string,
   projectCode: string,
   file: File,
   requiredOverrides?: Record<string, boolean>,
+  variants?: FormVariant[],
 ): Promise<CreateUploadResponse> {
   const formData = new FormData();
   formData.append("subsidiaryId", subsidiaryId);
@@ -100,6 +109,9 @@ export function uploadWorkbook(
   formData.append("file", file);
   if (requiredOverrides) {
     formData.append("requiredOverrides", JSON.stringify(requiredOverrides));
+  }
+  if (variants) {
+    formData.append("variants", JSON.stringify(variants));
   }
   return apiClient.postForm<CreateUploadResponse>("/api/v1/uploads", formData);
 }

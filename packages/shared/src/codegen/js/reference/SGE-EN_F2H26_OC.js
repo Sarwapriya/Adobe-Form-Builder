@@ -248,10 +248,39 @@ $(document).ready(function ()
         }
     }
 
-    // Function to enable Submit button if both Privacy Policy & Subscribe checkboxes are checked (else keep Submit button disabled)
+    // Function to check whether every question marked required (rendered with a "*") currently has an answer
+    function allRequiredQuestionsAnswered()
+    {
+        var allAnswered = true;
+
+        $("div.form_check_group > div.form_check_module").each(function()
+        {
+            if ($(this).find("div.form_check_title .star").length === 0)
+            {
+                return;
+            }
+
+            var textarea = $(this).find("textarea");
+
+            var hasAnswer = (textarea.length > 0)
+                ? ($.trim(textarea.val()) !== "")
+                : ($(this).find("input[type='radio']:checked, input[type='checkbox']:checked").length > 0);
+
+            if (!hasAnswer)
+            {
+                allAnswered = false;
+
+                return false;
+            }
+        });
+
+        return allAnswered;
+    }
+
+    // Function to enable Submit button once every required question has an answer (this variant has no Privacy Policy checkbox — else keep Submit button disabled)
     function enableDisableSubmit()
     {
-        if (($("#Q1A1").is(":checked") || $("#Q1A2").is(":checked") ||$("#Q1A3").is(":checked")))
+        if (allRequiredQuestionsAnswered())
         {
             $("#btnSubmit").prop("disabled", false);
 
@@ -353,14 +382,13 @@ $(document).ready(function ()
                 var callingCode = $("#callingCode").val();
                 if (!callingCode || callingCode === "0") return false;
 
-                // Check digit length by country: UAE allows 9 digits, others allow 8
-                var trimmedValue = value.replace(/\s/g, "");
-                if (callingCode === "971") {
-                    if (trimmedValue.length !== 9) return false;
-                } else {
-                    if (trimmedValue.length !== 8) return false;
-                }
-
+                // Digit-length correctness is left entirely to libphonenumber-js's own
+                // per-country numbering-plan metadata below (isValid()) rather than a
+                // hardcoded "9 digits for UAE, 8 for everyone else" guess — that guess
+                // was wrong for other countries this same dropdown offers (e.g. Saudi
+                // Arabia also needs 9 digits, not 8), and redundant even where it
+                // happened to be right, since isValid() already enforces the correct
+                // length for whichever country was actually selected.
                 var fullNumber = "+" + callingCode + value;
                 try {
                     var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber);
@@ -410,9 +438,10 @@ $(document).ready(function ()
         // Attach event to reset Calling Code if Mobile Number is removed
         $("#mobileNumber").on("change", resetCallingCode);
 
-        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of Privacy Policy & Subscribe checkboxes
-        $("#Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
-		//$("div.form_bottom_check_group input[type='checkbox'], #Q1A1, #Q1A2, #Q1A3").on("change", enableDisableSubmit);
+        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any required question's answer(s)
+        $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);
+
+        $("div.form_check_group > div.form_check_module").find("textarea").on("change keyup", enableDisableSubmit);
         // Floating submit button (outside form) — trigger Parsley validation on click
         // $("#btnSubmit").on("click", function ()
         // {

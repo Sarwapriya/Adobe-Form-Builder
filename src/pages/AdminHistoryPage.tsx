@@ -237,6 +237,19 @@ export function AdminHistoryPage() {
       valueGetter: (_, row) => (row.version != null ? `v${row.version}` : "—"),
     },
     {
+      field: "variants",
+      headerName: "Form type",
+      flex: 1,
+      sortable: false,
+      renderCell: (cellParams) => (
+        <Stack direction="row" spacing={0.5}>
+          {cellParams.row.variants.map((v) => (
+            <Chip key={v} label={v === "ff" ? "Full Form" : "One-Click"} size="small" variant="outlined" />
+          ))}
+        </Stack>
+      ),
+    },
+    {
       field: "status",
       headerName: "Status",
       width: 130,
@@ -263,9 +276,11 @@ export function AdminHistoryPage() {
       sortable: false,
       renderCell: (cellParams) => {
         const hasFiles = cellParams.row.status === "submitted" || cellParams.row.status === "generated";
-        // Mirrors uploadService.softDeleteUpload's own rule — a submitted
-        // record is never deletable, by anyone, regardless of role.
-        const canDelete = cellParams.row.status !== "submitted";
+        // This page is admin/superadmin-only (see AdminRoute) — every row
+        // here is deletable regardless of status, not just failed/generated
+        // ones. uploadService.softDeleteUpload exempts admins from the
+        // submitted-record lock that still applies to a standard user
+        // deleting their own upload elsewhere.
         return (
           <Stack direction="row" spacing={0.5}>
             <Button
@@ -284,16 +299,14 @@ export function AdminHistoryPage() {
             >
               Zip
             </Button>
-            {canDelete && (
-              <Button
-                size="small"
-                color="error"
-                startIcon={<DeleteIcon />}
-                onClick={() => handleDelete(cellParams.row.id, cellParams.row.fileName)}
-              >
-                Delete
-              </Button>
-            )}
+            <Button
+              size="small"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => handleDelete(cellParams.row.id, cellParams.row.fileName)}
+            >
+              Delete
+            </Button>
           </Stack>
         );
       },

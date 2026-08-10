@@ -31,6 +31,7 @@ import {
   regenerateUpload,
   submitUpload,
   uploadWorkbook,
+  type FormVariant,
   type UploadListItem,
   type ValidationResult,
 } from "../api/uploadsApi";
@@ -136,14 +137,14 @@ export function UploadHistoryPage() {
   // Confirming inside UploadConfigurePanel is what actually uploads — the
   // subsidiary/project code/file pickers above it only build up to that
   // point, so there's no separate top-level "Upload" submit action anymore.
-  async function handleConfirmUpload(requiredOverrides: Record<string, boolean>) {
+  async function handleConfirmUpload(requiredOverrides: Record<string, boolean>, variants: FormVariant[]) {
     if (!file || !subsidiaryId.trim() || !projectCode) return;
 
     setUploading(true);
     setUploadError(null);
     setLastValidation(null);
     try {
-      const response = await uploadWorkbook(subsidiaryId.trim(), projectCode, file, requiredOverrides);
+      const response = await uploadWorkbook(subsidiaryId.trim(), projectCode, file, requiredOverrides, variants);
       setLastValidation(response.validation);
       setFile(null);
       // A locked field stays put — there's nothing else to reset it to.
@@ -395,6 +396,7 @@ export function UploadHistoryPage() {
                 <TableCell>Project Code</TableCell>
                 <TableCell>File</TableCell>
                 <TableCell>Version</TableCell>
+                <TableCell>Form type</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Uploaded</TableCell>
                 <TableCell>Submitted</TableCell>
@@ -404,13 +406,13 @@ export function UploadHistoryPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={9} align="center" sx={{ py: 5 }}>
                     <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={9} align="center" sx={{ py: 5 }}>
                     <Typography color="text.secondary">No uploads yet — submit a workbook above to get started.</Typography>
                   </TableCell>
                 </TableRow>
@@ -421,6 +423,13 @@ export function UploadHistoryPage() {
                     <TableCell>{row.projectCode ?? "—"}</TableCell>
                     <TableCell>{row.fileName}</TableCell>
                     <TableCell>{row.version != null ? `v${row.version}` : "—"}</TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.5}>
+                        {row.variants.map((v) => (
+                          <Chip key={v} label={v === "ff" ? "Full Form" : "One-Click"} size="small" variant="outlined" />
+                        ))}
+                      </Stack>
+                    </TableCell>
                     <TableCell>
                       <Chip label={row.status} color={STATUS_COLOR[row.status]} size="small" />
                     </TableCell>

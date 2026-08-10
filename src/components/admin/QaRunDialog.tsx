@@ -36,6 +36,8 @@ import {
 } from "../../api/qaApi";
 import { downloadBlob } from "../../utils/download";
 
+const VARIANT_LABELS: Record<QaRunVariant, string> = { ff: "Full Form", oc: "One-Click" };
+
 const STATUS_COLOR: Record<QaRun["status"], "default" | "success" | "error" | "warning" | "info"> = {
   pending: "default",
   running: "info",
@@ -63,9 +65,24 @@ const POLL_INTERVAL_MS = 2000;
  * move from pending -> running -> passed/failed/error, then inspect every
  * individual test case (which fields need fixing, and why) or download the
  * whole thing as a standalone HTML report.
+ *
+ * `availableVariants` restricts the picker to whichever variant(s) this
+ * upload actually generated (see Upload.variants) — an upload requested as
+ * Full-Form-only never produced a One-Click HTML file, so offering it here
+ * would just lead to a 409 from createQaRun's own strict check.
  */
-export function QaRunDialog({ uploadId, open, onClose }: { uploadId: string; open: boolean; onClose: () => void }) {
-  const [variant, setVariant] = useState<QaRunVariant>("ff");
+export function QaRunDialog({
+  uploadId,
+  availableVariants,
+  open,
+  onClose,
+}: {
+  uploadId: string;
+  availableVariants: QaRunVariant[];
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [variant, setVariant] = useState<QaRunVariant>(availableVariants[0] ?? "ff");
   const [runs, setRuns] = useState<QaRun[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -94,6 +111,7 @@ export function QaRunDialog({ uploadId, open, onClose }: { uploadId: string; ope
     if (!open) return;
     setSelectedRunId(null);
     setResults(null);
+    setVariant(availableVariants[0] ?? "ff");
     void refreshRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, uploadId]);
@@ -187,10 +205,18 @@ export function QaRunDialog({ uploadId, open, onClose }: { uploadId: string; ope
             value={variant}
             onChange={(e) => setVariant(e.target.value as QaRunVariant)}
           >
-            <MenuItem value="ff">Full Form</MenuItem>
-            <MenuItem value="oc">One-Click</MenuItem>
+            {availableVariants.map((v) => (
+              <MenuItem key={v} value={v}>
+                {VARIANT_LABELS[v]}
+              </MenuItem>
+            ))}
           </TextField>
-          <Button variant="contained" startIcon={<PlayArrowIcon />} disabled={starting} onClick={handleRun}>
+          <Button
+            variant="contained"
+            startIcon={<PlayArrowIcon />}
+            disabled={starting || availableVariants.length === 0}
+            onClick={handleRun}
+          >
             {starting ? "Starting..." : "Run QA"}
           </Button>
         </Stack>

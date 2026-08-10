@@ -65,4 +65,12 @@ export class Upload {
    * question back to its Excel-parsed default (required: true). */
   @Column({ type: "nvarchar", length: "MAX", nullable: true })
   questionOverrides!: string | null;
+
+  /** JSON-encoded `FormVariant[]` (e.g. '["ff"]', '["ff","oc"]') — which
+   * generated-output variant(s) the uploader chose at upload time. Null means
+   * "both" (the original, still-default behavior, and what every row created
+   * before this feature existed implicitly has). Persisted so regenerateUpload
+   * re-applies the same selection instead of silently generating both again. */
+  @Column({ type: "nvarchar", length: 50, nullable: true })
+  variants!: string | null;
 }
