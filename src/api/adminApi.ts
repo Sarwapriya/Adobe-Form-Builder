@@ -164,6 +164,14 @@ export function setProjectCodeOpen(id: string, isOpen: boolean): Promise<Project
   return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { isOpen });
 }
 
+/** Renames a project code's own text value (server rejects an exact
+ * case-insensitive duplicate with a 409). Does not retroactively change
+ * anything already uploaded under the old value — see backend
+ * projectCodeService.setProjectCodeValue's own doc comment. */
+export function setProjectCodeValue(id: string, code: string): Promise<ProjectCode> {
+  return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { code });
+}
+
 /** Updates just the campaign date range — `null` clears a bound, `undefined`
  * (simply omit the key) leaves it as-is. Independent of setProjectCodeOpen
  * above; the two are never sent in the same request from this UI. */

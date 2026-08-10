@@ -20,6 +20,7 @@ import {
   listAllProjectCodes,
   setProjectCodeDateRange,
   setProjectCodeOpen,
+  setProjectCodeValue,
   type ProjectCode,
 } from "../../api/adminApi";
 
@@ -31,13 +32,17 @@ function toDateInputValue(value: string | null): string {
 
 /**
  * Inline admin panel for managing project codes (campaigns): create new
- * ones, toggle a code open/closed, and set/edit each one's descriptive
- * campaign date range. Closing a code blocks new uploads against it
- * (enforced server-side — see uploadService.createUpload) without touching
- * uploads already made under it; the date range is purely informational and
- * never enforced (see backend ProjectCode entity's own doc comment). Lives
- * on ConfigurationPage; the upload form's own dropdown (any user, open
- * codes only) is a separate endpoint — see projectCodesApi.ts.
+ * ones, rename a code's own text value, toggle a code open/closed, and
+ * set/edit each one's descriptive campaign date range. Closing a code blocks
+ * new uploads against it (enforced server-side — see
+ * uploadService.createUpload) without touching uploads already made under
+ * it; renaming likewise never touches anything already uploaded under the
+ * old value (Upload.projectCode is a text snapshot, not a live reference —
+ * see that column's own doc comment); the date range is purely informational
+ * and never enforced (see backend ProjectCode entity's own doc comment).
+ * Lives on ConfigurationPage, admin/superadmin only (gated by AdminRoute);
+ * the upload form's own dropdown (any user, open codes only) is a separate
+ * endpoint — see projectCodesApi.ts.
  */
 export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {}) {
   const [codes, setCodes] = useState<ProjectCode[]>([]);
@@ -49,6 +54,7 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -112,6 +118,20 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
     }
   }
 
+  async function handleRename(id: string, code: string) {
+    setRenamingId(id);
+    setError(null);
+    try {
+      await setProjectCodeValue(id, code);
+      await refresh();
+      onChange?.();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to rename project code");
+    } finally {
+      setRenamingId(null);
+    }
+  }
+
   return (
     <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
@@ -169,8 +189,10 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
               code={code}
               toggling={togglingId === code.id}
               saving={savingId === code.id}
+              renaming={renamingId === code.id}
               onToggle={() => handleToggle(code)}
               onSaveDateRange={(startDate, endDate) => handleSaveDateRange(code.id, startDate, endDate)}
+              onRename={(newValue) => handleRename(code.id, newValue)}
             />
           ))}
         </Stack>
@@ -183,17 +205,22 @@ function ProjectCodeRow({
   code,
   toggling,
   saving,
+  renaming,
   onToggle,
   onSaveDateRange,
+  onRename,
 }: {
   code: ProjectCode;
   toggling: boolean;
   saving: boolean;
+  renaming: boolean;
   onToggle: () => void;
   onSaveDateRange: (startDate: string, endDate: string) => void;
+  onRename: (code: string) => void;
 }) {
   const [startDate, setStartDate] = useState(toDateInputValue(code.startDate));
   const [endDate, setEndDate] = useState(toDateInputValue(code.endDate));
+  const [codeValue, setCodeValue] = useState(code.code);
 
   // Re-sync local edits if the underlying row changes from elsewhere (e.g.
   // after a refresh following a successful save).
@@ -202,7 +229,12 @@ function ProjectCodeRow({
     setEndDate(toDateInputValue(code.endDate));
   }, [code.startDate, code.endDate]);
 
+  useEffect(() => {
+    setCodeValue(code.code);
+  }, [code.code]);
+
   const isDirty = startDate !== toDateInputValue(code.startDate) || endDate !== toDateInputValue(code.endDate);
+  const isCodeDirty = codeValue.trim() !== code.code && codeValue.trim().length > 0;
 
   return (
     <Stack
@@ -212,14 +244,24 @@ function ProjectCodeRow({
       flexWrap="wrap"
       sx={{ px: 1.5, py: 1, borderRadius: 2, bgcolor: "rgba(20, 22, 33, 0.03)" }}
     >
+      <TextField
+        label="Project code"
+        size="small"
+        value={codeValue}
+        onChange={(e) => setCodeValue(e.target.value)}
+        sx={{ minWidth: 160 }}
+      />
+      <Button size="small" variant="text" disabled={!isCodeDirty || renaming} onClick={() => onRename(codeValue.trim())}>
+        {renaming ? "Saving..." : "Save code"}
+      </Button>
       <Chip
-        label={code.code}
+        label={code.isOpen ? "Open" : "Closed"}
         color={code.isOpen ? "success" : "default"}
         icon={code.isOpen ? <LockOpenIcon /> : <LockIcon />}
         onClick={onToggle}
         disabled={toggling}
         title={code.isOpen ? "Open — click to close" : "Closed — click to reopen"}
-        sx={{ minWidth: 140 }}
+        sx={{ minWidth: 100 }}
       />
       <TextField
         label="Start date"

@@ -16,7 +16,13 @@ import {
 import { computeDiff } from "../services/diffService";
 import { createUser, findUserById, listUsers, setUserActive } from "../services/authService";
 import { buildUploadPreview, type PreviewVariant } from "../services/previewService";
-import { createProjectCode, listProjectCodes, setProjectCodeDateRange, setProjectCodeOpen } from "../services/projectCodeService";
+import {
+  createProjectCode,
+  listProjectCodes,
+  setProjectCodeDateRange,
+  setProjectCodeOpen,
+  setProjectCodeValue,
+} from "../services/projectCodeService";
 import { createSubsidiary, deleteSubsidiary, listSubsidiaries, setSubsidiaryActive } from "../services/subsidiaryService";
 import {
   createSubsidiaryProjectBlock,
@@ -195,6 +201,7 @@ adminRouter.post(
 );
 
 const updateProjectCodeSchema = z.object({
+  code: z.string().trim().min(1).optional(),
   isOpen: z.boolean().optional(),
   startDate: dateStringSchema.nullable().optional(),
   endDate: dateStringSchema.nullable().optional(),
@@ -204,16 +211,22 @@ const updateProjectCodeSchema = z.object({
 // against it — see uploadService.createUpload's call to
 // assertProjectCodeOpenForUpload. It does not affect uploads already made
 // under that code. startDate/endDate are purely descriptive (see
-// ProjectCode entity) and applied independently of isOpen — either can be
-// sent alone (e.g. the "click a chip to toggle" UI only ever sends isOpen;
-// the date-range editor only ever sends the dates).
+// ProjectCode entity) and applied independently of isOpen/code — any of the
+// three can be sent alone (e.g. the "click a chip to toggle" UI only ever
+// sends isOpen; the date-range editor only ever sends the dates; the rename
+// field only ever sends code) or together. Renaming (code) never touches
+// uploads already made under the old value — see setProjectCodeValue's own
+// doc comment.
 adminRouter.patch(
   "/project-codes/:id",
   validateBody(updateProjectCodeSchema),
   asyncHandler(async (req, res) => {
-    const { isOpen, ...dateRange } = req.body as z.infer<typeof updateProjectCodeSchema>;
+    const { code, isOpen, ...dateRange } = req.body as z.infer<typeof updateProjectCodeSchema>;
 
     let updated = null;
+    if (code !== undefined) {
+      updated = await setProjectCodeValue(req.params.id, code);
+    }
     if (isOpen !== undefined) {
       updated = await setProjectCodeOpen(req.params.id, isOpen);
     }

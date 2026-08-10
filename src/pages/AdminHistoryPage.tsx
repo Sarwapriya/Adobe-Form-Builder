@@ -240,9 +240,10 @@ export function AdminHistoryPage() {
       field: "variants",
       headerName: "Form type",
       flex: 1,
+      minWidth: 220,
       sortable: false,
       renderCell: (cellParams) => (
-        <Stack direction="row" spacing={0.5}>
+        <Stack direction="row" spacing={0.5} sx={{ overflow: "hidden" }}>
           {cellParams.row.variants.map((v) => (
             <Chip key={v} label={v === "ff" ? "Full Form" : "One-Click"} size="small" variant="outlined" />
           ))}

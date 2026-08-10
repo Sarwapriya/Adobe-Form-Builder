@@ -68,6 +68,38 @@ export async function createProjectCode(code: string, dateRange: ProjectCodeDate
   );
 }
 
+/**
+ * Renames a project code's own text value. Rejects an exact-duplicate code
+ * (case-insensitive, excluding this row itself) with the same ConflictError
+ * createProjectCode uses, for the same reason: a raw DB unique-constraint
+ * error isn't a message the admin UI can show directly. Returns null if the
+ * id doesn't exist.
+ *
+ * This does NOT retroactively rename anything already uploaded — `Upload.
+ * projectCode` is a plain text snapshot taken at upload time, not a foreign
+ * key (see that column's own doc comment), so past uploads keep showing
+ * whatever code was selected when they were made, same as a subsidiary
+ * rename would leave `Upload.subsidiaryId`'s stored text alone.
+ */
+export async function setProjectCodeValue(id: string, code: string): Promise<ProjectCode | null> {
+  const trimmed = code.trim();
+  const repo = AppDataSource.getRepository(ProjectCode);
+  const existing = await repo.findOne({ where: { id } });
+  if (!existing) return null;
+
+  const duplicate = await repo
+    .createQueryBuilder("projectCode")
+    .where("LOWER(projectCode.code) = LOWER(:code)", { code: trimmed })
+    .andWhere("projectCode.id != :id", { id })
+    .getOne();
+  if (duplicate) {
+    throw new ConflictError(`Project code "${trimmed}" already exists`);
+  }
+
+  existing.code = trimmed;
+  return repo.save(existing);
+}
+
 /** Toggles a project code open/closed. Returns null if the id doesn't exist —
  * callers map that to a 404, same convention as the rest of the admin API. */
 export async function setProjectCodeOpen(id: string, isOpen: boolean): Promise<ProjectCode | null> {
