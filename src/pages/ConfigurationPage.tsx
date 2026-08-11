@@ -4,6 +4,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import { ProjectCodeManager } from "../components/admin/ProjectCodeManager";
 import { SubsidiaryManager } from "../components/admin/SubsidiaryManager";
 import { SubsidiaryProjectBlockManager } from "../components/admin/SubsidiaryProjectBlockManager";
+import { SubsidiaryProjectBulkBlockManager } from "../components/admin/SubsidiaryProjectBulkBlockManager";
 
 /**
  * Admin configuration hub: project codes (globally open/closed), subsidiaries
@@ -52,6 +53,10 @@ export function ConfigurationPage() {
       <ProjectCodeManager onChange={bumpRestrictionsRefresh} />
       <SubsidiaryManager onChange={bumpRestrictionsRefresh} />
       <SubsidiaryProjectBlockManager refreshSignal={restrictionsRefreshSignal} />
+      <SubsidiaryProjectBulkBlockManager
+        refreshSignal={restrictionsRefreshSignal}
+        onChange={bumpRestrictionsRefresh}
+      />
     </Box>
   );
 }

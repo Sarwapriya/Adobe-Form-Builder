@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { Alert, Box, Button, Chip, Menu, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryIcon from "@mui/icons-material/History";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
@@ -22,8 +23,10 @@ import {
   type ProjectCode,
   type UploadHistorySummary,
 } from "../api/adminApi";
-import { deleteUpload, type UploadStatus } from "../api/uploadsApi";
+import { deleteUpload, type FormVariant, type UploadStatus } from "../api/uploadsApi";
 import { downloadBlob } from "../utils/download";
+
+const VARIANT_LABEL: Record<FormVariant, string> = { ff: "Full Form", oc: "One-Click" };
 
 // Only these three statuses can ever appear here (the backend's
 // listUploadHistoryForAdmin filters to exactly this set) — a "generated" row
@@ -111,6 +114,9 @@ export function AdminHistoryPage() {
   const [searchFilter, setSearchFilter] = useState("");
 
   const [summary, setSummary] = useState<UploadHistorySummary>({ total: 0, generated: 0, submitted: 0, failed: 0 });
+  const [previewMenu, setPreviewMenu] = useState<{ anchorEl: HTMLElement; uploadId: string; variants: FormVariant[] } | null>(
+    null,
+  );
 
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 20 });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: "uploadDate", sort: "desc" }]);
@@ -198,15 +204,26 @@ export function AdminHistoryPage() {
     }
   }
 
-  async function handlePreview(uploadId: string) {
+  async function handlePreview(uploadId: string, variant: FormVariant) {
     try {
-      const blob = await previewUpload(uploadId, "ff");
+      const blob = await previewUpload(uploadId, variant);
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank", "noopener,noreferrer");
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Preview failed");
     }
+  }
+
+  // A row only ever offers what its uploader actually requested (see
+  // Upload.variants) — one variant previews directly, both prompt a picker
+  // rather than silently defaulting to Full Form.
+  function handleViewClick(event: MouseEvent<HTMLElement>, row: AdminUploadListItem) {
+    if (row.variants.length > 1) {
+      setPreviewMenu({ anchorEl: event.currentTarget, uploadId: row.id, variants: row.variants });
+      return;
+    }
+    void handlePreview(row.id, row.variants[0] ?? "ff");
   }
 
   // Soft-delete only (see uploadService.softDeleteUpload) — hides the record
@@ -287,8 +304,9 @@ export function AdminHistoryPage() {
             <Button
               size="small"
               startIcon={<VisibilityIcon />}
+              endIcon={hasFiles && cellParams.row.variants.length > 1 ? <ArrowDropDownIcon /> : undefined}
               disabled={!hasFiles}
-              onClick={() => handlePreview(cellParams.row.id)}
+              onClick={(e) => handleViewClick(e, cellParams.row)}
             >
               View
             </Button>
@@ -431,6 +449,20 @@ export function AdminHistoryPage() {
           }}
         />
       </Paper>
+
+      <Menu anchorEl={previewMenu?.anchorEl ?? null} open={!!previewMenu} onClose={() => setPreviewMenu(null)}>
+        {previewMenu?.variants.map((variant) => (
+          <MenuItem
+            key={variant}
+            onClick={() => {
+              void handlePreview(previewMenu.uploadId, variant);
+              setPreviewMenu(null);
+            }}
+          >
+            {VARIANT_LABEL[variant]}
+          </MenuItem>
+        ))}
+      </Menu>
     </Box>
   );
 }

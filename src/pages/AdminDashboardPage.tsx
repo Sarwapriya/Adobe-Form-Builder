@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { Alert, Box, Button, Chip, Menu, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ScienceIcon from "@mui/icons-material/Science";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { DataGrid, type GridColDef, type GridPaginationModel, type GridSortModel } from "@mui/x-data-grid";
@@ -15,8 +16,11 @@ import {
   type AdminUploadListItem,
   type ProjectCode,
 } from "../api/adminApi";
+import type { FormVariant } from "../api/uploadsApi";
 import { downloadBlob } from "../utils/download";
 import { QaRunDialog } from "../components/admin/QaRunDialog";
+
+const VARIANT_LABEL: Record<FormVariant, string> = { ff: "Full Form", oc: "One-Click" };
 
 /**
  * Admin-only view of every *submitted* upload across every user — an upload
@@ -34,6 +38,9 @@ export function AdminDashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [qaDialogRow, setQaDialogRow] = useState<AdminUploadListItem | null>(null);
+  const [previewMenu, setPreviewMenu] = useState<{ anchorEl: HTMLElement; uploadId: string; variants: FormVariant[] } | null>(
+    null,
+  );
 
   const [subsidiaryFilter, setSubsidiaryFilter] = useState("");
   const [projectCodeFilter, setProjectCodeFilter] = useState("");
@@ -99,13 +106,13 @@ export function AdminDashboardPage() {
     }
   }
 
-  // Opens the generated Full Form in a new tab as a self-contained HTML blob
+  // Opens a generated variant in a new tab as a self-contained HTML blob
   // (CSS/JS inlined server-side — see previewService.ts) rather than
   // navigating there directly, since a plain link can't carry the
   // Authorization header the admin API requires.
-  async function handlePreview(uploadId: string) {
+  async function handlePreview(uploadId: string, variant: FormVariant) {
     try {
-      const blob = await previewUpload(uploadId, "ff");
+      const blob = await previewUpload(uploadId, variant);
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank", "noopener,noreferrer");
       // The new tab has already loaded the blob URL by the time it opens;
@@ -115,6 +122,17 @@ export function AdminDashboardPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Preview failed");
     }
+  }
+
+  // A row only ever offers what its uploader actually requested (see
+  // Upload.variants) — one variant previews directly, both prompt a picker
+  // rather than silently defaulting to Full Form.
+  function handleViewClick(event: MouseEvent<HTMLElement>, row: AdminUploadListItem) {
+    if (row.variants.length > 1) {
+      setPreviewMenu({ anchorEl: event.currentTarget, uploadId: row.id, variants: row.variants });
+      return;
+    }
+    void handlePreview(row.id, row.variants[0] ?? "ff");
   }
 
   const columns: GridColDef<AdminUploadListItem>[] = [
@@ -161,7 +179,12 @@ export function AdminDashboardPage() {
       sortable: false,
       renderCell: (cellParams) => (
         <Stack direction="row" spacing={0.5}>
-          <Button size="small" startIcon={<VisibilityIcon />} onClick={() => handlePreview(cellParams.row.id)}>
+          <Button
+            size="small"
+            startIcon={<VisibilityIcon />}
+            endIcon={cellParams.row.variants.length > 1 ? <ArrowDropDownIcon /> : undefined}
+            onClick={(e) => handleViewClick(e, cellParams.row)}
+          >
             View
           </Button>
           <Button
@@ -285,6 +308,20 @@ export function AdminDashboardPage() {
           onClose={() => setQaDialogRow(null)}
         />
       )}
+
+      <Menu anchorEl={previewMenu?.anchorEl ?? null} open={!!previewMenu} onClose={() => setPreviewMenu(null)}>
+        {previewMenu?.variants.map((variant) => (
+          <MenuItem
+            key={variant}
+            onClick={() => {
+              void handlePreview(previewMenu.uploadId, variant);
+              setPreviewMenu(null);
+            }}
+          >
+            {VARIANT_LABEL[variant]}
+          </MenuItem>
+        ))}
+      </Menu>
     </Box>
   );
 }
