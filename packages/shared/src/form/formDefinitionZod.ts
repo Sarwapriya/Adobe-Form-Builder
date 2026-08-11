@@ -6,7 +6,7 @@ import { z } from "zod";
 
 const localeTextMap = z.record(z.string(), z.string());
 
-export const controlTypeSchema = z.enum(["radio", "checkbox", "text"]);
+export const controlTypeSchema = z.enum(["radio", "checkbox", "text", "shortText", "dropdown"]);
 
 export const localeInfoSchema = z.object({
   code: z.string(),
@@ -42,6 +42,11 @@ const callingCodeFieldMetaSchema = localizedFieldMetaSchema.extend({
   dropdownFirstEntryByLocale: localeTextMap,
 });
 
+const mobileNumberFieldMetaSchema = localizedFieldMetaSchema.extend({
+  countries: z.array(z.string()),
+  dropdownFirstEntryByLocale: localeTextMap,
+});
+
 const privacyPolicyMetaSchema = z.object({
   textByLocale: localeTextMap,
   linkUrlByLocale: localeTextMap,
@@ -58,6 +63,7 @@ export const profileFieldSetSchema = z.object({
   lastName: localizedFieldMetaSchema.optional(),
   countryCode: localizedFieldMetaSchema.optional(),
   callingCode: callingCodeFieldMetaSchema.optional(),
+  mobileNumber: mobileNumberFieldMetaSchema.optional(),
   privacyPolicy: privacyPolicyMetaSchema.optional(),
   marketingOptin: localizedFieldMetaSchema.optional(),
   termsAndConditions: termsAndConditionsMetaSchema.optional(),
@@ -65,6 +71,7 @@ export const profileFieldSetSchema = z.object({
   redirectAfterSuccessUrlByLocale: localeTextMap.optional(),
   headingBeforeBreakByLocale: localeTextMap.optional(),
   headingAfterBreakByLocale: localeTextMap.optional(),
+  campaignSubheadingByLocale: localeTextMap.optional(),
   requiredFieldNoteByLocale: localeTextMap.optional(),
   extraFieldsByLocale: z.record(z.string(), localeTextMap).optional(),
 });
@@ -84,6 +91,16 @@ export const validationMessageSetSchema = z.object({
   modalMessage2: z.string().optional(),
   modalButtonYes: z.string().optional(),
   modalButtonNo: z.string().optional(),
+  emailError: z.string().optional(),
+  firstNameError: z.string().optional(),
+  lastNameError: z.string().optional(),
+  callingCodeError: z.string().optional(),
+  mobileNumberType: z.string().optional(),
+  mobileNumberLength: z.string().optional(),
+  mobileNumberError: z.string().optional(),
+  zipCodeError: z.string().optional(),
+  reCaptchaRequired: z.string().optional(),
+  apiError: z.string().optional(),
 });
 
 export const formDefinitionSchema = z.object({

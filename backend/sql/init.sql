@@ -67,15 +67,62 @@ CREATE TABLE RefreshTokens (
 );
 CREATE INDEX IX_RefreshTokens_userId ON RefreshTokens(userId);
 
+-- A builder-authored form/campaign — the schema-authored counterpart to Uploads,
+-- kept as its own table/lifecycle (draft/published/unpublished) rather than folded
+-- into Uploads, since a builder form has no source .xlsx and is repeatedly editable
+-- (see Form.ts's own doc comment). subsidiaryId/projectCode are text snapshots,
+-- mirroring Uploads' own convention.
+CREATE TABLE Forms (
+    id                    UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    name                  NVARCHAR(200) NOT NULL,
+    subsidiaryId          NVARCHAR(50) NOT NULL,
+    projectCode           NVARCHAR(100) NULL,
+    status                NVARCHAR(20) NOT NULL DEFAULT 'draft',
+    currentDraftVersionId UNIQUEIDENTIFIER NULL,
+    publishedVersionId    UNIQUEIDENTIFIER NULL,
+    isDeleted             BIT NOT NULL DEFAULT 0,
+    createdByUserId       UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
+    createdAt             DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET(),
+    updatedAt             DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+
+-- One snapshot of a builder-authored form's content — see FormVersion.ts's own doc
+-- comment for the full draft/publish/unpublish lifecycle. versionNumber is NULL
+-- until published, mirroring Uploads.version's own null-until-submitted contract.
+CREATE TABLE FormVersions (
+    id              UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    formId          UNIQUEIDENTIFIER NOT NULL REFERENCES Forms(id),
+    versionNumber   INT NULL,
+    definition      NVARCHAR(MAX) NOT NULL,
+    config          NVARCHAR(MAX) NOT NULL,
+    status          NVARCHAR(20) NOT NULL DEFAULT 'draft',
+    createdByUserId UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
+    createdAt       DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET(),
+    publishedAt     DATETIMEOFFSET(7) NULL,
+    unpublishedAt   DATETIMEOFFSET(7) NULL
+);
+ALTER TABLE Forms ADD CONSTRAINT FK_Forms_currentDraftVersionId FOREIGN KEY (currentDraftVersionId) REFERENCES FormVersions(id);
+ALTER TABLE Forms ADD CONSTRAINT FK_Forms_publishedVersionId FOREIGN KEY (publishedVersionId) REFERENCES FormVersions(id);
+CREATE INDEX IX_FormVersions_formId ON FormVersions(formId);
+CREATE INDEX IX_Forms_subsidiaryId ON Forms(subsidiaryId);
+
+-- Owned by either an Upload (Excel-authored) or a FormVersion (builder-authored) —
+-- exactly one of uploadId/formVersionId is set, enforced by the CHECK constraint
+-- below (Forms/FormVersions are declared further down this file).
 CREATE TABLE GeneratedFiles (
-    id        UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    uploadId  UNIQUEIDENTIFIER NOT NULL REFERENCES Uploads(id),
-    fileName  NVARCHAR(255) NOT NULL,
-    filePath  NVARCHAR(2000) NOT NULL,
-    fileType  NVARCHAR(20) NOT NULL,
-    createdAt DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+    id            UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    uploadId      UNIQUEIDENTIFIER NULL REFERENCES Uploads(id),
+    formVersionId UNIQUEIDENTIFIER NULL CONSTRAINT FK_GeneratedFiles_formVersionId REFERENCES FormVersions(id),
+    fileName      NVARCHAR(255) NOT NULL,
+    filePath      NVARCHAR(2000) NOT NULL,
+    fileType      NVARCHAR(20) NOT NULL,
+    createdAt     DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET(),
+    CONSTRAINT CK_GeneratedFiles_owner CHECK (
+        (uploadId IS NOT NULL AND formVersionId IS NULL) OR (uploadId IS NULL AND formVersionId IS NOT NULL)
+    )
 );
 CREATE INDEX IX_GeneratedFiles_uploadId ON GeneratedFiles(uploadId);
+CREATE INDEX IX_GeneratedFiles_formVersionId ON GeneratedFiles(formVersionId);
 
 CREATE TABLE EmailLogs (
     id           UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),

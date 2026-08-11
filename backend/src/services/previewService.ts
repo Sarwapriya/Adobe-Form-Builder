@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { AppDataSource } from "../config/data-source";
 import { Upload } from "../entities/Upload";
+import { Form } from "../entities/Form";
 import { GeneratedFile as GeneratedFileEntity } from "../entities/GeneratedFile";
 import { absoluteFilePath } from "./fileService";
 
@@ -58,6 +59,54 @@ export async function buildUploadPreview(
   }
 
   const files = await AppDataSource.getRepository(GeneratedFileEntity).find({ where: { uploadId } });
+  if (files.length === 0) {
+    return { outcome: "no_files" };
+  }
+
+  const suffixFor = (v: PreviewVariant) => (v === "ff" ? "_FF" : "_OC");
+  const findHtml = (v: PreviewVariant) => files.find((f) => f.fileType === "html" && f.fileName.endsWith(`${suffixFor(v)}.html`));
+
+  const requestedHtml = findHtml(variant);
+  const fallbackVariant: PreviewVariant = variant === "ff" ? "oc" : "ff";
+  const htmlFile = requestedHtml ?? (strict ? undefined : findHtml(fallbackVariant));
+  const resolvedVariant = requestedHtml ? variant : fallbackVariant;
+  if (!htmlFile) {
+    return { outcome: "no_files" };
+  }
+  const suffix = suffixFor(resolvedVariant);
+  const jsFile = files.find((f) => f.fileType === "js" && f.fileName.endsWith(`${suffix}.js`));
+  const cssFile = files.find((f) => f.fileType === "css");
+  const dataJsFile = files.find((f) => f.fileType === "data-js");
+
+  const [html, css, dataJs, behaviorJs] = await Promise.all([
+    readGeneratedFile(htmlFile),
+    cssFile ? readGeneratedFile(cssFile) : Promise.resolve(""),
+    dataJsFile ? readGeneratedFile(dataJsFile) : Promise.resolve(""),
+    jsFile ? readGeneratedFile(jsFile) : Promise.resolve(""),
+  ]);
+
+  const inlined = inlineScript(inlineScript(inlineLink(html, cssFile, css), dataJsFile, dataJs), jsFile, behaviorJs);
+
+  return { outcome: "ok", html: inlined };
+}
+
+/**
+ * Builder-authored counterpart to buildUploadPreview above — same self-contained-HTML
+ * inlining technique (reusing this file's own file-scoped readGeneratedFile/inlineLink/
+ * inlineScript helpers), against a Form's *published* FormVersion instead of an Upload.
+ * Only ever serves a currently-published form (`status === "published"`) — an
+ * unpublished form's previously-generated files stay on disk but become unreachable
+ * here, reversible by re-publishing (see formBuilderService.unpublishForm).
+ */
+export async function buildFormVersionPreview(formId: string, variant: PreviewVariant, strict = false): Promise<PreviewResult> {
+  const form = await AppDataSource.getRepository(Form).findOne({ where: { id: formId, isDeleted: false } });
+  if (!form || form.status !== "published" || !form.publishedVersionId) {
+    return { outcome: "not_found" };
+  }
+
+  const files = await AppDataSource.getRepository(GeneratedFileEntity).find({
+    where: { formVersionId: form.publishedVersionId },
+  });
   if (files.length === 0) {
     return { outcome: "no_files" };
   }

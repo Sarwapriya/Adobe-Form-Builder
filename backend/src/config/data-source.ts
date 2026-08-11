@@ -11,6 +11,8 @@ import { Subsidiary } from "../entities/Subsidiary";
 import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
 import { QaRun } from "../entities/QaRun";
 import { QaTestCaseResult } from "../entities/QaTestCaseResult";
+import { Form } from "../entities/Form";
+import { FormVersion } from "../entities/FormVersion";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 import { SubmittedOnlyVersioning1720000000000 } from "../migrations/1720000000000-SubmittedOnlyVersioning";
@@ -23,6 +25,8 @@ import { AddSubsidiaryIsActive1780000000000 } from "../migrations/1780000000000-
 import { AddQaRuns1790000000000 } from "../migrations/1790000000000-AddQaRuns";
 import { AddProjectCodeDateRange1800000000000 } from "../migrations/1800000000000-AddProjectCodeDateRange";
 import { AddUploadVariants1810000000000 } from "../migrations/1810000000000-AddUploadVariants";
+import { AddFormBuilder1820000000000 } from "../migrations/1820000000000-AddFormBuilder";
+import { AddFormVersionToGeneratedFiles1830000000000 } from "../migrations/1830000000000-AddFormVersionToGeneratedFiles";
 
 const entities = [
   Upload,
@@ -36,6 +40,8 @@ const entities = [
   SubsidiaryProjectBlock,
   QaRun,
   QaTestCaseResult,
+  Form,
+  FormVersion,
 ];
 const migrations = [
   InitSchema1700000000000,
@@ -50,6 +56,8 @@ const migrations = [
   AddQaRuns1790000000000,
   AddProjectCodeDateRange1800000000000,
   AddUploadVariants1810000000000,
+  AddFormBuilder1820000000000,
+  AddFormVersionToGeneratedFiles1830000000000,
 ];
 
 /**

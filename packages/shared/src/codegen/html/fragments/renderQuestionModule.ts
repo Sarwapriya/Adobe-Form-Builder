@@ -29,6 +29,27 @@ export function renderQuestionModule(q: QuestionDefinition): string {
     );
   }
 
+  if (q.controlType === "shortText") {
+    return (
+      `<div class="form_check_module" id="${escapeHtml(q.id)}">` +
+      titleBlock +
+      `<div class="form_text_bx"><div class="input_wrap">` +
+      `<input type="text" id="${escapeHtml(q.id)}" name="${escapeHtml(q.id)}" data-pt-api="y">` +
+      `<div class="btn_clear"></div>` +
+      `</div></div></div>`
+    );
+  }
+
+  if (q.controlType === "dropdown") {
+    return (
+      `<div class="form_check_module" id="${escapeHtml(q.id)}">` +
+      titleBlock +
+      `<div class="form_text_bx select_bx"><div class="select_wrap">` +
+      `<select id="${escapeHtml(q.id)}" name="${escapeHtml(q.id)}" data-pt-api="y"><option value=""></option></select>` +
+      `</div></div></div>`
+    );
+  }
+
   const inputType = q.controlType === "checkbox" ? "checkbox" : "radio";
   // Match the reference: radio with ≤3 answers uses radio_group (inline layout),
   // radio with >3 answers uses form_check_list_wrap (grid layout) with radio_wrap

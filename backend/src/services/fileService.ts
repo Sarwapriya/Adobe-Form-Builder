@@ -130,3 +130,34 @@ export async function saveGeneratedFiles(
   }
   return saved;
 }
+
+/** Directory (relative to UPLOAD_DIR) holding one FormVersion's generated solution
+ * files — the builder-authored counterpart to uploadGeneratedDir, keyed by the
+ * FormVersion's own id (not the parent Form's) since a publish clones a fresh draft
+ * version and each published version keeps its own independent output on disk. */
+export function formVersionGeneratedDir(subsidiaryId: string, formVersionId: string): string {
+  return path.join(sanitizeSubsidiaryId(subsidiaryId), "forms", formVersionId, "generated");
+}
+
+/** Writes every generated solution file to one FormVersion's generated/ directory —
+ * the builder-authored counterpart to saveGeneratedFiles above. Kept as its own
+ * function (not a shared helper parameterized by directory) since the two callers'
+ * naming/ownership concepts (upload vs. form version) are distinct enough that a
+ * shared signature would obscure which one a given call site means. */
+export async function saveFormVersionGeneratedFiles(
+  subsidiaryId: string,
+  formVersionId: string,
+  files: GeneratedFile[],
+): Promise<SavedGeneratedFile[]> {
+  const generatedDir = formVersionGeneratedDir(subsidiaryId, formVersionId);
+  const absoluteDir = absoluteFilePath(generatedDir);
+  await fsp.mkdir(absoluteDir, { recursive: true });
+
+  const saved: SavedGeneratedFile[] = [];
+  for (const file of files) {
+    const relativePath = path.join(generatedDir, file.path);
+    await fsp.writeFile(absoluteFilePath(relativePath), file.contents, "utf-8");
+    saved.push({ fileName: file.path, relativePath });
+  }
+  return saved;
+}

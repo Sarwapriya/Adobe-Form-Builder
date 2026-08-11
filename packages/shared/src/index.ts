@@ -22,6 +22,7 @@ export type {
   LocaleCode,
   LocaleInfo,
   LocalizedFieldMeta,
+  MobileNumberFieldMeta,
   PageCopy,
   PrivacyPolicyMeta,
   ProfileFieldSet,
@@ -31,6 +32,18 @@ export type {
 } from "./form/formDefinition";
 export { resolveLocalizedText } from "./form/formDefinition";
 export { formDefinitionSchema } from "./form/formDefinitionZod";
+
+// Schema-authored (builder) form validation — the non-Excel counterpart to validateWorkbook
+export { validateFormDefinition } from "./form/formDefinitionValidator";
+
+// Country/calling-code lookup — needed by a builder UI's own Mobile Number field
+// configuration (country picker); the Samsung-specific subsidiaryData.ts tables stay
+// internal, only this generic table is part of the public surface.
+export { CALLING_CODES, findCallingCodeEntry, type CallingCodeEntry } from "./form/callingCodes";
+
+// Locale/RTL helpers — needed by a builder UI's own locale setup, since it has no
+// Excel metadata row to derive LocaleInfo from automatically.
+export { isRtlLangSubtag, langDisplayName, RTL_LANGS } from "./form/langNames";
 
 // Codegen pipeline
 export { generateSolution } from "./codegen/generate";

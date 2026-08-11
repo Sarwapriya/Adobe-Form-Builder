@@ -49,13 +49,18 @@ export function renderPage(form: FormDefinition, config: BuilderConfig, variant:
 
   const profileFields = renderProfileFields(
     isOc
-      ? { callingCode: form.fields.callingCode, countryCode: form.fields.countryCode }
+      ? {
+          callingCode: form.fields.callingCode,
+          countryCode: form.fields.countryCode,
+          mobileNumber: form.fields.mobileNumber,
+        }
       : {
           email: form.fields.email,
           firstName: form.fields.firstName,
           lastName: form.fields.lastName,
           countryCode: form.fields.countryCode,
           callingCode: form.fields.callingCode,
+          mobileNumber: form.fields.mobileNumber,
         },
   );
 
@@ -87,7 +92,8 @@ export function renderPage(form: FormDefinition, config: BuilderConfig, variant:
     ? `<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>`
     : `<div class="form_bottom_group">${privacyBlock}${submitBlock}</div>`;
 
-  const topHeading = isOc ? '<h2><br class="b_850"><span></span></h2>' : "";
+  const topHeading = '<h2><br class="b_850"><span></span></h2>';
+  const topSubheading = '<p class="top_subheading"></p>';
 
   return `<!doctype html>
 <html lang="${langSubtag}" dir="${dir}">
@@ -103,7 +109,7 @@ ${analyticsScript}
 </head>
 <body>
 <div class="${isOc ? "container_oc" : "container"}">
-<div class="top_cont">${topHeading}<p><span class="star">*</span><span id="requiredFieldNote"></span></p></div>
+<div class="top_cont">${topHeading}${topSubheading}<p><span class="star">*</span><span id="requiredFieldNote"></span></p></div>
 <div class="main">
 <form action="" id="dataForm">
 <div class="form_top_group">${profileFields}</div>

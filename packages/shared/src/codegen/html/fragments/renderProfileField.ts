@@ -1,6 +1,9 @@
 import type { ProfileFieldSet } from "../../../form/formDefinition";
 
-type ProfileInputFields = Pick<ProfileFieldSet, "email" | "firstName" | "lastName" | "countryCode" | "callingCode">;
+type ProfileInputFields = Pick<
+  ProfileFieldSet,
+  "email" | "firstName" | "lastName" | "countryCode" | "callingCode" | "mobileNumber"
+>;
 
 /**
  * Renders the `.form_top_group` profile inputs, matching the reference's exact
@@ -65,7 +68,7 @@ export function renderProfileFields(fields: ProfileInputFields): string {
     parts.push(`<div class="form_text_group">${nameFields.join("")}</div>`);
   }
 
-  if (fields.callingCode) {
+  if (fields.callingCode || fields.mobileNumber) {
     parts.push(
       '<div class="form_text_bx select_bx">' +
         '<p class="form_label"></p>' +

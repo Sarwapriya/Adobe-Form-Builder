@@ -7,6 +7,8 @@ export declare const controlTypeSchema: z.ZodEnum<{
     radio: "radio";
     checkbox: "checkbox";
     text: "text";
+    shortText: "shortText";
+    dropdown: "dropdown";
 }>;
 export declare const localeInfoSchema: z.ZodObject<{
     code: z.ZodString;
@@ -35,6 +37,8 @@ export declare const questionDefinitionSchema: z.ZodObject<{
         radio: "radio";
         checkbox: "checkbox";
         text: "text";
+        shortText: "shortText";
+        dropdown: "dropdown";
     }>;
     headingByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
     subheadingByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
@@ -71,6 +75,12 @@ export declare const profileFieldSetSchema: z.ZodObject<{
         placeholderByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
         dropdownFirstEntryByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
     }, z.core.$strip>>;
+    mobileNumber: z.ZodOptional<z.ZodObject<{
+        labelByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+        placeholderByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+        countries: z.ZodArray<z.ZodString>;
+        dropdownFirstEntryByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+    }, z.core.$strip>>;
     privacyPolicy: z.ZodOptional<z.ZodObject<{
         textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
         linkUrlByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
@@ -90,6 +100,7 @@ export declare const profileFieldSetSchema: z.ZodObject<{
     redirectAfterSuccessUrlByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     headingBeforeBreakByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     headingAfterBreakByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    campaignSubheadingByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     requiredFieldNoteByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     extraFieldsByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodRecord<z.ZodString, z.ZodString>>>;
 }, z.core.$strip>;
@@ -107,6 +118,16 @@ export declare const validationMessageSetSchema: z.ZodObject<{
     modalMessage2: z.ZodOptional<z.ZodString>;
     modalButtonYes: z.ZodOptional<z.ZodString>;
     modalButtonNo: z.ZodOptional<z.ZodString>;
+    emailError: z.ZodOptional<z.ZodString>;
+    firstNameError: z.ZodOptional<z.ZodString>;
+    lastNameError: z.ZodOptional<z.ZodString>;
+    callingCodeError: z.ZodOptional<z.ZodString>;
+    mobileNumberType: z.ZodOptional<z.ZodString>;
+    mobileNumberLength: z.ZodOptional<z.ZodString>;
+    mobileNumberError: z.ZodOptional<z.ZodString>;
+    zipCodeError: z.ZodOptional<z.ZodString>;
+    reCaptchaRequired: z.ZodOptional<z.ZodString>;
+    apiError: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const formDefinitionSchema: z.ZodObject<{
     meta: z.ZodObject<{
@@ -132,6 +153,8 @@ export declare const formDefinitionSchema: z.ZodObject<{
             radio: "radio";
             checkbox: "checkbox";
             text: "text";
+            shortText: "shortText";
+            dropdown: "dropdown";
         }>;
         headingByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
         subheadingByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
@@ -168,6 +191,12 @@ export declare const formDefinitionSchema: z.ZodObject<{
             placeholderByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
             dropdownFirstEntryByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
         }, z.core.$strip>>;
+        mobileNumber: z.ZodOptional<z.ZodObject<{
+            labelByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+            placeholderByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+            countries: z.ZodArray<z.ZodString>;
+            dropdownFirstEntryByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+        }, z.core.$strip>>;
         privacyPolicy: z.ZodOptional<z.ZodObject<{
             textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
             linkUrlByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
@@ -187,6 +216,7 @@ export declare const formDefinitionSchema: z.ZodObject<{
         redirectAfterSuccessUrlByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
         headingBeforeBreakByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
         headingAfterBreakByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+        campaignSubheadingByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
         requiredFieldNoteByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
         extraFieldsByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodRecord<z.ZodString, z.ZodString>>>;
     }, z.core.$strip>;
@@ -198,6 +228,16 @@ export declare const formDefinitionSchema: z.ZodObject<{
         modalMessage2: z.ZodOptional<z.ZodString>;
         modalButtonYes: z.ZodOptional<z.ZodString>;
         modalButtonNo: z.ZodOptional<z.ZodString>;
+        emailError: z.ZodOptional<z.ZodString>;
+        firstNameError: z.ZodOptional<z.ZodString>;
+        lastNameError: z.ZodOptional<z.ZodString>;
+        callingCodeError: z.ZodOptional<z.ZodString>;
+        mobileNumberType: z.ZodOptional<z.ZodString>;
+        mobileNumberLength: z.ZodOptional<z.ZodString>;
+        mobileNumberError: z.ZodOptional<z.ZodString>;
+        zipCodeError: z.ZodOptional<z.ZodString>;
+        reCaptchaRequired: z.ZodOptional<z.ZodString>;
+        apiError: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
     pageError: z.ZodRecord<z.ZodString, z.ZodObject<{
         heading: z.ZodOptional<z.ZodString>;

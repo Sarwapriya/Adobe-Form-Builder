@@ -1,9 +1,53 @@
-import { resolveLocalizedText, type FormDefinition, type LocaleCode, type PageCopy } from "../../form/formDefinition";
-import { COUNTRY_SUBSIDIARY, SUBSIDIARY_DETAIL } from "../../form/subsidiaryData";
+import { findCallingCodeEntry } from "../../form/callingCodes";
+import { resolveLocalizedText, type FormDefinition, type LocaleCode, type LocaleInfo, type PageCopy } from "../../form/formDefinition";
+import { COUNTRY_SUBSIDIARY, SUBSIDIARY_DETAIL, type SubsidiaryCountryEntry } from "../../form/subsidiaryData";
 import { answerDomKey } from "../domIds";
 import type { FileNames } from "../fileNames";
 import type { BuilderConfig, GeneratedFile } from "../types";
 import { safeJsonForScript } from "./escaping";
+
+/** Reserved subsidiary key for a builder-authored `fields.mobileNumber` field — never
+ * a real Samsung subsidiary code (those are short org codes like "SGE"/"SEIL"). Lets
+ * the existing, unmodified reference-JS dropdown/validation population functions
+ * (`populateCountryCodeDropdown`/`populateCallingCodeDropdown`, keyed purely off
+ * `country_subsidiary`/`subsidiary_detail`) work against a builder's own configured
+ * country list instead of the real Samsung tables, with zero reference-JS changes. */
+const BUILDER_SUBSIDIARY_KEY = "BUILDER";
+
+/** Synthesizes one-off `country_subsidiary`/`subsidiary_detail` tables for a builder's
+ * `fields.mobileNumber.countries` list, from the generic `CALLING_CODES` table (see
+ * `callingCodes.ts`) rather than the real, org-specific Samsung tables in
+ * `subsidiaryData.ts`. Every one of the form's own locales also gets its country
+ * suffix mapped to the same key, even if that country isn't in `countries` — so a
+ * locale whose own country wasn't explicitly configured still resolves to a working
+ * (if not country-specific) dropdown instead of an undefined-subsidiary lookup. */
+function buildBuilderSubsidiaryTables(
+  countries: string[],
+  locales: LocaleInfo[],
+): { countrySubsidiary: Record<string, string>; subsidiaryDetail: Record<string, SubsidiaryCountryEntry[]> } {
+  const countrySubsidiary: Record<string, string> = {};
+  const entries: SubsidiaryCountryEntry[] = [];
+
+  for (const code of countries) {
+    const entry = findCallingCodeEntry(code);
+    if (!entry) continue;
+    countrySubsidiary[entry.countryCode] = BUILDER_SUBSIDIARY_KEY;
+    entries.push({
+      callingCode: entry.callingCode,
+      countryCode: entry.countryCode,
+      countryName: Object.fromEntries(locales.map((l) => [l.code, entry.countryName])),
+    });
+  }
+
+  for (const locale of locales) {
+    const localeCountry = locale.code.split("_")[1];
+    if (localeCountry && !countrySubsidiary[localeCountry]) {
+      countrySubsidiary[localeCountry] = BUILDER_SUBSIDIARY_KEY;
+    }
+  }
+
+  return { countrySubsidiary, subsidiaryDetail: { [BUILDER_SUBSIDIARY_KEY]: entries } };
+}
 
 /** Fallback validation messages when the workbook carries no "Error Messages" section.
  * The reference itself only ever ships one generic English set; these mirror that
@@ -59,18 +103,21 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
   for (const locale of localeCodes) {
     const f = form.fields;
 
+    const callingCodeField = f.callingCode ?? f.mobileNumber;
+
     fields[locale] = {
-      headingBeforeBreakFF: "",
-      headingAfterBreakFF: "",
+      headingBeforeBreakFF: f.headingBeforeBreakByLocale ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale) : "",
+      headingAfterBreakFF: f.headingAfterBreakByLocale ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale) : "",
       headingBeforeBreak: f.headingBeforeBreakByLocale ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale) : "",
       headingAfterBreak: f.headingAfterBreakByLocale ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale) : "",
+      campaignSubheading: f.campaignSubheadingByLocale ? resolveLocalizedText(f.campaignSubheadingByLocale, locale, defaultLocale) : "",
       requiredField: f.requiredFieldNoteByLocale ? resolveLocalizedText(f.requiredFieldNoteByLocale, locale, defaultLocale) : "",
       label: {
         countryCode: f.countryCode ? resolveLocalizedText(f.countryCode.labelByLocale, locale, defaultLocale) : "",
         email: f.email ? resolveLocalizedText(f.email.labelByLocale, locale, defaultLocale) : "",
         firstName: f.firstName ? resolveLocalizedText(f.firstName.labelByLocale, locale, defaultLocale) : "",
         lastName: f.lastName ? resolveLocalizedText(f.lastName.labelByLocale, locale, defaultLocale) : "",
-        callingCode: f.callingCode ? resolveLocalizedText(f.callingCode.labelByLocale, locale, defaultLocale) : "",
+        callingCode: callingCodeField ? resolveLocalizedText(callingCodeField.labelByLocale, locale, defaultLocale) : "",
         zipCode: "",
       },
       placeholder: {
@@ -80,8 +127,8 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
         mobileNumber: "",
         zipCode: "",
       },
-      callingCodeDropdownFirstEntry: f.callingCode
-        ? resolveLocalizedText(f.callingCode.dropdownFirstEntryByLocale, locale, defaultLocale)
+      callingCodeDropdownFirstEntry: callingCodeField
+        ? resolveLocalizedText(callingCodeField.dropdownFirstEntryByLocale, locale, defaultLocale)
         : "",
       privacyPolicy: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.textByLocale, locale, defaultLocale) : "",
       privacyPolicyLink: {
@@ -126,14 +173,18 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
     validationMessages[locale] = { ...DEFAULT_VALIDATION_MESSAGES, ...wbMessages };
   }
 
+  const builderSubsidiaryTables = form.fields.mobileNumber
+    ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales)
+    : null;
+
   const parts = [
     ["page_error", pageError],
     ["fields", fields],
     ["questions", questions],
     ["answers", answers],
     ["validation_messages", validationMessages],
-    ["country_subsidiary", COUNTRY_SUBSIDIARY],
-    ["subsidiary_detail", SUBSIDIARY_DETAIL],
+    ["country_subsidiary", builderSubsidiaryTables?.countrySubsidiary ?? COUNTRY_SUBSIDIARY],
+    ["subsidiary_detail", builderSubsidiaryTables?.subsidiaryDetail ?? SUBSIDIARY_DETAIL],
     [
       "param",
       {

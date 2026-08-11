@@ -19,10 +19,16 @@ export function getAccessToken(): string | null {
 
 export class ApiError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** The full parsed JSON error body, when the response had one beyond a plain
+   * `{ error: string }` — e.g. `{ error, validation }` from the form-builder
+   * publish endpoint's 422, or `{ error, details }` from validateBody's 400.
+   * Undefined when the body was empty/unparseable or carried nothing extra. */
+  readonly body: unknown;
+  constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -114,14 +120,14 @@ function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
-async function extractErrorMessage(response: Response): Promise<string> {
+async function extractErrorBody(response: Response): Promise<{ message: string; body: unknown }> {
   try {
     const data = await response.json();
-    if (data && typeof data.error === "string") return data.error;
+    if (data && typeof data.error === "string") return { message: data.error, body: data };
   } catch {
     // Response body wasn't JSON — fall through to the generic message.
   }
-  return `Request failed with status ${response.status}`;
+  return { message: `Request failed with status ${response.status}`, body: undefined };
 }
 
 /**
@@ -141,7 +147,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   if (!response.ok) {
-    throw new ApiError(response.status, await extractErrorMessage(response));
+    const { message, body } = await extractErrorBody(response);
+    throw new ApiError(response.status, message, body);
   }
 
   if (options.expectBlob) {

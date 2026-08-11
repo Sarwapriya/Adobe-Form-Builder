@@ -7,7 +7,10 @@
 export type LocaleCode = string;
 /** The language subtag portion of a LocaleCode, e.g. "en", "he", "ar". */
 export type LangSubtag = string;
-export type ControlType = "radio" | "checkbox" | "text";
+/** "text" is historical naming — it renders as a multi-line `<textarea>`, kept as-is
+ * for Excel-sourced-form backward compatibility. "shortText" (single-line `<input>`)
+ * and "dropdown" (`<select>`) are builder-only additions. */
+export type ControlType = "radio" | "checkbox" | "text" | "shortText" | "dropdown";
 export interface LocaleInfo {
     code: LocaleCode;
     langSubtag: LangSubtag;
@@ -48,6 +51,16 @@ export interface LocalizedFieldMeta {
 export interface CallingCodeFieldMeta extends LocalizedFieldMeta {
     dropdownFirstEntryByLocale: Record<LocaleCode, string>;
 }
+/** A first-class, builder-only mobile-number field — Excel-sourced forms instead use
+ * the separate `countryCode`/`callingCode` fields driven by the real Samsung subsidiary
+ * tables. `countries` is a non-empty list of ISO-3166 alpha-2 codes, each required to be
+ * resolvable via `findCallingCodeEntry` at publish time; it drives both the calling-code
+ * dropdown and the runtime mobile-number validation via a synthesized "BUILDER"
+ * subsidiary table (see buildDataJs.ts) rather than the real Samsung tables. */
+export interface MobileNumberFieldMeta extends LocalizedFieldMeta {
+    countries: string[];
+    dropdownFirstEntryByLocale: Record<LocaleCode, string>;
+}
 export interface PrivacyPolicyMeta {
     /** Excel provides the full paragraph text plus a link URL, but no separate
      * "link text" translation — codegen renders the URL against generic anchor text. */
@@ -68,6 +81,9 @@ export interface ProfileFieldSet {
     lastName?: LocalizedFieldMeta;
     countryCode?: LocalizedFieldMeta;
     callingCode?: CallingCodeFieldMeta;
+    /** Builder-only alternative to callingCode — see MobileNumberFieldMeta's own doc
+     * comment. Never set on an Excel-sourced form. */
+    mobileNumber?: MobileNumberFieldMeta;
     privacyPolicy?: PrivacyPolicyMeta;
     marketingOptin?: LocalizedFieldMeta;
     termsAndConditions?: TermsAndConditionsMeta;
@@ -77,6 +93,9 @@ export interface ProfileFieldSet {
     redirectAfterSuccessUrlByLocale?: Record<LocaleCode, string>;
     headingBeforeBreakByLocale?: Record<LocaleCode, string>;
     headingAfterBreakByLocale?: Record<LocaleCode, string>;
+    /** Builder-only campaign subheading, rendered under the page heading. Never set on
+     * an Excel-sourced form (no equivalent Excel row exists). */
+    campaignSubheadingByLocale?: Record<LocaleCode, string>;
     requiredFieldNoteByLocale?: Record<LocaleCode, string>;
     /** Passthrough for flat-field-key rows recognized in the sheet (non-blank column A)
      * that don't map to a dedicated field above (e.g. the source's "Rafle Draw" key) —

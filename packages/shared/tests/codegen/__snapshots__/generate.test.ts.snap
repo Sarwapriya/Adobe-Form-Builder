@@ -26,6 +26,7 @@ const fields = {
     "headingAfterBreakFF": "",
     "headingBeforeBreak": "",
     "headingAfterBreak": "",
+    "campaignSubheading": "",
     "requiredField": "",
     "label": {
       "countryCode": "",
@@ -65,6 +66,7 @@ const fields = {
     "headingAfterBreakFF": "",
     "headingBeforeBreak": "",
     "headingAfterBreak": "",
+    "campaignSubheading": "",
     "requiredField": "",
     "label": {
       "countryCode": "",
@@ -1020,7 +1022,7 @@ exports[`generateSolution > matches the reference fixture snapshot (ff.html) 1`]
 </head>
 <body>
 <div class="container">
-<div class="top_cont"><p><span class="star">*</span><span id="requiredFieldNote"></span></p></div>
+<div class="top_cont"><h2><br class="b_850"><span></span></h2><p class="top_subheading"></p><p><span class="star">*</span><span id="requiredFieldNote"></span></p></div>
 <div class="main">
 <form action="" id="dataForm">
 <div class="form_top_group"><div class="form_text_bx"><p class="form_label"><span></span><span class="star">*</span></p><div class="input_wrap"><input autocapitalize="none" autocomplete="off" autocorrect="off" data-parsley-trigger="blur" data-parsley-error-message="Enter a valid Email address" data-parsley-pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" data-parsley-required="true" data-parsley-type="email" data-pt-api="y" id="email" maxlength="128" name="email" placeholder="" spellcheck="false" type="email"><div class="btn_clear"></div></div></div></div>
@@ -1084,14 +1086,7 @@ fo"
 `;
 
 exports[`generateSolution > matches the reference fixture snapshot (style.css head/tail) 2`] = `
-" free of
-   inline styles, so the equivalent rules live here instead) --- */
-#hrTy,
-#hrErr {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+";
   min-height: 100vh;
   margin: 0 auto;
   max-width: 480px;
@@ -1120,6 +1115,16 @@ exports[`generateSolution > matches the reference fixture snapshot (style.css he
 #hrTy a,
 #hrErr a {
   color: #007bff;
+}
+
+
+/* --- Campaign subheading (not present in the reference stylesheet) --- */
+.top_cont .top_subheading {
+  margin: 4px 0 12px;
+}
+
+.top_cont .top_subheading:empty {
+  display: none;
 }
 "
 `;

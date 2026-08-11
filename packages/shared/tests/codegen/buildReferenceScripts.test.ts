@@ -89,7 +89,7 @@ describe("generated bundle (ff.html + data file + FF js) wired together", () => 
     expect(document.querySelector("#btnSubmit")?.textContent).toBe("Submit");
   });
 
-  it("updates <html lang> from ?lang=, but leaves dir alone (the reference has no RTL handling at all)", async () => {
+  it("updates <html lang> AND <html dir> at runtime from ?lang=, based on the reference's own hardcoded RTL-language list", async () => {
     const originalLocation = window.location.href;
     window.history.pushState({}, "", "/ff.html?lang=ar_AE");
     try {
@@ -103,9 +103,12 @@ describe("generated bundle (ff.html + data file + FF js) wired together", () => 
       await runGeneratedBundle(html.contents, dataJs.contents, ffJs.contents);
 
       expect(document.documentElement.getAttribute("lang")).toBe("ar");
-      // dir was set once at generation time from the form's default locale (en_GB,
-      // LTR) — the byte-identical reference script never touches it at runtime.
-      expect(document.documentElement.getAttribute("dir")).toBe("ltr");
+      // The reference script re-derives dir at runtime from the *viewed* locale's
+      // language subtag (against its own hardcoded rtlLangs list), overriding
+      // whatever pageTemplate.ts set at generation time from the form's default
+      // locale — so a multi-locale form viewed with ?lang=ar_AE renders RTL even
+      // when its default locale is LTR.
+      expect(document.documentElement.getAttribute("dir")).toBe("rtl");
       expect(document.querySelector("#Q1 .form_check_title h3")?.textContent).toContain("أنا أستخدم حاليًا");
     } finally {
       window.history.pushState({}, "", originalLocation);

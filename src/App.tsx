@@ -13,6 +13,8 @@ import { ConfigurationPage } from "./pages/ConfigurationPage.tsx";
 import { UserManagementPage } from "./pages/UserManagementPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { UploadHistoryPage } from "./pages/UploadHistoryPage.tsx";
+import { FormBuilderListPage } from "./pages/FormBuilderListPage.tsx";
+import { FormBuilderEditorPage } from "./pages/FormBuilderEditorPage.tsx";
 
 export default function App() {
   const silentRefresh = useAuthStore((s) => s.silentRefresh);
@@ -42,6 +44,8 @@ export default function App() {
                 <Route path="admin/history" element={<AdminHistoryPage />} />
                 <Route path="admin/configuration" element={<ConfigurationPage />} />
                 <Route path="admin/users" element={<UserManagementPage />} />
+                <Route path="admin/form-builder" element={<FormBuilderListPage />} />
+                <Route path="admin/form-builder/:id" element={<FormBuilderEditorPage />} />
               </Route>
             </Route>
           </Route>

@@ -22,6 +22,7 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import HistoryIcon from "@mui/icons-material/History";
 import SettingsIcon from "@mui/icons-material/Settings";
 import PeopleIcon from "@mui/icons-material/People";
+import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
@@ -68,6 +69,7 @@ export function AppLayout() {
           { to: "/admin/history", label: "All History", icon: <HistoryIcon />, exact: true },
           { to: "/admin/configuration", label: "Configuration", icon: <SettingsIcon />, exact: true },
           { to: "/admin/users", label: "User Management", icon: <PeopleIcon />, exact: true },
+          { to: "/admin/form-builder", label: "Form Builder", icon: <DesignServicesIcon />, exact: false },
         ]
       : []),
   ];

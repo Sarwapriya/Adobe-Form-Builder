@@ -136,6 +136,26 @@ const RTL_OVERRIDES = `
 }
 `;
 
+/**
+ * `.top_subheading` (the builder's campaign-subheading field, see pageTemplate.ts) is
+ * new markup with no reference-CSS counterpart — it otherwise inherits `.top_cont p`'s
+ * existing font rules (already matches by tag+ancestor), this just adds the spacing
+ * needed to sit between the heading and the required-field note.
+ */
+const SUBHEADING_OVERRIDES = `
+/* --- Campaign subheading (not present in the reference stylesheet) --- */
+.top_cont .top_subheading {
+  margin: 4px 0 12px;
+}
+
+.top_cont .top_subheading:empty {
+  display: none;
+}
+`;
+
 export function buildStyleCss(fileNames: FileNames): GeneratedFile {
-  return { path: fileNames.css, contents: `${referenceCss}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}` };
+  return {
+    path: fileNames.css,
+    contents: `${referenceCss}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}\n${SUBHEADING_OVERRIDES}`,
+  };
 }

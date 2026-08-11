@@ -73,8 +73,11 @@ $(document).ready(function ()
         // Heading
         $("div.top_cont h2").html(fields[language]["headingBeforeBreak"] + $("div.top_cont h2").html() + fields[language]["headingAfterBreak"]);
 
-        // Subheading
-        $("div.top_cont p").html($("div.top_cont p").html() + fields[language]["requiredField"]);
+        // Campaign Subheading
+        $("div.top_cont p.top_subheading").html(fields[language]["campaignSubheading"]);
+
+        // Required Field Note
+        $("div.top_cont p").not(".top_subheading").html($("div.top_cont p").not(".top_subheading").html() + fields[language]["requiredField"]);
 
         // Profile Field(s)
         $("div.form_top_group").find("div.form_text_bx").each(function()
@@ -143,8 +146,10 @@ $(document).ready(function ()
 
             $(this).find("div.form_check_title p").html(questions[language][questionId]["subheading"]);
 
-            // Answer
-            $(this).find("input[name='" + questionId + "']").each(function()
+            // Answer (radio / checkbox only — a shortText input shares the same
+            // "name" attribute but has no <label> sibling to populate, and a
+            // dropdown's <option>s are populated separately below)
+            $(this).find("input[name='" + questionId + "'][type='radio'], input[name='" + questionId + "'][type='checkbox']").each(function()
             {
                 var input = $(this);
 
@@ -169,6 +174,17 @@ $(document).ready(function ()
 
                     label.children("img").attr("alt", answers[language][questionId][input.val()]["imageAlt"]);
                 }
+            });
+
+            // Answer (dropdown options)
+            $(this).find("select").each(function()
+            {
+                var select = $(this);
+
+                $.each(answers[language][questionId], function(val, text)
+                {
+                    select.append($("<option></option>").val(val).html(text));
+                });
             });
         });
     }
@@ -262,9 +278,17 @@ $(document).ready(function ()
 
             var textarea = $(this).find("textarea");
 
+            var select = $(this).find("select");
+
+            var shortTextInput = $(this).find("input[type='text']");
+
             var hasAnswer = (textarea.length > 0)
                 ? ($.trim(textarea.val()) !== "")
-                : ($(this).find("input[type='radio']:checked, input[type='checkbox']:checked").length > 0);
+                : (select.length > 0)
+                    ? (select.val() !== "")
+                    : (shortTextInput.length > 0)
+                        ? ($.trim(shortTextInput.val()) !== "")
+                        : ($(this).find("input[type='radio']:checked, input[type='checkbox']:checked").length > 0);
 
             if (!hasAnswer)
             {
@@ -441,7 +465,9 @@ $(document).ready(function ()
         // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any required question's answer(s)
         $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);
 
-        $("div.form_check_group > div.form_check_module").find("textarea").on("change keyup", enableDisableSubmit);
+        $("div.form_check_group > div.form_check_module").find("textarea, input[type='text']").on("change keyup", enableDisableSubmit);
+
+        $("div.form_check_group > div.form_check_module").find("select").on("change", enableDisableSubmit);
         // Floating submit button (outside form) — trigger Parsley validation on click
         // $("#btnSubmit").on("click", function ()
         // {

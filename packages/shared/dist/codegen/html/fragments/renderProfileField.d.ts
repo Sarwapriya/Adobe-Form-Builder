@@ -1,5 +1,5 @@
 import type { ProfileFieldSet } from "../../../form/formDefinition";
-type ProfileInputFields = Pick<ProfileFieldSet, "email" | "firstName" | "lastName" | "countryCode" | "callingCode">;
+type ProfileInputFields = Pick<ProfileFieldSet, "email" | "firstName" | "lastName" | "countryCode" | "callingCode" | "mobileNumber">;
 /**
  * Renders the `.form_top_group` profile inputs, matching the reference's exact
  * attributes field-for-field (autocapitalize/autocorrect hints, maxlength, Parsley

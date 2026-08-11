@@ -582,7 +582,7 @@ function resolveLocalizedText(map, locale, defaultLocale) {
 // src/form/formDefinitionZod.ts
 import { z } from "zod";
 var localeTextMap = z.record(z.string(), z.string());
-var controlTypeSchema = z.enum(["radio", "checkbox", "text"]);
+var controlTypeSchema = z.enum(["radio", "checkbox", "text", "shortText", "dropdown"]);
 var localeInfoSchema = z.object({
   code: z.string(),
   langSubtag: z.string(),
@@ -612,6 +612,10 @@ var localizedFieldMetaSchema = z.object({
 var callingCodeFieldMetaSchema = localizedFieldMetaSchema.extend({
   dropdownFirstEntryByLocale: localeTextMap
 });
+var mobileNumberFieldMetaSchema = localizedFieldMetaSchema.extend({
+  countries: z.array(z.string()),
+  dropdownFirstEntryByLocale: localeTextMap
+});
 var privacyPolicyMetaSchema = z.object({
   textByLocale: localeTextMap,
   linkUrlByLocale: localeTextMap
@@ -626,6 +630,7 @@ var profileFieldSetSchema = z.object({
   lastName: localizedFieldMetaSchema.optional(),
   countryCode: localizedFieldMetaSchema.optional(),
   callingCode: callingCodeFieldMetaSchema.optional(),
+  mobileNumber: mobileNumberFieldMetaSchema.optional(),
   privacyPolicy: privacyPolicyMetaSchema.optional(),
   marketingOptin: localizedFieldMetaSchema.optional(),
   termsAndConditions: termsAndConditionsMetaSchema.optional(),
@@ -633,6 +638,7 @@ var profileFieldSetSchema = z.object({
   redirectAfterSuccessUrlByLocale: localeTextMap.optional(),
   headingBeforeBreakByLocale: localeTextMap.optional(),
   headingAfterBreakByLocale: localeTextMap.optional(),
+  campaignSubheadingByLocale: localeTextMap.optional(),
   requiredFieldNoteByLocale: localeTextMap.optional(),
   extraFieldsByLocale: z.record(z.string(), localeTextMap).optional()
 });
@@ -649,7 +655,17 @@ var validationMessageSetSchema = z.object({
   modalMessage1: z.string().optional(),
   modalMessage2: z.string().optional(),
   modalButtonYes: z.string().optional(),
-  modalButtonNo: z.string().optional()
+  modalButtonNo: z.string().optional(),
+  emailError: z.string().optional(),
+  firstNameError: z.string().optional(),
+  lastNameError: z.string().optional(),
+  callingCodeError: z.string().optional(),
+  mobileNumberType: z.string().optional(),
+  mobileNumberLength: z.string().optional(),
+  mobileNumberError: z.string().optional(),
+  zipCodeError: z.string().optional(),
+  reCaptchaRequired: z.string().optional(),
+  apiError: z.string().optional()
 });
 var formDefinitionSchema = z.object({
   meta: z.object({
@@ -664,6 +680,132 @@ var formDefinitionSchema = z.object({
   pageError: z.record(z.string(), pageCopySchema),
   thankYou: z.record(z.string(), pageCopySchema)
 });
+
+// src/form/callingCodes.ts
+var CALLING_CODES = [
+  { countryCode: "AE", callingCode: "971", countryName: "United Arab Emirates", mobileDigits: 9 },
+  { countryCode: "SA", callingCode: "966", countryName: "Saudi Arabia", mobileDigits: 9 },
+  { countryCode: "EG", callingCode: "20", countryName: "Egypt", mobileDigits: 10 },
+  { countryCode: "IL", callingCode: "972", countryName: "Israel", mobileDigits: 9 },
+  { countryCode: "PS", callingCode: "970", countryName: "Palestine", mobileDigits: 9 },
+  { countryCode: "TR", callingCode: "90", countryName: "Turkey", mobileDigits: 10 },
+  { countryCode: "JO", callingCode: "962", countryName: "Jordan", mobileDigits: 9 },
+  { countryCode: "LB", callingCode: "961", countryName: "Lebanon", mobileDigits: 8 },
+  { countryCode: "IQ", callingCode: "964", countryName: "Iraq", mobileDigits: 10 },
+  { countryCode: "KW", callingCode: "965", countryName: "Kuwait", mobileDigits: 8 },
+  { countryCode: "QA", callingCode: "974", countryName: "Qatar", mobileDigits: 8 },
+  { countryCode: "BH", callingCode: "973", countryName: "Bahrain", mobileDigits: 8 },
+  { countryCode: "OM", callingCode: "968", countryName: "Oman", mobileDigits: 8 },
+  { countryCode: "GB", callingCode: "44", countryName: "United Kingdom", mobileDigits: 10 },
+  { countryCode: "US", callingCode: "1", countryName: "United States", mobileDigits: 10 },
+  { countryCode: "FR", callingCode: "33", countryName: "France", mobileDigits: 9 },
+  { countryCode: "DE", callingCode: "49", countryName: "Germany", mobileDigits: 10 },
+  { countryCode: "IN", callingCode: "91", countryName: "India", mobileDigits: 10 },
+  { countryCode: "PK", callingCode: "92", countryName: "Pakistan", mobileDigits: 10 }
+];
+function findCallingCodeEntry(countryCode) {
+  return CALLING_CODES.find((c) => c.countryCode === countryCode.toUpperCase());
+}
+
+// src/form/formDefinitionValidator.ts
+var LABEL = "Form Builder";
+function validateFormDefinition(form) {
+  const errors = [];
+  const warnings = [];
+  if (form.questions.length === 0) {
+    errors.push(err("Add at least one question before publishing."));
+  }
+  if (form.locales.length === 0) {
+    errors.push(err("The form has no locales configured."));
+  } else if (!form.locales.some((l) => l.code === form.meta.defaultLocale)) {
+    errors.push(err(`Default locale "${form.meta.defaultLocale}" is not one of the form's configured locales.`));
+  }
+  checkDuplicates(
+    form.locales.map((l) => l.code),
+    (code) => `Locale "${code}" is configured more than once.`,
+    errors
+  );
+  if (!form.fields.submitButton?.labelByLocale?.[form.meta.defaultLocale]) {
+    errors.push(err("The submit button has no label for the default locale."));
+  }
+  checkDuplicates(
+    form.questions.map((q) => q.id),
+    (id) => `Question id "${id}" is used more than once.`,
+    errors
+  );
+  checkSequential(
+    form.questions.map((q) => q.order),
+    "Question",
+    errors
+  );
+  for (const q of form.questions) {
+    checkQuestion(q, errors, warnings);
+  }
+  if (form.fields.mobileNumber) {
+    const countries = form.fields.mobileNumber.countries;
+    if (countries.length === 0) {
+      errors.push(err("The Mobile Number field has no countries configured."));
+    }
+    for (const code of countries) {
+      if (!findCallingCodeEntry(code)) {
+        errors.push(err(`The Mobile Number field references an unrecognized country code "${code}".`));
+      }
+    }
+  }
+  if (form.fields.privacyPolicy && !form.fields.privacyPolicy.linkUrlByLocale?.[form.meta.defaultLocale]) {
+    warnings.push(warn("The Privacy Policy field has no link URL for the default locale."));
+  }
+  return { errors, warnings };
+}
+function checkQuestion(q, errors, warnings) {
+  checkDuplicates(
+    q.answers.map((a) => a.id),
+    (id) => `Question ${q.id}: answer id "${id}" is used more than once.`,
+    errors
+  );
+  checkSequential(
+    q.answers.map((a) => a.order),
+    `Question ${q.id}'s answers`,
+    errors
+  );
+  const isChoiceType = q.controlType === "radio" || q.controlType === "checkbox" || q.controlType === "dropdown";
+  if (isChoiceType && q.answers.length === 0) {
+    errors.push(err(`Question ${q.id} (${q.controlType}) has no options.`));
+  }
+  if (q.controlType === "radio" && q.answers.length === 1) {
+    warnings.push(warn(`Question ${q.id} is a radio question with only one option.`));
+  }
+  if ((q.controlType === "text" || q.controlType === "shortText") && q.answers.length > 0) {
+    warnings.push(warn(`Question ${q.id} is a free-text question but has options configured \u2014 they will be ignored.`));
+  }
+  if (!q.headingByLocale || Object.keys(q.headingByLocale).length === 0) {
+    warnings.push(warn(`Question ${q.id} has no heading text.`));
+  }
+}
+function checkDuplicates(values, message, errors) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const value of values) {
+    if (seen.has(value)) {
+      errors.push(err(message(value)));
+    }
+    seen.add(value);
+  }
+}
+function checkSequential(orders, label, errors) {
+  if (orders.length === 0) return;
+  const sorted = [...orders].sort((a, b) => a - b);
+  const expected = sorted.map((_, i) => i + 1);
+  const isSequential = sorted.every((value, i) => value === expected[i]);
+  if (!isSequential) {
+    errors.push(err(`${label} order values must be sequential starting at 1 (found: ${sorted.join(", ")}).`));
+  }
+}
+function err(message) {
+  return { severity: "error", sheet: LABEL, message };
+}
+function warn(message) {
+  return { severity: "warning", sheet: LABEL, message };
+}
 
 // src/codegen/css/referenceCssContent.ts
 var REFERENCE_CSS = `a,
@@ -2807,10 +2949,24 @@ var RTL_OVERRIDES = `
   color: #007bff;
 }
 `;
+var SUBHEADING_OVERRIDES = `
+/* --- Campaign subheading (not present in the reference stylesheet) --- */
+.top_cont .top_subheading {
+  margin: 4px 0 12px;
+}
+
+.top_cont .top_subheading:empty {
+  display: none;
+}
+`;
 function buildStyleCss(fileNames) {
-  return { path: fileNames.css, contents: `${REFERENCE_CSS}
+  return {
+    path: fileNames.css,
+    contents: `${REFERENCE_CSS}
 ${FONT_OVERRIDES}
-${RTL_OVERRIDES}` };
+${RTL_OVERRIDES}
+${SUBHEADING_OVERRIDES}`
+  };
 }
 
 // src/codegen/fileNames.ts
@@ -2867,7 +3023,7 @@ function renderProfileFields(fields) {
     }
     parts.push(`<div class="form_text_group">${nameFields.join("")}</div>`);
   }
-  if (fields.callingCode) {
+  if (fields.callingCode || fields.mobileNumber) {
     parts.push(
       '<div class="form_text_bx select_bx"><p class="form_label"></p><div class="select_wrap"><select autocomplete="off" data-parsley-error-message="Select a value" data-parsley-required-if="#mobileNumber" data-parsley-validate-if-empty="true" data-pt-api="y" id="callingCode" name="callingCode"></select><div class="input_wrap"><input autocapitalize="none" autocomplete="off" autocorrect="off" data-parsley-trigger="blur" data-parsley-mobile-number-by-country="true" data-parsley-mobile-number-by-country-message="Enter a valid mobile number" data-parsley-type-message="Digits are allowed" data-parsley-type="digits" data-pt-api="y" id="mobileNumber" maxlength="10" name="mobileNumber" placeholder="" spellcheck="false" type="text"><div class="btn_clear"></div></div></div>'
     );
@@ -2900,6 +3056,12 @@ function renderQuestionModule(q) {
   if (q.controlType === "text") {
     return `<div class="form_check_module" id="${escapeHtml(q.id)}">` + titleBlock + `<div class="form_text_bx"><div class="input_wrap"><textarea id="${escapeHtml(q.id)}" name="${escapeHtml(q.id)}" rows="3" data-pt-api="y"></textarea></div></div></div>`;
   }
+  if (q.controlType === "shortText") {
+    return `<div class="form_check_module" id="${escapeHtml(q.id)}">` + titleBlock + `<div class="form_text_bx"><div class="input_wrap"><input type="text" id="${escapeHtml(q.id)}" name="${escapeHtml(q.id)}" data-pt-api="y"><div class="btn_clear"></div></div></div></div>`;
+  }
+  if (q.controlType === "dropdown") {
+    return `<div class="form_check_module" id="${escapeHtml(q.id)}">` + titleBlock + `<div class="form_text_bx select_bx"><div class="select_wrap"><select id="${escapeHtml(q.id)}" name="${escapeHtml(q.id)}" data-pt-api="y"><option value=""></option></select></div></div></div>`;
+  }
   const inputType = q.controlType === "checkbox" ? "checkbox" : "radio";
   const isRadioWithFewAnswers = q.controlType === "radio" && q.answers.length <= 3;
   const groupClass = isRadioWithFewAnswers ? "radio_group" : "form_check_list_wrap";
@@ -2929,19 +3091,25 @@ function renderPage(form, config, variant, fileNames) {
   const langSubtag = defaultLocaleInfo?.langSubtag ?? "en";
   const dir = defaultLocaleInfo?.isRtl ? "rtl" : "ltr";
   const profileFields = renderProfileFields(
-    isOc ? { callingCode: form.fields.callingCode, countryCode: form.fields.countryCode } : {
+    isOc ? {
+      callingCode: form.fields.callingCode,
+      countryCode: form.fields.countryCode,
+      mobileNumber: form.fields.mobileNumber
+    } : {
       email: form.fields.email,
       firstName: form.fields.firstName,
       lastName: form.fields.lastName,
       countryCode: form.fields.countryCode,
-      callingCode: form.fields.callingCode
+      callingCode: form.fields.callingCode,
+      mobileNumber: form.fields.mobileNumber
     }
   );
   const questionsHtml = form.questions.map(renderQuestionModule).join("");
   const privacyBlock = !isOc && form.fields.privacyPolicy ? '<div class="form_bottom_check_group"><div class="form_bottom_check"><input id="privacyPolicy" name="privacyPolicy" type="checkbox" data-pt-api="y"><label for="privacyPolicy"><span></span><br><a href="#" target="_blank" id="privacyPolicyLink"><span></span></a><span class="star">*</span></label></div>' + (form.fields.marketingOptin ? '<div class="form_bottom_check form_bottom_check2"><input id="subscribe" name="subscribe" type="checkbox" data-pt-api="y"><label for="subscribe"><span></span></label></div>' : "") + "</div>" : "";
   const submitBlock = '<button class="disabled" disabled id="btnSubmit"></button><div class="error" id="apiError" style="display:none"></div>' + termsLink(isOc ? "form_bottom_terms" : "");
   const bottomGroup = isOc ? `<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>` : `<div class="form_bottom_group">${privacyBlock}${submitBlock}</div>`;
-  const topHeading = isOc ? '<h2><br class="b_850"><span></span></h2>' : "";
+  const topHeading = '<h2><br class="b_850"><span></span></h2>';
+  const topSubheading = '<p class="top_subheading"></p>';
   return `<!doctype html>
 <html lang="${langSubtag}" dir="${dir}">
 <head>
@@ -2956,7 +3124,7 @@ ${analyticsScript}
 </head>
 <body>
 <div class="${isOc ? "container_oc" : "container"}">
-<div class="top_cont">${topHeading}<p><span class="star">*</span><span id="requiredFieldNote"></span></p></div>
+<div class="top_cont">${topHeading}${topSubheading}<p><span class="star">*</span><span id="requiredFieldNote"></span></p></div>
 <div class="main">
 <form action="" id="dataForm">
 <div class="form_top_group">${profileFields}</div>
@@ -3747,6 +3915,28 @@ var SUBSIDIARY_DETAIL = {
 var SUBSIDIARY_CODES = Object.keys(SUBSIDIARY_DETAIL).sort();
 
 // src/codegen/js/buildDataJs.ts
+var BUILDER_SUBSIDIARY_KEY = "BUILDER";
+function buildBuilderSubsidiaryTables(countries, locales) {
+  const countrySubsidiary = {};
+  const entries = [];
+  for (const code of countries) {
+    const entry = findCallingCodeEntry(code);
+    if (!entry) continue;
+    countrySubsidiary[entry.countryCode] = BUILDER_SUBSIDIARY_KEY;
+    entries.push({
+      callingCode: entry.callingCode,
+      countryCode: entry.countryCode,
+      countryName: Object.fromEntries(locales.map((l) => [l.code, entry.countryName]))
+    });
+  }
+  for (const locale of locales) {
+    const localeCountry = locale.code.split("_")[1];
+    if (localeCountry && !countrySubsidiary[localeCountry]) {
+      countrySubsidiary[localeCountry] = BUILDER_SUBSIDIARY_KEY;
+    }
+  }
+  return { countrySubsidiary, subsidiaryDetail: { [BUILDER_SUBSIDIARY_KEY]: entries } };
+}
 var DEFAULT_VALIDATION_MESSAGES = {
   emailError: "Please enter a valid Email address",
   firstNameError: "Only letters are allowed",
@@ -3783,18 +3973,20 @@ function buildDataJs(form, config, fileNames) {
   const validationMessages = {};
   for (const locale of localeCodes) {
     const f = form.fields;
+    const callingCodeField = f.callingCode ?? f.mobileNumber;
     fields[locale] = {
-      headingBeforeBreakFF: "",
-      headingAfterBreakFF: "",
+      headingBeforeBreakFF: f.headingBeforeBreakByLocale ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale) : "",
+      headingAfterBreakFF: f.headingAfterBreakByLocale ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale) : "",
       headingBeforeBreak: f.headingBeforeBreakByLocale ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale) : "",
       headingAfterBreak: f.headingAfterBreakByLocale ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale) : "",
+      campaignSubheading: f.campaignSubheadingByLocale ? resolveLocalizedText(f.campaignSubheadingByLocale, locale, defaultLocale) : "",
       requiredField: f.requiredFieldNoteByLocale ? resolveLocalizedText(f.requiredFieldNoteByLocale, locale, defaultLocale) : "",
       label: {
         countryCode: f.countryCode ? resolveLocalizedText(f.countryCode.labelByLocale, locale, defaultLocale) : "",
         email: f.email ? resolveLocalizedText(f.email.labelByLocale, locale, defaultLocale) : "",
         firstName: f.firstName ? resolveLocalizedText(f.firstName.labelByLocale, locale, defaultLocale) : "",
         lastName: f.lastName ? resolveLocalizedText(f.lastName.labelByLocale, locale, defaultLocale) : "",
-        callingCode: f.callingCode ? resolveLocalizedText(f.callingCode.labelByLocale, locale, defaultLocale) : "",
+        callingCode: callingCodeField ? resolveLocalizedText(callingCodeField.labelByLocale, locale, defaultLocale) : "",
         zipCode: ""
       },
       placeholder: {
@@ -3804,7 +3996,7 @@ function buildDataJs(form, config, fileNames) {
         mobileNumber: "",
         zipCode: ""
       },
-      callingCodeDropdownFirstEntry: f.callingCode ? resolveLocalizedText(f.callingCode.dropdownFirstEntryByLocale, locale, defaultLocale) : "",
+      callingCodeDropdownFirstEntry: callingCodeField ? resolveLocalizedText(callingCodeField.dropdownFirstEntryByLocale, locale, defaultLocale) : "",
       privacyPolicy: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.textByLocale, locale, defaultLocale) : "",
       privacyPolicyLink: {
         label: "",
@@ -3837,14 +4029,15 @@ function buildDataJs(form, config, fileNames) {
     const wbMessages = form.validationMessages[locale] ?? {};
     validationMessages[locale] = { ...DEFAULT_VALIDATION_MESSAGES, ...wbMessages };
   }
+  const builderSubsidiaryTables = form.fields.mobileNumber ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales) : null;
   const parts = [
     ["page_error", pageError],
     ["fields", fields],
     ["questions", questions],
     ["answers", answers],
     ["validation_messages", validationMessages],
-    ["country_subsidiary", COUNTRY_SUBSIDIARY],
-    ["subsidiary_detail", SUBSIDIARY_DETAIL],
+    ["country_subsidiary", builderSubsidiaryTables?.countrySubsidiary ?? COUNTRY_SUBSIDIARY],
+    ["subsidiary_detail", builderSubsidiaryTables?.subsidiaryDetail ?? SUBSIDIARY_DETAIL],
     [
       "param",
       {
@@ -3866,940 +4059,966 @@ function buildDataJs(form, config, fileNames) {
 }
 
 // src/codegen/js/referenceFfJsContent.ts
-var REFERENCE_FF_JS = `/*
-Function to hide reCaptcha verification error
-function hideCaptchaVerificationError()
-{
-    $("#reCaptchaRequired").hide();
-}
-
-reCapthca Callback method
-/*var onloadCallback = function()
-{
-    grecaptcha.render("g-recaptcha",
-    {
-        "sitekey" : param["reCaptchaSiteKey"],
-        "callback": hideCaptchaVerificationError
-    });
-}
-*/
-
-// Once the document is ready
-$(document).ready(function ()
-{
-    // Function to set content for Error Message
-    // It is kept separate instead of being defined within setFieldData to provide handling in case data is not available in config for received language
-    // If data is not available in config for received language, fallbackLanguage will be used
-    function setErrorContent()
-    {
-        var heading = "",
-            subHeading = "",
-            subHeadingUrl = "",
-            subHeadingUrlText = "";
-
-        try
-        {
-            heading = page_error[language]["hrErr"]["heading"];
-
-            subHeading = page_error[language]["hrErr"]["subHeading"];
-
-            subHeadingUrl = page_error[language]["hrErr"]["subHeadingUrl"];
-
-            subHeadingUrlText = page_error[language]["hrErr"]["subHeadingUrlText"];
-        }
-        catch(err)
-        {
-            heading = page_error[param["fallbackLanguage"]]["hrErr"]["heading"];
-
-            subHeading = page_error[param["fallbackLanguage"]]["hrErr"]["subHeading"];
-
-            subHeadingUrl = page_error[param["fallbackLanguage"]]["hrErr"]["subHeadingUrl"];
-
-            subHeadingUrlText = page_error[param["fallbackLanguage"]]["hrErr"]["subHeadingUrlText"];
-        }
-        finally
-        {
-            $("div#hrErr").find("h3").html(heading);
-
-            $("div#hrErr").find("a").attr("href", subHeadingUrl);
-
-            $("div#hrErr").find("a").html(subHeadingUrlText);
-
-            $("div#hrErr").find("p").html(subHeading + $("div#hrErr").find("p").html());
-        }
-    }
-	
-    // Function to get value for passed key from fields JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder
-    function setFieldData()
-    {
-        // HTML Language
-        $("html").attr("lang", language.substring(0, language.indexOf("_")));
-
-        // HTML Direction (RTL/LTR)
-        var rtlLangs = ["ar", "he", "ku", "fa", "ur", "yi"];
-        var langSubtag = language.substring(0, language.indexOf("_"));
-        $("html").attr("dir", rtlLangs.indexOf(langSubtag) !== -1 ? "rtl" : "ltr");
-
-        // Error page / section
-        setErrorContent();
-
-        // Heading
-        //$("div.top_cont h2").html(fields[language]["headingBeforeBreakFF"] + $("div.top_cont h2").html() + fields[language]["headingAfterBreakFF"]);
-
-        // Subheading
-        $("div.top_cont p").html($("div.top_cont p").html() + fields[language]["requiredField"]);
-
-        // Profile Field(s)
-        $("div.form_top_group").find("div.form_text_bx").each(function()
-        {
-            // Field Label
-            var pFormLabel = $(this).find("p.form_label");
-            
-            pFormLabel.html(fields[language]["label"][pFormLabel.parent().find("input, select").attr("id")] + pFormLabel.html());
-
-            // Field Placeholder
-            $(this).find("input, select").each(function()
-            {
-                if($(this).attr("placeholder") != undefined)
-                {
-                    $(this).attr("placeholder", fields[language]["placeholder"][$(this).attr("id")])
-                }
-            });
-        });
-
-        // Privacy Policy & Subscribe
-        $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()
-        {
-            // Label
-            var ckbLabel = $(this).find("label");
-
-            ckbLabel.html(fields[language][ckbLabel.attr("for")] + ckbLabel.html());
-
-            // Link within Label
-            var ckbLabelLink = ckbLabel.find("a");
-
-            // Is present
-            if(ckbLabelLink.length === 1)
-            {
-                ckbLabelLink.children("img").attr("alt", fields[language][ckbLabel.attr("for") + "Link"]["imageAlt"]);
-
-                ckbLabelLink.children("img").attr("src", fields[language][ckbLabel.attr("for") + "Link"]["image"]);
-
-                ckbLabelLink.html(fields[language][ckbLabel.attr("for") + "Link"]["label"] + ckbLabelLink.html());
-
-                ckbLabelLink.attr("href", fields[language][ckbLabel.attr("for") + "Link"]["url"]);
-            }
-        });
-
-        // Submit Button
-        $("#btnSubmit").html(fields[language]["submitButton"]);
-        
-        // Thank You page / section
-        $("div#hrTy").find("h3").html(fields[language]["hrTy"]["heading"]);
-
-        $("div#hrTy").find("a").attr("href", fields[language]["hrTy"]["subHeadingUrl"]);
-
-        $("div#hrTy").find("a").html(fields[language]["hrTy"]["subHeadingUrlText"]);
-
-        $("div#hrTy").find("p").html(fields[language]["hrTy"]["subHeading"] + $("div#hrTy").find("p").html());
-    }
-
-    // Function to get value for passed key from questions & answers JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder
-    function setQuestionAndAnswerData()
-    {
-        $("div.form_check_group > div.form_check_module").each(function()
-        {
-            var questionId = $(this).attr("id");
-
-            // Question
-            $(this).find("div.form_check_title h3").html(questions[language][questionId]["heading"] + $(this).find("div.form_check_title h3").html());
-
-            $(this).find("div.form_check_title p").html(questions[language][questionId]["subheading"]);
-
-            // Answer
-            $(this).find("input[name='" + questionId + "']").each(function()
-            {
-                var input = $(this);
-
-                var label = input.next();
-
-                if (label.children().length == 0)
-                {
-                    // Answer with Text inside <label>
-                    label.html(answers[language][questionId][input.val()]);
-                }
-                else if (label.children().length == 1)
-                {
-                    // Answer with Text inside <p> (within <label>)
-                    label.children("p").html(answers[language][questionId][input.val()]);
-                }
-                else if (label.children().length == 2)
-                {
-                    // Answer with Text & Image (within <label>)
-                    label.children("p").html(answers[language][questionId][input.val()]["label"]);
-
-                    label.children("img").attr("src", answers[language][questionId][input.val()]["image"]);
-
-                    label.children("img").attr("alt", answers[language][questionId][input.val()]["imageAlt"]);
-                }
-            });
-        });
-    }
-
-    // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message
-    function setValidationMessage()
-    {
-        $("input[data-parsley-error-message], select[data-parsley-error-message]").each(function()
-        {
-            $(this).attr("data-parsley-error-message", validation_messages[language][$(this).attr("id") + "Error"]);
-        });
-
-        $("input[data-parsley-type-message]").each(function()
-        {
-            $(this).attr("data-parsley-type-message", validation_messages[language][$(this).attr("id") + "Type"]);
-        });
-
-        $("input[data-parsley-length-message]").each(function()
-        {
-            $(this).attr("data-parsley-length-message", validation_messages[language][$(this).attr("id") + "Length"]);
-        });
-
-        $("input[data-parsley-mobile-number-by-country-message]").each(function()
-        {
-            $(this).attr("data-parsley-mobile-number-by-country-message", validation_messages[language][$(this).attr("id") + "Error"]);
-        });
-
-
-        //$("#reCaptchaRequired").html(validation_messages[language]["reCaptchaRequired"]);
-
-         $("#apiError").html(validation_messages[language]["apiError"]);
-
-        // Modal Messages
-        $("#submitIntentPopupMessage1").text(validation_messages[language]["modalMessage_1"]);
-        $("#submitIntentPopupMessage2").text(validation_messages[language]["modalMessage_2"]);
-        $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);
-        $("#submitIntentPopupNo").text(validation_messages[language]["modalButtonNo"]);
-    }
-
-    // Function to populate Country Code dropdown
-    function populateCountryCodeDropdown()
-    {
-        // Get Subsidiary from Country Code (parsed from Language)
-        var subsidiary = country_subsidiary[countryCode];
-
-        // Get Country Code dropdown
-        var ddCountryCode = $("#countryCode");
-
-        // Check if Country Code dropdown is available
-        var isCountryCodeDrodownPresent = (ddCountryCode.length === 1);
-
-        // If Country Code dropdown is available
-        if (isCountryCodeDrodownPresent)
-        {
-            // Set Option(s) in Country Code dropdown
-            $.each(subsidiary_detail[subsidiary], function (val, text)
-            {
-                // Append value(s) to Country Code dropdown
-                ddCountryCode.append($("<option></option>").val(text.countryCode).html(text.countryName[language]));
-            });
-        
-            // Show Country (parsed from Language) as selected
-            ddCountryCode.val(countryCode);
-
-            // If Subsidiary has more than 1 Country, then only show the dropdown
-            if(subsidiary_detail[subsidiary].length > 1)
-            {
-                ddCountryCode.closest("div.form_text_bx").css("display", "block");
-            }
-        }
-    }
-
-    // Function to populate Calling Code dropdown
-    function populateCallingCodeDropdown()
-    {
-        // Get Subsidiary from Country Code (parsed from Language)
-        var subsidiary = country_subsidiary[countryCode];
-
-        // Calling Code dropdown
-        var ddCallingCode = $("#callingCode");
-
-        // Set Default Value in Calling Code dropdown
-        //ddCallingCode.append($("<option></option>").val("0").html(fields[language]["callingCodeDropdownFirstEntry"]));
-
-        // Disable First / Default Entry in Calling Code dropdown
-        $("#callingCode option:first-child").attr("disabled", "disabled").prop("selected", true);
-
-        // Set Option(s) in Calling Code dropdown
-        $.each(subsidiary_detail[subsidiary], function (val, text)
-        {
-            // If Calling Code is not blank
-            if (text.callingCode != "")
-            {
-                ddCallingCode.append($("<option></option>").val(text.callingCode).html(text.countryName[language] + " (+" + text.callingCode + ")"));
-            }
-        });
-    }
-
-    // Function to reset selected value in Calling Code dropdown if Mobile Number is removed
-    function resetCallingCode()
-    {
-        if($("#mobileNumber").val() == "")
-        {
-            // Reset value
-            $("#callingCode").val("0");
-
-            // Remove Parsley validation message
-            $("#callingCode").parsley().reset();
-        }
-    }
-
-    // Function to check whether every question marked required (rendered with a "*") currently has an answer
-    function allRequiredQuestionsAnswered()
-    {
-        var allAnswered = true;
-
-        $("div.form_check_group > div.form_check_module").each(function()
-        {
-            if ($(this).find("div.form_check_title .star").length === 0)
-            {
-                return;
-            }
-
-            var textarea = $(this).find("textarea");
-
-            var hasAnswer = (textarea.length > 0)
-                ? ($.trim(textarea.val()) !== "")
-                : ($(this).find("input[type='radio']:checked, input[type='checkbox']:checked").length > 0);
-
-            if (!hasAnswer)
-            {
-                allAnswered = false;
-
-                return false;
-            }
-        });
-
-        return allAnswered;
-    }
-
-    // Function to enable Submit button if Privacy Policy is checked & every required question has an answer (else keep Submit button disabled)
-    function enableDisableSubmit()
-    {
-        if ($("#privacyPolicy").is(":checked") && allRequiredQuestionsAnswered())
-        {
-            $("#btnSubmit").prop("disabled", false);
-
-            $("#btnSubmit").removeClass("disabled");
-        }
-        else
-        {
-            $("#btnSubmit").prop("disabled", true);
-
-            $("#btnSubmit").addClass("disabled");
-        }
-    }
-
-    function validateModal()
-    {
-        // Check whether any questions in the full form have been answered
-        submitModalAnsweredAny = $('[data-pt-api="y"][name^=Q]').filter((i, el) => el.checked).length > 0
-
-		//submitModalWithsub = $("#subscribe").is(":checked");
-        return !submitModalHasOpened && !submitModalAnsweredAny;
-    }
-
-    function closeSubmitModal()
-    {
-        if (submitModalElement)
-        {
-            submitModalElement.removeClass("popup--open");
-        }
-    }
-
-    function showSubmitModal(resumeCallback)
-    {
-		
-        submitModalResume = typeof resumeCallback === "function" ? resumeCallback : null;
-
-        if (!submitModalElement) // Bind events once
-        {
-            submitModalElement = $("#submitIntentPopup");
-            submitModalElement.find("#submitIntentPopupYes, .popup__close, .popup__dimmed").on("click", closeSubmitModal);
-            submitModalElement.find("#submitIntentPopupNo").on("click", function ()
-            {
-                closeSubmitModal();
-                
-                if (submitModalResume)
-                {
-                    submitModalResume();
-                    submitModalResume = null;
-                }
-            });
-        }
-
-        submitModalElement.addClass("popup--open");
-        submitModalHasOpened = true;
-		
-    }
-
-    // Function to attach different event(s) to various element(s)
-    function attachEvent()
-    {
-        // Add Parsley Custom Validator to validate Calling Code (value should be selected in dropdown if Mobile Number is entered)
-        window.Parsley.addValidator("requiredIf", {
-            validateString : function(value, requirement)
-            {
-                if($(requirement).parsley().isValid())
-                {
-                    if (jQuery(requirement).val())
-                    {
-                        return !!value;
-                    }
-                }
-
-                return true;
-            }
-        });
-
-        // Build callingCode -> countryCode mapping from subsidiary_detail
-        var callingCodeToCountry = {};
-        $.each(subsidiary_detail, function(subsidiary, countries) {
-            $.each(countries, function(i, country) {
-                if (country.callingCode && country.callingCode !== "") {
-                    callingCodeToCountry[country.callingCode] = country.countryCode;
-                }
-            });
-        });
-
-        // Custom Parsley Validator - validate mobile number against selected calling code using libphonenumber-js
-        window.Parsley.addValidator("mobileNumberByCountry", {
-            validateString: function (value) {
-                if (value.trim() === "") return true; // empty value handled by required-if on callingCode
-
-                var callingCode = $("#callingCode").val();
-                if (!callingCode || callingCode === "0") return false;
-
-                // Digit-length correctness is left entirely to libphonenumber-js's own
-                // per-country numbering-plan metadata below (isValid()) rather than a
-                // hardcoded "9 digits for UAE, 8 for everyone else" guess \u2014 that guess
-                // was wrong for other countries this same dropdown offers (e.g. Saudi
-                // Arabia also needs 9 digits, not 8), and redundant even where it
-                // happened to be right, since isValid() already enforces the correct
-                // length for whichever country was actually selected.
-                var fullNumber = "+" + callingCode + value;
-                try {
-                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber);
-                    return phoneNumber && phoneNumber.isValid();
-                } catch (e) {
-                    return false;
-                }
-            },
-            message: "Enter a valid mobile number"
-        });
-
-        // Clear / reset user entered data (from Profile fields)
-        $(".btn_clear").on("click", function()
-        {
-            // Parent of element having btn_clear class
-            var parent = $(this).parent();
-
-            // Find input field present in parent container (having element with btn_clear class)
-            var inputField = parent.find("input");
-
-            // If input field is present
-            if (inputField.length === 1)
-            {
-                // Reset input field value
-                inputField.val("");
-
-                // Remove Parsley validation message
-                inputField.parsley().reset();
-
-                // Find second parent (parent element's parent) of element having btn_clear class
-                var secondParent = parent.parent();
-
-                // Find dropdown field present in secodn parent container
-                var ddSelect = secondParent.find("select");
-
-                // If dropdown is present && is dependent on input field
-                if((ddSelect.length === 1) && (ddSelect.attr("data-parsley-required-if") != undefined) && (ddSelect.attr("data-parsley-required-if") == ("#" + inputField.attr("id"))))
-                {
-                    // Reset dropdown value
-                    ddSelect.val(secondParent.find("select option:first-child").val());
-
-                    // Remove Parsley validation message
-                    ddSelect.parsley().reset();
-                }
-            }
-        });
-
-        // Attach event to reset Calling Code if Mobile Number is removed
-        $("#mobileNumber").on("change", resetCallingCode);
-
-        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of Privacy Policy & any required question's answer(s)
-        $("#privacyPolicy").on("change", enableDisableSubmit);
-
-        $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);
-
-        $("div.form_check_group > div.form_check_module").find("textarea").on("change keyup", enableDisableSubmit);
-
-        // For Calling Code & Mobile Number fields, override Parsley method to change DOM position of validation message
-        window.Parsley.on('field:error', function()
-        {
-            if(this.$element.attr("id") == "callingCode")
-            {
-                $("#callingCode").parent().prev().after($("#callingCode").next("span.parsley-errors"));
-            }
-
-            if(this.$element.attr("id") == "mobileNumber")
-            {
-                $("#mobileNumber").before($("#mobileNumber").next("span.parsley-errors"));
-				// Force red color on mobile number validation errors
-                $("#mobileNumber").next("span.parsley-errors").find("span.parsley-error").css("color", "red");
-            }
-        });
-    }
-
-    
-    /*
-    Function to check if User has verified the reCaptcha
-    function isCaptchaVerified()
-    {
-        return ((grecaptcha) && (grecaptcha.getResponse().length !== 0));
-    }
-    */
-   
-
-    // Function to carry out task(s) at the start of Form submit process
-    function preSubmitProcess()
-    {
-        // Disable Submit button
-        $("#submitform").attr("disabled", true).addClass("disabled");
-
-        showOverlay();
-
-        // Hide error message
-        $("#apiError").hide();
-    }
-
-    // Function to show Overlay (with Loader)
-    function showOverlay()
-    {
-        if( $("#overlay").css("display") == "none")
-        {
-            $("#overlay").css("display", "block");
-        }
-    }
-
-    // Function to hide Overlay (with Loader)
-    function hideOverlay()
-    {
-        if( $("#overlay").css("display") == "block")
-        {
-            $("#overlay").css("display", "none");
-        }
-    }
-
-    // Function to show div confirming that data was successfully sent to server
-    function showSuccess()
-    {
-        // Hide div having Form fields
-        $("div.container").css("display", "none");
-
-        // Empty div (having Form fields)
-        $("div.container").empty();
-
-        // Hide div having Error message
-        $("#hrErr").css("display", "none");
-
-        // Empty div (having Error message)
-        $("#hrErr").empty();
-
-        // Scroll to Top
-        window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-        });
-
-        // Show div having Success message
-        $("#hrTy").css("display", "block");
-
-        // Set Timeout for Redirection
-        window.top.location.href = fields[language]["redirectAfterSuccessUrl"];
-        //setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 8) * 1000));
-		window.parent.postMessage('success_message', '*');  
-        hideOverlay();
-		const heightn = document.body.scrollHeight;
-		parent.postMessage(heightn, '*'); 
-
-        // Empty div (having Ovelary with Loader)
-        $("#overlay").empty();
-
-        // Adobe Analytics Tracking - Submit Form Event
-        if (param?.analytics?.enabled) {
-            _satellite.track("submit_form");
-        }
-    }
-
-    // Function to show div informing about error
-    function showError()
-    {
-        // Hide div having Form fields
-        $("div.container").css("display", "none");
-
-        // Empty div (having Form fields)
-        $("div.container").empty();
-
-        // Hide div having Success message
-        $("#hrTy").css("display", "none");
-
-        // Empty div (having Success message)
-        $("#hrTy").empty();
-
-        // Scroll to Top
-        window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-        });
-
-        // Show div having Error message
-        $("#hrErr").css("display", "block");
-
-        hideOverlay();
-
-        // Empty div (having Ovelary with Loader)
-        $("#overlay").empty();
-    }
-
-    // Function to parse User Agent to get Platform Type
-    function getPlatformType()
-    {
-        var userAgent = navigator.userAgent.toString();
-
-        var platformType = "web";
-
-        if(!!(window.EcommAndroidClient || window.flutter_inappwebview) || userAgent.indexOf('samsung-mobile-app') > -1)
-        {
-            platformType = "app";
-        }
-
-        return platformType;
-    }
-
-    // Function to Identify HHP using Calling Code & Mobile Number
-    function identifyHHP(callingCode, mobileNumber)
-    {
-        var hhp =  "";
-
-        if (callingCode != null && callingCode != "" && mobileNumber != "")
-        {
-            hhp = (callingCode + mobileNumber);
-        }
-
-        return hhp;
-    }
-
-    // Function to handle error occurred during API call
-    function apiCallErrorHandler()
-    {
-        // Show error message
-        $("#apiError").show();
-
-        // Enable Submit button so that user can try again
-        enableDisableSubmit();
-
-        // Scroll to Bottom
-        window.scrollTo({
-            top: document.body.scrollHeight,
-            behavior: "smooth"
-        });
-
-        hideOverlay();
-    }
-
-    // Function to Send Data to API
-    function sendData(request)
-    {
-        try
-        {
-            fetch(param["apiEndpoint"], {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(request)
-            })
-            .then(response =>
-            {
-                if(!(response.ok) || response.status != "200")
-                {
-                    apiCallErrorHandler();
-                }
-                else
-                {
-                    // Submit Success Tagging
-                    window.parent.postMessage({ type: 'submit_success', content: 'the next galaxy f2h26-pre registration_register' }, '*')
-					
-                    showSuccess();
-                }
-            }).
-            catch(error =>
-            {
-                apiCallErrorHandler();
-            });
-        }
-        catch(err)
-        {
-            apiCallErrorHandler();
-        }
-    }
-
-    function uuidv4Fallback() {
-        // Return a RFC4122 version 4 compliant UUID
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-        });
-    }
-	
-    // iOS or MacOS \xED\u0152\x90\xEB\xB3\u201E \xED\u2022\xA8\xEC\u02C6\u02DC
-    function isIOS() {
-        var ua = navigator.userAgent || navigator.vendor || window.opera;
-        var iOSClassic = /iPhone|iPad|iPod/.test(ua);
-        var iPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        var MacOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints <= 1);
-        var hasMacUA = /Macintosh/.test(ua) && !iPadOS;
-        return iOSClassic || iPadOS || MacOS || hasMacUA;
-    }
-    // Function to create Request data based on User Input & call method to trigger API
-    function mapParam(userResponse, isSubmitClicked)
-    {
-        var dtmCurrent = new Date();
-
-        var requestBody = {
-            app_yn: (getPlatformType() === "app" ? "Y" : "N"),
-			channel: ch === "" ? param["channel"]["fullForm"] : ch,
-			channel_detail: chd === "" ? param["channelDetail"]["fullForm"] : chd,
-            cid: userResponse["campaignId"],
-            country_alpha_2: userResponse["countryCode"],
-            deliveryId: userResponse["deliveryId"],
-            email: userResponse["email"],
-            first_name: userResponse["firstName"],
-            hhp: identifyHHP(userResponse["callingCode"], userResponse["mobileNumber"]),
-            imei: "",
-            language: userResponse["language"],
-            last_name: userResponse["lastName"],
-            mid: "",
-            pin_code: userResponse["zipCode"],
-            privacy_policy_yn: (userResponse["privacyPolicy"] === "on" ? "Y" : "N"),
-            project: param["project"],
-            q01Answer: userResponse["Q1"],
-            q02Answer: userResponse["Q2"],
-            q03Answer: userResponse["Q3"],
-            q04Answer: userResponse["Q4"],
-            q05Answer: userResponse["Q5"],
-            q06Answer: "",
-            q07Answer: "",
-            q08Answer: "",
-            q09Answer: "",
-            q10Answer: "",
-            q11Answer: "",
-            q12Answer: "",
-            q13Answer: "",
-            q14Answer: "",
-            q15Answer: "",
-            q16Answer: "",
-            q17Answer: "",
-            q18Answer: "",
-            q19Answer: "",
-            q20Answer: "",
-            recipientId: userResponse["recipientId"],
-            registerDatetime: dtmCurrent.toISOString(),
-            source: param["source"]["fullForm"],
-            subscribe_yn: (userResponse["subscribe"] === "on" ? "Y" : "N"),
-            tm_yn: "",
-            uniqueid: dtmCurrent.getTime() + "_" + (crypto.randomUUID ? crypto.randomUUID() : uuidv4Fallback()) + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),
-            VoucherRequired: param["voucherRequired"],
-			oneclickFlag: "N",
-            submitFlag: (isSubmitClicked === true ? "Y" : "N"),
-            iosFlag: (isIOS() ? "Y" : "N")
-        };
-
-        return requestBody;
-    }
-
-    try
-    {
-        // Get Parameter Value from URL
-        var frameUrlParam = new URLSearchParams(window.location.search);
-
-        var language = frameUrlParam.get("lang") || param["fallbackLanguage"];
-
-        var campaignId = frameUrlParam.get("cid") || "";
-
-        var deliveryId = frameUrlParam.get("did") || "";
-
-        var recipientId = frameUrlParam.get("id") || "";
-
-        var countryCode = language.substring(language.indexOf("_") + 1);
-		
-		var ch = frameUrlParam.get("ch") || "";
-			
-		var chd = frameUrlParam.get("chd") || "";
-
-        setFieldData();
-
-        setQuestionAndAnswerData();
-
-        setValidationMessage();
-
-        populateCountryCodeDropdown();
-
-        populateCallingCodeDropdown();
-
-        attachEvent();
-
-        // Load and display submit modal (modal.html) when form is submitted, or none of answers are selected
-        var submitModalElement = null;
-        var submitModalResume = null;
-        var submitModalHasOpened = false;
-        var submitModalAnsweredAny = false;
-
-        var parsleyConfig = {
-            errorsWrapper: '<span class="parsley-errors"></span>',
-            errorTemplate: '<span class="parsley-error"></span>',
-            excluded: 'input[type=button], input[type=submit], input[type=reset], input[type=hidden], input[class=noValidate]',
-        }
-
-        function processValidatedSubmit()
-        {
-            preSubmitProcess();
-
-            var formElements = document.getElementById("dataForm");
-
-            var elementId,
-                elementName,
-                objectValue,
-                cBrBData = {},
-                formData = [],
-                elementDataAttr,
-                userResponse = {},
-                isSubmitClicked = true;
-
-            // Process all the Form Fields
-            for (i = 0; i < formElements.length; i++)
-            {
-                if (formElements.elements[i].type != "hidden")
-                {
-                    elementId = formElements.elements[i].id;
-
-                    elementName = formElements.elements[i].name;
-
-                    elementDataAttr = formElements.elements[i].getAttribute("data-pt-api");
-
-                    if (elementDataAttr && elementDataAttr.trim() !== "" && elementDataAttr.trim() === "y")
-                    {
-                        if (formElements.elements[i].type == "radio")
-                        {
-                            if (!cBrBData[elementName])
-                            {
-                                cBrBData[elementName] = [];
-                            }
-
-                            if ($("#" + elementId).is(":checked"))
-                            {
-                                cBrBData[elementName].push($("#" + elementId).val());
-                            }
-                        }
-                        else if (formElements.elements[i].type == "checkbox")
-                        {
-                            if (!cBrBData[elementName])
-                            {
-                                cBrBData[elementName] = [];
-                            }
-
-                            if ($("#" + elementId).is(":checked"))
-                            {
-                                cBrBData[elementName].push($("#" + elementId).val());
-                            }
-                        }
-                        else
-                        {
-                            objectValue = $("#" + elementId).val();
-
-                            formData.push({name: elementName, value: objectValue});
-                        }
-                    }
-                }
-            }
-
-            Object.keys(cBrBData).forEach(function (key)
-            {
-                formData.push({ name: key, value: cBrBData[key].join("|") });
-            });
-
-            // Move data from Array to Key / Value pair
-            for (var i=0, len=formData.length; i < len; i++)
-            {
-                userResponse[formData[i]["name"]] = formData[i]["value"];
-            }
-
-            // If Country Code dropdown is present in form, then pick the value from dropdown -- This is already handled above along with other fields (no special handling required).
-            // If Country Code dropdown is not present in form, then pick the value from URL (parsed from Language).
-            if(userResponse["countryCode"] == null || userResponse["countryCode"] == undefined)
-            {
-                userResponse["countryCode"] = countryCode;
-            }
-
-            // Add data determined earlier (from URL Parameter) to Key / Value pair
-            userResponse["campaignId"] = campaignId;
-
-            userResponse["deliveryId"] = deliveryId;
-
-            userResponse["recipientId"] = recipientId;
-
-            userResponse["language"] = language;
-			
-			//userResponse["subscribe"] = $("#subscribe").val();
-
-            userResponse["channel"] = ch;
-
-            userResponse["channel_detail"] = chd;
-
-            // Call function to map (API) Parameter with User Response & send data to server
-            sendData(mapParam(userResponse, isSubmitClicked));
-        }
-
-        // Carry out following after the submit button is clicked
-        $("form").parsley(parsleyConfig).on("form:submit", function ()
-        {
-            validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
-
-			/*
-			Check if reCaptcha is verified
-			if (($(".g-recaptcha").length) && (!(isCaptchaVerified())))
-			{
-				$("#reCaptchaRequired").show();
-
-				return false;
-			}
-			*/
-
-            return false;
-        });
-    }
-    catch(err)
-    {
-        showError();
-    }
-});
-
-function postHeight(e) {
-   const height = document.body.scrollHeight;
-   parent.postMessage(height, '*');  
-};
-window.addEventListener('load', postHeight);
+var REFERENCE_FF_JS = `/*\r
+Function to hide reCaptcha verification error\r
+function hideCaptchaVerificationError()\r
+{\r
+    $("#reCaptchaRequired").hide();\r
+}\r
+\r
+reCapthca Callback method\r
+/*var onloadCallback = function()\r
+{\r
+    grecaptcha.render("g-recaptcha",\r
+    {\r
+        "sitekey" : param["reCaptchaSiteKey"],\r
+        "callback": hideCaptchaVerificationError\r
+    });\r
+}\r
+*/\r
+\r
+// Once the document is ready\r
+$(document).ready(function ()\r
+{\r
+    // Function to set content for Error Message\r
+    // It is kept separate instead of being defined within setFieldData to provide handling in case data is not available in config for received language\r
+    // If data is not available in config for received language, fallbackLanguage will be used\r
+    function setErrorContent()\r
+    {\r
+        var heading = "",\r
+            subHeading = "",\r
+            subHeadingUrl = "",\r
+            subHeadingUrlText = "";\r
+\r
+        try\r
+        {\r
+            heading = page_error[language]["hrErr"]["heading"];\r
+\r
+            subHeading = page_error[language]["hrErr"]["subHeading"];\r
+\r
+            subHeadingUrl = page_error[language]["hrErr"]["subHeadingUrl"];\r
+\r
+            subHeadingUrlText = page_error[language]["hrErr"]["subHeadingUrlText"];\r
+        }\r
+        catch(err)\r
+        {\r
+            heading = page_error[param["fallbackLanguage"]]["hrErr"]["heading"];\r
+\r
+            subHeading = page_error[param["fallbackLanguage"]]["hrErr"]["subHeading"];\r
+\r
+            subHeadingUrl = page_error[param["fallbackLanguage"]]["hrErr"]["subHeadingUrl"];\r
+\r
+            subHeadingUrlText = page_error[param["fallbackLanguage"]]["hrErr"]["subHeadingUrlText"];\r
+        }\r
+        finally\r
+        {\r
+            $("div#hrErr").find("h3").html(heading);\r
+\r
+            $("div#hrErr").find("a").attr("href", subHeadingUrl);\r
+\r
+            $("div#hrErr").find("a").html(subHeadingUrlText);\r
+\r
+            $("div#hrErr").find("p").html(subHeading + $("div#hrErr").find("p").html());\r
+        }\r
+    }\r
+	\r
+    // Function to get value for passed key from fields JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder\r
+    function setFieldData()\r
+    {\r
+        // HTML Language\r
+        $("html").attr("lang", language.substring(0, language.indexOf("_")));\r
+\r
+        // HTML Direction (RTL/LTR)\r
+        var rtlLangs = ["ar", "he", "ku", "fa", "ur", "yi"];\r
+        var langSubtag = language.substring(0, language.indexOf("_"));\r
+        $("html").attr("dir", rtlLangs.indexOf(langSubtag) !== -1 ? "rtl" : "ltr");\r
+\r
+        // Error page / section\r
+        setErrorContent();\r
+\r
+        // Heading\r
+        $("div.top_cont h2").html(fields[language]["headingBeforeBreakFF"] + $("div.top_cont h2").html() + fields[language]["headingAfterBreakFF"]);\r
+\r
+        // Campaign Subheading\r
+        $("div.top_cont p.top_subheading").html(fields[language]["campaignSubheading"]);\r
+\r
+        // Required Field Note\r
+        $("div.top_cont p").not(".top_subheading").html($("div.top_cont p").not(".top_subheading").html() + fields[language]["requiredField"]);\r
+\r
+        // Profile Field(s)\r
+        $("div.form_top_group").find("div.form_text_bx").each(function()\r
+        {\r
+            // Field Label\r
+            var pFormLabel = $(this).find("p.form_label");\r
+            \r
+            pFormLabel.html(fields[language]["label"][pFormLabel.parent().find("input, select").attr("id")] + pFormLabel.html());\r
+\r
+            // Field Placeholder\r
+            $(this).find("input, select").each(function()\r
+            {\r
+                if($(this).attr("placeholder") != undefined)\r
+                {\r
+                    $(this).attr("placeholder", fields[language]["placeholder"][$(this).attr("id")])\r
+                }\r
+            });\r
+        });\r
+\r
+        // Privacy Policy & Subscribe\r
+        $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()\r
+        {\r
+            // Label\r
+            var ckbLabel = $(this).find("label");\r
+\r
+            ckbLabel.html(fields[language][ckbLabel.attr("for")] + ckbLabel.html());\r
+\r
+            // Link within Label\r
+            var ckbLabelLink = ckbLabel.find("a");\r
+\r
+            // Is present\r
+            if(ckbLabelLink.length === 1)\r
+            {\r
+                ckbLabelLink.children("img").attr("alt", fields[language][ckbLabel.attr("for") + "Link"]["imageAlt"]);\r
+\r
+                ckbLabelLink.children("img").attr("src", fields[language][ckbLabel.attr("for") + "Link"]["image"]);\r
+\r
+                ckbLabelLink.html(fields[language][ckbLabel.attr("for") + "Link"]["label"] + ckbLabelLink.html());\r
+\r
+                ckbLabelLink.attr("href", fields[language][ckbLabel.attr("for") + "Link"]["url"]);\r
+            }\r
+        });\r
+\r
+        // Submit Button\r
+        $("#btnSubmit").html(fields[language]["submitButton"]);\r
+        \r
+        // Thank You page / section\r
+        $("div#hrTy").find("h3").html(fields[language]["hrTy"]["heading"]);\r
+\r
+        $("div#hrTy").find("a").attr("href", fields[language]["hrTy"]["subHeadingUrl"]);\r
+\r
+        $("div#hrTy").find("a").html(fields[language]["hrTy"]["subHeadingUrlText"]);\r
+\r
+        $("div#hrTy").find("p").html(fields[language]["hrTy"]["subHeading"] + $("div#hrTy").find("p").html());\r
+    }\r
+\r
+    // Function to get value for passed key from questions & answers JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder\r
+    function setQuestionAndAnswerData()\r
+    {\r
+        $("div.form_check_group > div.form_check_module").each(function()\r
+        {\r
+            var questionId = $(this).attr("id");\r
+\r
+            // Question\r
+            $(this).find("div.form_check_title h3").html(questions[language][questionId]["heading"] + $(this).find("div.form_check_title h3").html());\r
+\r
+            $(this).find("div.form_check_title p").html(questions[language][questionId]["subheading"]);\r
+\r
+            // Answer (radio / checkbox only \u2014 a shortText input shares the same\r
+            // "name" attribute but has no <label> sibling to populate, and a\r
+            // dropdown's <option>s are populated separately below)\r
+            $(this).find("input[name='" + questionId + "'][type='radio'], input[name='" + questionId + "'][type='checkbox']").each(function()\r
+            {\r
+                var input = $(this);\r
+\r
+                var label = input.next();\r
+\r
+                if (label.children().length == 0)\r
+                {\r
+                    // Answer with Text inside <label>\r
+                    label.html(answers[language][questionId][input.val()]);\r
+                }\r
+                else if (label.children().length == 1)\r
+                {\r
+                    // Answer with Text inside <p> (within <label>)\r
+                    label.children("p").html(answers[language][questionId][input.val()]);\r
+                }\r
+                else if (label.children().length == 2)\r
+                {\r
+                    // Answer with Text & Image (within <label>)\r
+                    label.children("p").html(answers[language][questionId][input.val()]["label"]);\r
+\r
+                    label.children("img").attr("src", answers[language][questionId][input.val()]["image"]);\r
+\r
+                    label.children("img").attr("alt", answers[language][questionId][input.val()]["imageAlt"]);\r
+                }\r
+            });\r
+\r
+            // Answer (dropdown options)\r
+            $(this).find("select").each(function()\r
+            {\r
+                var select = $(this);\r
+\r
+                $.each(answers[language][questionId], function(val, text)\r
+                {\r
+                    select.append($("<option></option>").val(val).html(text));\r
+                });\r
+            });\r
+        });\r
+    }\r
+\r
+    // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message\r
+    function setValidationMessage()\r
+    {\r
+        $("input[data-parsley-error-message], select[data-parsley-error-message]").each(function()\r
+        {\r
+            $(this).attr("data-parsley-error-message", validation_messages[language][$(this).attr("id") + "Error"]);\r
+        });\r
+\r
+        $("input[data-parsley-type-message]").each(function()\r
+        {\r
+            $(this).attr("data-parsley-type-message", validation_messages[language][$(this).attr("id") + "Type"]);\r
+        });\r
+\r
+        $("input[data-parsley-length-message]").each(function()\r
+        {\r
+            $(this).attr("data-parsley-length-message", validation_messages[language][$(this).attr("id") + "Length"]);\r
+        });\r
+\r
+        $("input[data-parsley-mobile-number-by-country-message]").each(function()\r
+        {\r
+            $(this).attr("data-parsley-mobile-number-by-country-message", validation_messages[language][$(this).attr("id") + "Error"]);\r
+        });\r
+\r
+\r
+        //$("#reCaptchaRequired").html(validation_messages[language]["reCaptchaRequired"]);\r
+\r
+         $("#apiError").html(validation_messages[language]["apiError"]);\r
+\r
+        // Modal Messages\r
+        $("#submitIntentPopupMessage1").text(validation_messages[language]["modalMessage_1"]);\r
+        $("#submitIntentPopupMessage2").text(validation_messages[language]["modalMessage_2"]);\r
+        $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);\r
+        $("#submitIntentPopupNo").text(validation_messages[language]["modalButtonNo"]);\r
+    }\r
+\r
+    // Function to populate Country Code dropdown\r
+    function populateCountryCodeDropdown()\r
+    {\r
+        // Get Subsidiary from Country Code (parsed from Language)\r
+        var subsidiary = country_subsidiary[countryCode];\r
+\r
+        // Get Country Code dropdown\r
+        var ddCountryCode = $("#countryCode");\r
+\r
+        // Check if Country Code dropdown is available\r
+        var isCountryCodeDrodownPresent = (ddCountryCode.length === 1);\r
+\r
+        // If Country Code dropdown is available\r
+        if (isCountryCodeDrodownPresent)\r
+        {\r
+            // Set Option(s) in Country Code dropdown\r
+            $.each(subsidiary_detail[subsidiary], function (val, text)\r
+            {\r
+                // Append value(s) to Country Code dropdown\r
+                ddCountryCode.append($("<option></option>").val(text.countryCode).html(text.countryName[language]));\r
+            });\r
+        \r
+            // Show Country (parsed from Language) as selected\r
+            ddCountryCode.val(countryCode);\r
+\r
+            // If Subsidiary has more than 1 Country, then only show the dropdown\r
+            if(subsidiary_detail[subsidiary].length > 1)\r
+            {\r
+                ddCountryCode.closest("div.form_text_bx").css("display", "block");\r
+            }\r
+        }\r
+    }\r
+\r
+    // Function to populate Calling Code dropdown\r
+    function populateCallingCodeDropdown()\r
+    {\r
+        // Get Subsidiary from Country Code (parsed from Language)\r
+        var subsidiary = country_subsidiary[countryCode];\r
+\r
+        // Calling Code dropdown\r
+        var ddCallingCode = $("#callingCode");\r
+\r
+        // Set Default Value in Calling Code dropdown\r
+        //ddCallingCode.append($("<option></option>").val("0").html(fields[language]["callingCodeDropdownFirstEntry"]));\r
+\r
+        // Disable First / Default Entry in Calling Code dropdown\r
+        $("#callingCode option:first-child").attr("disabled", "disabled").prop("selected", true);\r
+\r
+        // Set Option(s) in Calling Code dropdown\r
+        $.each(subsidiary_detail[subsidiary], function (val, text)\r
+        {\r
+            // If Calling Code is not blank\r
+            if (text.callingCode != "")\r
+            {\r
+                ddCallingCode.append($("<option></option>").val(text.callingCode).html(text.countryName[language] + " (+" + text.callingCode + ")"));\r
+            }\r
+        });\r
+    }\r
+\r
+    // Function to reset selected value in Calling Code dropdown if Mobile Number is removed\r
+    function resetCallingCode()\r
+    {\r
+        if($("#mobileNumber").val() == "")\r
+        {\r
+            // Reset value\r
+            $("#callingCode").val("0");\r
+\r
+            // Remove Parsley validation message\r
+            $("#callingCode").parsley().reset();\r
+        }\r
+    }\r
+\r
+    // Function to check whether every question marked required (rendered with a "*") currently has an answer\r
+    function allRequiredQuestionsAnswered()\r
+    {\r
+        var allAnswered = true;\r
+\r
+        $("div.form_check_group > div.form_check_module").each(function()\r
+        {\r
+            if ($(this).find("div.form_check_title .star").length === 0)\r
+            {\r
+                return;\r
+            }\r
+\r
+            var textarea = $(this).find("textarea");\r
+\r
+            var select = $(this).find("select");\r
+\r
+            var shortTextInput = $(this).find("input[type='text']");\r
+\r
+            var hasAnswer = (textarea.length > 0)\r
+                ? ($.trim(textarea.val()) !== "")\r
+                : (select.length > 0)\r
+                    ? (select.val() !== "")\r
+                    : (shortTextInput.length > 0)\r
+                        ? ($.trim(shortTextInput.val()) !== "")\r
+                        : ($(this).find("input[type='radio']:checked, input[type='checkbox']:checked").length > 0);\r
+\r
+            if (!hasAnswer)\r
+            {\r
+                allAnswered = false;\r
+\r
+                return false;\r
+            }\r
+        });\r
+\r
+        return allAnswered;\r
+    }\r
+\r
+    // Function to enable Submit button if Privacy Policy is checked & every required question has an answer (else keep Submit button disabled)\r
+    function enableDisableSubmit()\r
+    {\r
+        if ($("#privacyPolicy").is(":checked") && allRequiredQuestionsAnswered())\r
+        {\r
+            $("#btnSubmit").prop("disabled", false);\r
+\r
+            $("#btnSubmit").removeClass("disabled");\r
+        }\r
+        else\r
+        {\r
+            $("#btnSubmit").prop("disabled", true);\r
+\r
+            $("#btnSubmit").addClass("disabled");\r
+        }\r
+    }\r
+\r
+    function validateModal()\r
+    {\r
+        // Check whether any questions in the full form have been answered\r
+        submitModalAnsweredAny = $('[data-pt-api="y"][name^=Q]').filter((i, el) => el.checked).length > 0\r
+\r
+		//submitModalWithsub = $("#subscribe").is(":checked");\r
+        return !submitModalHasOpened && !submitModalAnsweredAny;\r
+    }\r
+\r
+    function closeSubmitModal()\r
+    {\r
+        if (submitModalElement)\r
+        {\r
+            submitModalElement.removeClass("popup--open");\r
+        }\r
+    }\r
+\r
+    function showSubmitModal(resumeCallback)\r
+    {\r
+		\r
+        submitModalResume = typeof resumeCallback === "function" ? resumeCallback : null;\r
+\r
+        if (!submitModalElement) // Bind events once\r
+        {\r
+            submitModalElement = $("#submitIntentPopup");\r
+            submitModalElement.find("#submitIntentPopupYes, .popup__close, .popup__dimmed").on("click", closeSubmitModal);\r
+            submitModalElement.find("#submitIntentPopupNo").on("click", function ()\r
+            {\r
+                closeSubmitModal();\r
+                \r
+                if (submitModalResume)\r
+                {\r
+                    submitModalResume();\r
+                    submitModalResume = null;\r
+                }\r
+            });\r
+        }\r
+\r
+        submitModalElement.addClass("popup--open");\r
+        submitModalHasOpened = true;\r
+		\r
+    }\r
+\r
+    // Function to attach different event(s) to various element(s)\r
+    function attachEvent()\r
+    {\r
+        // Add Parsley Custom Validator to validate Calling Code (value should be selected in dropdown if Mobile Number is entered)\r
+        window.Parsley.addValidator("requiredIf", {\r
+            validateString : function(value, requirement)\r
+            {\r
+                if($(requirement).parsley().isValid())\r
+                {\r
+                    if (jQuery(requirement).val())\r
+                    {\r
+                        return !!value;\r
+                    }\r
+                }\r
+\r
+                return true;\r
+            }\r
+        });\r
+\r
+        // Build callingCode -> countryCode mapping from subsidiary_detail\r
+        var callingCodeToCountry = {};\r
+        $.each(subsidiary_detail, function(subsidiary, countries) {\r
+            $.each(countries, function(i, country) {\r
+                if (country.callingCode && country.callingCode !== "") {\r
+                    callingCodeToCountry[country.callingCode] = country.countryCode;\r
+                }\r
+            });\r
+        });\r
+\r
+        // Custom Parsley Validator - validate mobile number against selected calling code using libphonenumber-js\r
+        window.Parsley.addValidator("mobileNumberByCountry", {\r
+            validateString: function (value) {\r
+                if (value.trim() === "") return true; // empty value handled by required-if on callingCode\r
+\r
+                var callingCode = $("#callingCode").val();\r
+                if (!callingCode || callingCode === "0") return false;\r
+\r
+                // Digit-length correctness is left entirely to libphonenumber-js's own\r
+                // per-country numbering-plan metadata below (isValid()) rather than a\r
+                // hardcoded "9 digits for UAE, 8 for everyone else" guess \u2014 that guess\r
+                // was wrong for other countries this same dropdown offers (e.g. Saudi\r
+                // Arabia also needs 9 digits, not 8), and redundant even where it\r
+                // happened to be right, since isValid() already enforces the correct\r
+                // length for whichever country was actually selected.\r
+                var fullNumber = "+" + callingCode + value;\r
+                try {\r
+                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber);\r
+                    return phoneNumber && phoneNumber.isValid();\r
+                } catch (e) {\r
+                    return false;\r
+                }\r
+            },\r
+            message: "Enter a valid mobile number"\r
+        });\r
+\r
+        // Clear / reset user entered data (from Profile fields)\r
+        $(".btn_clear").on("click", function()\r
+        {\r
+            // Parent of element having btn_clear class\r
+            var parent = $(this).parent();\r
+\r
+            // Find input field present in parent container (having element with btn_clear class)\r
+            var inputField = parent.find("input");\r
+\r
+            // If input field is present\r
+            if (inputField.length === 1)\r
+            {\r
+                // Reset input field value\r
+                inputField.val("");\r
+\r
+                // Remove Parsley validation message\r
+                inputField.parsley().reset();\r
+\r
+                // Find second parent (parent element's parent) of element having btn_clear class\r
+                var secondParent = parent.parent();\r
+\r
+                // Find dropdown field present in secodn parent container\r
+                var ddSelect = secondParent.find("select");\r
+\r
+                // If dropdown is present && is dependent on input field\r
+                if((ddSelect.length === 1) && (ddSelect.attr("data-parsley-required-if") != undefined) && (ddSelect.attr("data-parsley-required-if") == ("#" + inputField.attr("id"))))\r
+                {\r
+                    // Reset dropdown value\r
+                    ddSelect.val(secondParent.find("select option:first-child").val());\r
+\r
+                    // Remove Parsley validation message\r
+                    ddSelect.parsley().reset();\r
+                }\r
+            }\r
+        });\r
+\r
+        // Attach event to reset Calling Code if Mobile Number is removed\r
+        $("#mobileNumber").on("change", resetCallingCode);\r
+\r
+        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of Privacy Policy & any required question's answer(s)\r
+        $("#privacyPolicy").on("change", enableDisableSubmit);\r
+\r
+        $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);\r
+\r
+        $("div.form_check_group > div.form_check_module").find("textarea, input[type='text']").on("change keyup", enableDisableSubmit);\r
+\r
+        $("div.form_check_group > div.form_check_module").find("select").on("change", enableDisableSubmit);\r
+\r
+        // For Calling Code & Mobile Number fields, override Parsley method to change DOM position of validation message\r
+        window.Parsley.on('field:error', function()\r
+        {\r
+            if(this.$element.attr("id") == "callingCode")\r
+            {\r
+                $("#callingCode").parent().prev().after($("#callingCode").next("span.parsley-errors"));\r
+            }\r
+\r
+            if(this.$element.attr("id") == "mobileNumber")\r
+            {\r
+                $("#mobileNumber").before($("#mobileNumber").next("span.parsley-errors"));\r
+				// Force red color on mobile number validation errors\r
+                $("#mobileNumber").next("span.parsley-errors").find("span.parsley-error").css("color", "red");\r
+            }\r
+        });\r
+    }\r
+\r
+    \r
+    /*\r
+    Function to check if User has verified the reCaptcha\r
+    function isCaptchaVerified()\r
+    {\r
+        return ((grecaptcha) && (grecaptcha.getResponse().length !== 0));\r
+    }\r
+    */\r
+   \r
+\r
+    // Function to carry out task(s) at the start of Form submit process\r
+    function preSubmitProcess()\r
+    {\r
+        // Disable Submit button\r
+        $("#submitform").attr("disabled", true).addClass("disabled");\r
+\r
+        showOverlay();\r
+\r
+        // Hide error message\r
+        $("#apiError").hide();\r
+    }\r
+\r
+    // Function to show Overlay (with Loader)\r
+    function showOverlay()\r
+    {\r
+        if( $("#overlay").css("display") == "none")\r
+        {\r
+            $("#overlay").css("display", "block");\r
+        }\r
+    }\r
+\r
+    // Function to hide Overlay (with Loader)\r
+    function hideOverlay()\r
+    {\r
+        if( $("#overlay").css("display") == "block")\r
+        {\r
+            $("#overlay").css("display", "none");\r
+        }\r
+    }\r
+\r
+    // Function to show div confirming that data was successfully sent to server\r
+    function showSuccess()\r
+    {\r
+        // Hide div having Form fields\r
+        $("div.container").css("display", "none");\r
+\r
+        // Empty div (having Form fields)\r
+        $("div.container").empty();\r
+\r
+        // Hide div having Error message\r
+        $("#hrErr").css("display", "none");\r
+\r
+        // Empty div (having Error message)\r
+        $("#hrErr").empty();\r
+\r
+        // Scroll to Top\r
+        window.scrollTo({\r
+        top: 0,\r
+        behavior: "smooth"\r
+        });\r
+\r
+        // Show div having Success message\r
+        $("#hrTy").css("display", "block");\r
+\r
+        // Set Timeout for Redirection\r
+        window.top.location.href = fields[language]["redirectAfterSuccessUrl"];\r
+        //setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 8) * 1000));\r
+		window.parent.postMessage('success_message', '*');  \r
+        hideOverlay();\r
+		const heightn = document.body.scrollHeight;\r
+		parent.postMessage(heightn, '*'); \r
+\r
+        // Empty div (having Ovelary with Loader)\r
+        $("#overlay").empty();\r
+\r
+        // Adobe Analytics Tracking - Submit Form Event\r
+        if (param?.analytics?.enabled) {\r
+            _satellite.track("submit_form");\r
+        }\r
+    }\r
+\r
+    // Function to show div informing about error\r
+    function showError()\r
+    {\r
+        // Hide div having Form fields\r
+        $("div.container").css("display", "none");\r
+\r
+        // Empty div (having Form fields)\r
+        $("div.container").empty();\r
+\r
+        // Hide div having Success message\r
+        $("#hrTy").css("display", "none");\r
+\r
+        // Empty div (having Success message)\r
+        $("#hrTy").empty();\r
+\r
+        // Scroll to Top\r
+        window.scrollTo({\r
+        top: 0,\r
+        behavior: "smooth"\r
+        });\r
+\r
+        // Show div having Error message\r
+        $("#hrErr").css("display", "block");\r
+\r
+        hideOverlay();\r
+\r
+        // Empty div (having Ovelary with Loader)\r
+        $("#overlay").empty();\r
+    }\r
+\r
+    // Function to parse User Agent to get Platform Type\r
+    function getPlatformType()\r
+    {\r
+        var userAgent = navigator.userAgent.toString();\r
+\r
+        var platformType = "web";\r
+\r
+        if(!!(window.EcommAndroidClient || window.flutter_inappwebview) || userAgent.indexOf('samsung-mobile-app') > -1)\r
+        {\r
+            platformType = "app";\r
+        }\r
+\r
+        return platformType;\r
+    }\r
+\r
+    // Function to Identify HHP using Calling Code & Mobile Number\r
+    function identifyHHP(callingCode, mobileNumber)\r
+    {\r
+        var hhp =  "";\r
+\r
+        if (callingCode != null && callingCode != "" && mobileNumber != "")\r
+        {\r
+            hhp = (callingCode + mobileNumber);\r
+        }\r
+\r
+        return hhp;\r
+    }\r
+\r
+    // Function to handle error occurred during API call\r
+    function apiCallErrorHandler()\r
+    {\r
+        // Show error message\r
+        $("#apiError").show();\r
+\r
+        // Enable Submit button so that user can try again\r
+        enableDisableSubmit();\r
+\r
+        // Scroll to Bottom\r
+        window.scrollTo({\r
+            top: document.body.scrollHeight,\r
+            behavior: "smooth"\r
+        });\r
+\r
+        hideOverlay();\r
+    }\r
+\r
+    // Function to Send Data to API\r
+    function sendData(request)\r
+    {\r
+        try\r
+        {\r
+            fetch(param["apiEndpoint"], {\r
+                method: "POST",\r
+                headers: {\r
+                    "Content-Type": "application/json"\r
+                },\r
+                body: JSON.stringify(request)\r
+            })\r
+            .then(response =>\r
+            {\r
+                if(!(response.ok) || response.status != "200")\r
+                {\r
+                    apiCallErrorHandler();\r
+                }\r
+                else\r
+                {\r
+                    // Submit Success Tagging\r
+                    window.parent.postMessage({ type: 'submit_success', content: 'the next galaxy f2h26-pre registration_register' }, '*')\r
+					\r
+                    showSuccess();\r
+                }\r
+            }).\r
+            catch(error =>\r
+            {\r
+                apiCallErrorHandler();\r
+            });\r
+        }\r
+        catch(err)\r
+        {\r
+            apiCallErrorHandler();\r
+        }\r
+    }\r
+\r
+    function uuidv4Fallback() {\r
+        // Return a RFC4122 version 4 compliant UUID\r
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\r
+            const r = Math.random() * 16 | 0;\r
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;\r
+            return v.toString(16);\r
+        });\r
+    }\r
+	\r
+    // iOS or MacOS \xED\u0152\x90\xEB\xB3\u201E \xED\u2022\xA8\xEC\u02C6\u02DC\r
+    function isIOS() {\r
+        var ua = navigator.userAgent || navigator.vendor || window.opera;\r
+        var iOSClassic = /iPhone|iPad|iPod/.test(ua);\r
+        var iPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);\r
+        var MacOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints <= 1);\r
+        var hasMacUA = /Macintosh/.test(ua) && !iPadOS;\r
+        return iOSClassic || iPadOS || MacOS || hasMacUA;\r
+    }\r
+    // Function to create Request data based on User Input & call method to trigger API\r
+    function mapParam(userResponse, isSubmitClicked)\r
+    {\r
+        var dtmCurrent = new Date();\r
+\r
+        var requestBody = {\r
+            app_yn: (getPlatformType() === "app" ? "Y" : "N"),\r
+			channel: ch === "" ? param["channel"]["fullForm"] : ch,\r
+			channel_detail: chd === "" ? param["channelDetail"]["fullForm"] : chd,\r
+            cid: userResponse["campaignId"],\r
+            country_alpha_2: userResponse["countryCode"],\r
+            deliveryId: userResponse["deliveryId"],\r
+            email: userResponse["email"],\r
+            first_name: userResponse["firstName"],\r
+            hhp: identifyHHP(userResponse["callingCode"], userResponse["mobileNumber"]),\r
+            imei: "",\r
+            language: userResponse["language"],\r
+            last_name: userResponse["lastName"],\r
+            mid: "",\r
+            pin_code: userResponse["zipCode"],\r
+            privacy_policy_yn: (userResponse["privacyPolicy"] === "on" ? "Y" : "N"),\r
+            project: param["project"],\r
+            q01Answer: userResponse["Q1"],\r
+            q02Answer: userResponse["Q2"],\r
+            q03Answer: userResponse["Q3"],\r
+            q04Answer: userResponse["Q4"],\r
+            q05Answer: userResponse["Q5"],\r
+            q06Answer: "",\r
+            q07Answer: "",\r
+            q08Answer: "",\r
+            q09Answer: "",\r
+            q10Answer: "",\r
+            q11Answer: "",\r
+            q12Answer: "",\r
+            q13Answer: "",\r
+            q14Answer: "",\r
+            q15Answer: "",\r
+            q16Answer: "",\r
+            q17Answer: "",\r
+            q18Answer: "",\r
+            q19Answer: "",\r
+            q20Answer: "",\r
+            recipientId: userResponse["recipientId"],\r
+            registerDatetime: dtmCurrent.toISOString(),\r
+            source: param["source"]["fullForm"],\r
+            subscribe_yn: (userResponse["subscribe"] === "on" ? "Y" : "N"),\r
+            tm_yn: "",\r
+            uniqueid: dtmCurrent.getTime() + "_" + (crypto.randomUUID ? crypto.randomUUID() : uuidv4Fallback()) + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),\r
+            VoucherRequired: param["voucherRequired"],\r
+			oneclickFlag: "N",\r
+            submitFlag: (isSubmitClicked === true ? "Y" : "N"),\r
+            iosFlag: (isIOS() ? "Y" : "N")\r
+        };\r
+\r
+        return requestBody;\r
+    }\r
+\r
+    try\r
+    {\r
+        // Get Parameter Value from URL\r
+        var frameUrlParam = new URLSearchParams(window.location.search);\r
+\r
+        var language = frameUrlParam.get("lang") || param["fallbackLanguage"];\r
+\r
+        var campaignId = frameUrlParam.get("cid") || "";\r
+\r
+        var deliveryId = frameUrlParam.get("did") || "";\r
+\r
+        var recipientId = frameUrlParam.get("id") || "";\r
+\r
+        var countryCode = language.substring(language.indexOf("_") + 1);\r
+		\r
+		var ch = frameUrlParam.get("ch") || "";\r
+			\r
+		var chd = frameUrlParam.get("chd") || "";\r
+\r
+        setFieldData();\r
+\r
+        setQuestionAndAnswerData();\r
+\r
+        setValidationMessage();\r
+\r
+        populateCountryCodeDropdown();\r
+\r
+        populateCallingCodeDropdown();\r
+\r
+        attachEvent();\r
+\r
+        // Load and display submit modal (modal.html) when form is submitted, or none of answers are selected\r
+        var submitModalElement = null;\r
+        var submitModalResume = null;\r
+        var submitModalHasOpened = false;\r
+        var submitModalAnsweredAny = false;\r
+\r
+        var parsleyConfig = {\r
+            errorsWrapper: '<span class="parsley-errors"></span>',\r
+            errorTemplate: '<span class="parsley-error"></span>',\r
+            excluded: 'input[type=button], input[type=submit], input[type=reset], input[type=hidden], input[class=noValidate]',\r
+        }\r
+\r
+        function processValidatedSubmit()\r
+        {\r
+            preSubmitProcess();\r
+\r
+            var formElements = document.getElementById("dataForm");\r
+\r
+            var elementId,\r
+                elementName,\r
+                objectValue,\r
+                cBrBData = {},\r
+                formData = [],\r
+                elementDataAttr,\r
+                userResponse = {},\r
+                isSubmitClicked = true;\r
+\r
+            // Process all the Form Fields\r
+            for (i = 0; i < formElements.length; i++)\r
+            {\r
+                if (formElements.elements[i].type != "hidden")\r
+                {\r
+                    elementId = formElements.elements[i].id;\r
+\r
+                    elementName = formElements.elements[i].name;\r
+\r
+                    elementDataAttr = formElements.elements[i].getAttribute("data-pt-api");\r
+\r
+                    if (elementDataAttr && elementDataAttr.trim() !== "" && elementDataAttr.trim() === "y")\r
+                    {\r
+                        if (formElements.elements[i].type == "radio")\r
+                        {\r
+                            if (!cBrBData[elementName])\r
+                            {\r
+                                cBrBData[elementName] = [];\r
+                            }\r
+\r
+                            if ($("#" + elementId).is(":checked"))\r
+                            {\r
+                                cBrBData[elementName].push($("#" + elementId).val());\r
+                            }\r
+                        }\r
+                        else if (formElements.elements[i].type == "checkbox")\r
+                        {\r
+                            if (!cBrBData[elementName])\r
+                            {\r
+                                cBrBData[elementName] = [];\r
+                            }\r
+\r
+                            if ($("#" + elementId).is(":checked"))\r
+                            {\r
+                                cBrBData[elementName].push($("#" + elementId).val());\r
+                            }\r
+                        }\r
+                        else\r
+                        {\r
+                            objectValue = $("#" + elementId).val();\r
+\r
+                            formData.push({name: elementName, value: objectValue});\r
+                        }\r
+                    }\r
+                }\r
+            }\r
+\r
+            Object.keys(cBrBData).forEach(function (key)\r
+            {\r
+                formData.push({ name: key, value: cBrBData[key].join("|") });\r
+            });\r
+\r
+            // Move data from Array to Key / Value pair\r
+            for (var i=0, len=formData.length; i < len; i++)\r
+            {\r
+                userResponse[formData[i]["name"]] = formData[i]["value"];\r
+            }\r
+\r
+            // If Country Code dropdown is present in form, then pick the value from dropdown -- This is already handled above along with other fields (no special handling required).\r
+            // If Country Code dropdown is not present in form, then pick the value from URL (parsed from Language).\r
+            if(userResponse["countryCode"] == null || userResponse["countryCode"] == undefined)\r
+            {\r
+                userResponse["countryCode"] = countryCode;\r
+            }\r
+\r
+            // Add data determined earlier (from URL Parameter) to Key / Value pair\r
+            userResponse["campaignId"] = campaignId;\r
+\r
+            userResponse["deliveryId"] = deliveryId;\r
+\r
+            userResponse["recipientId"] = recipientId;\r
+\r
+            userResponse["language"] = language;\r
+			\r
+			//userResponse["subscribe"] = $("#subscribe").val();\r
+\r
+            userResponse["channel"] = ch;\r
+\r
+            userResponse["channel_detail"] = chd;\r
+\r
+            // Call function to map (API) Parameter with User Response & send data to server\r
+            sendData(mapParam(userResponse, isSubmitClicked));\r
+        }\r
+\r
+        // Carry out following after the submit button is clicked\r
+        $("form").parsley(parsleyConfig).on("form:submit", function ()\r
+        {\r
+            validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();\r
+\r
+			/*\r
+			Check if reCaptcha is verified\r
+			if (($(".g-recaptcha").length) && (!(isCaptchaVerified())))\r
+			{\r
+				$("#reCaptchaRequired").show();\r
+\r
+				return false;\r
+			}\r
+			*/\r
+\r
+            return false;\r
+        });\r
+    }\r
+    catch(err)\r
+    {\r
+        showError();\r
+    }\r
+});\r
+\r
+function postHeight(e) {\r
+   const height = document.body.scrollHeight;\r
+   parent.postMessage(height, '*');  \r
+};\r
+window.addEventListener('load', postHeight);\r
 window.addEventListener('resize', postHeight);`;
 
 // src/codegen/js/buildFfJs.ts
@@ -4808,936 +5027,962 @@ function buildFfJs(fileNames) {
 }
 
 // src/codegen/js/referenceOcJsContent.ts
-var REFERENCE_OC_JS = `// Once the document is ready
-$(document).ready(function ()
-{    
-    
-
-    // Function to set content for Page Language & Error Message
-    // It is kept separate instead of being defined within setFieldData to provide handling in case data is not available in config for received language
-    // If data is not available in config for received language, fallbackLanguage will be used
-    function setPageContent()
-    {
-        // HTML Language
-        $("html").attr("lang", language.substring(0, language.indexOf("_")));
-
-        // HTML Direction (RTL/LTR)
-        var rtlLangs = ["ar", "he", "ku", "fa", "ur", "yi"];
-        var langSubtag = language.substring(0, language.indexOf("_"));
-        $("html").attr("dir", rtlLangs.indexOf(langSubtag) !== -1 ? "rtl" : "ltr");
-
-        // Error Message container content
-        var heading = "",
-            subHeading = "",
-            subHeadingUrl = "",
-            subHeadingUrlText = "";
-
-        try
-        {
-            heading = page_error[language]["hrErr"]["heading"];
-
-            subHeading = page_error[language]["hrErr"]["subHeading"];
-
-            subHeadingUrl = page_error[language]["hrErr"]["subHeadingUrl"];
-
-            subHeadingUrlText = page_error[language]["hrErr"]["subHeadingUrlText"];
-        }
-        catch(err)
-        {
-            heading = page_error[param["fallbackLanguage"]]["hrErr"]["heading"];
-
-            subHeading = page_error[param["fallbackLanguage"]]["hrErr"]["subHeading"];
-
-            subHeadingUrl = page_error[param["fallbackLanguage"]]["hrErr"]["subHeadingUrl"];
-
-            subHeadingUrlText = page_error[param["fallbackLanguage"]]["hrErr"]["subHeadingUrlText"];
-        }
-        finally
-        {
-            $("div#hrErr").find("h3").html(heading);
-
-            $("div#hrErr").find("a").attr("href", subHeadingUrl);
-
-            $("div#hrErr").find("a").html(subHeadingUrlText);
-
-            $("div#hrErr").find("p").html(subHeading + $("div#hrErr").find("p").html());
-        }
-    }
-    
-    
-
-    
-
-    // Function to check all the Param(s) expected in URL are available or not
-    function validateRequiredUrlParam()
-    {
-        if(recipientId == "" || recipientId == null || recipientId == undefined)
-        {
-            throw new Error("Recipient Id Missing");
-        }
-    }
-
-    // Function to get value for passed key from fields JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder
-    function setFieldData()
-    {
-        // Heading
-        $("div.top_cont h2").html(fields[language]["headingBeforeBreak"] + $("div.top_cont h2").html() + fields[language]["headingAfterBreak"]);
-
-        // Subheading
-        $("div.top_cont p").html($("div.top_cont p").html() + fields[language]["requiredField"]);
-
-        // Profile Field(s)
-        $("div.form_top_group").find("div.form_text_bx").each(function()
-        {
-            // Field Label
-            var pFormLabel = $(this).find("p.form_label");
-            
-            pFormLabel.html(fields[language]["label"][pFormLabel.parent().find("input, select").attr("id")] + pFormLabel.html());
-
-            // Field Placeholder
-            $(this).find("input, select").each(function()
-            {
-                if($(this).attr("placeholder") != undefined)
-                {
-                    $(this).attr("placeholder", fields[language]["placeholder"][$(this).attr("id")])
-                }
-            });
-        });
-
-        // Privacy Policy & Subscribe
-        $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()
-        {
-            // Label
-            var ckbLabel = $(this).find("label");
-
-            ckbLabel.html(fields[language][ckbLabel.attr("for")] + ckbLabel.html());
-
-            // Link within Label
-            var ckbLabelLink = ckbLabel.find("a");
-
-            // Is present
-            if(ckbLabelLink.length === 1)
-            {
-                ckbLabelLink.children("img").attr("alt", fields[language][ckbLabel.attr("for") + "Link"]["imageAlt"]);
-
-                ckbLabelLink.children("img").attr("src", fields[language][ckbLabel.attr("for") + "Link"]["image"]);
-
-                ckbLabelLink.html(fields[language][ckbLabel.attr("for") + "Link"]["label"] + ckbLabelLink.html());
-
-                ckbLabelLink.attr("href", fields[language][ckbLabel.attr("for") + "Link"]["url"]);
-            }
-        });
-
-        // Submit Button
-        $("#btnSubmit").html(fields[language]["submitButton"]);
-        
-        // Thank You page / section
-        $("div#hrTy").find("h3").html(fields[language]["hrTy"]["heading"]);
-
-        $("div#hrTy").find("a").attr("href", fields[language]["hrTy"]["subHeadingUrl"]);
-
-        $("div#hrTy").find("a").html(fields[language]["hrTy"]["subHeadingUrlText"]);
-
-        $("div#hrTy").find("p").html(fields[language]["hrTy"]["subHeading"] + $("div#hrTy").find("p").html());
-    }
-
-    // Function to get value for passed key from questions & answers JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder
-    function setQuestionAndAnswerData()
-    {
-        $("div.form_check_group > div.form_check_module").each(function()
-        {
-            var questionId = $(this).attr("id");
-
-            // Question
-            $(this).find("div.form_check_title h3").html(questions[language][questionId]["heading"] + $(this).find("div.form_check_title h3").html());
-
-            $(this).find("div.form_check_title p").html(questions[language][questionId]["subheading"]);
-
-            // Answer
-            $(this).find("input[name='" + questionId + "']").each(function()
-            {
-                var input = $(this);
-
-                var label = input.next();
-
-                if (label.children().length == 0)
-                {
-                    // Answer with Text inside <label>
-                    label.html(answers[language][questionId][input.val()]);
-                }
-                else if (label.children().length == 1)
-                {
-                    // Answer with Text inside <p> (within <label>)
-                    label.children("p").html(answers[language][questionId][input.val()]);
-                }
-                else if (label.children().length == 2)
-                {
-                    // Answer with Text & Image (within <label>)
-                    label.children("p").html(answers[language][questionId][input.val()]["label"]);
-
-                    label.children("img").attr("src", answers[language][questionId][input.val()]["image"]);
-
-                    label.children("img").attr("alt", answers[language][questionId][input.val()]["imageAlt"]);
-                }
-            });
-        });
-    }
-	
-	function setAnswerDataFromparam(q01)
-	{
-		//isSubmitClicked = true;
-		$("#Q1"+q01).prop('checked', true);
-	}
-
-    // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message
-    function setValidationMessage()
-    {
-        $("input[data-parsley-error-message], select[data-parsley-error-message]").each(function()
-        {
-            $(this).attr("data-parsley-error-message", validation_messages[language][$(this).attr("id") + "Error"]);
-        });
-
-        $("input[data-parsley-type-message]").each(function()
-        {
-            $(this).attr("data-parsley-type-message", validation_messages[language][$(this).attr("id") + "Type"]);
-        });
-
-        $("input[data-parsley-length-message]").each(function()
-        {
-            $(this).attr("data-parsley-length-message", validation_messages[language][$(this).attr("id") + "Length"]);
-        });
-
-         $("#apiError").html(validation_messages[language]["apiError"]);
-        $("#submitIntentPopupMessage1").text(validation_messages[language]["modalMessage_1"]);
-        $("#submitIntentPopupMessage2").text(validation_messages[language]["modalMessage_2"]);
-        $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);
-        $("#submitIntentPopupNo").text(validation_messages[language]["modalButtonNo"]);
-		
-		$("input[data-parsley-mobile-number-by-country-message]").each(function()
-        {
-            $(this).attr("data-parsley-mobile-number-by-country-message", validation_messages[language][$(this).attr("id") + "Error"]);
-        });
-    }
-
-    // Function to populate Calling Code dropdown
-    function populateCallingCodeDropdown()
-    {
-        // Get Subsidiary from Country Code (parsed from Language)
-        var subsidiary = country_subsidiary[countryCode];
-
-        // Calling Code dropdown
-        var ddCallingCode = $("#callingCode");
-
-        // Set Default Value in Calling Code dropdown
-        //ddCallingCode.append($("<option></option>").val("0").html(fields[language]["callingCodeDropdownFirstEntry"]));
-
-        // Disable First / Default Entry in Calling Code dropdown
-        $("#callingCode option:first-child").attr("disabled", "disabled").prop("selected", true);
-
-        // Set Option(s) in Calling Code dropdown
-        $.each(subsidiary_detail[subsidiary], function (val, text)
-        {
-            // If Calling Code is not blank
-            if (text.callingCode != "")
-            {
-                ddCallingCode.append($("<option></option>").val(text.callingCode).html(text.countryName[language] + " (+" + text.callingCode + ")"));
-            }
-        });
-    }
-
-    // Function to reset selected value in Calling Code dropdown if Mobile Number is removed
-    function resetCallingCode()
-    {
-        if($("#mobileNumber").val() == "")
-        {
-            // Reset value
-            $("#callingCode").val("0");
-
-            // Remove Parsley validation message
-            $("#callingCode").parsley().reset();
-        }
-    }
-
-    // Function to check whether every question marked required (rendered with a "*") currently has an answer
-    function allRequiredQuestionsAnswered()
-    {
-        var allAnswered = true;
-
-        $("div.form_check_group > div.form_check_module").each(function()
-        {
-            if ($(this).find("div.form_check_title .star").length === 0)
-            {
-                return;
-            }
-
-            var textarea = $(this).find("textarea");
-
-            var hasAnswer = (textarea.length > 0)
-                ? ($.trim(textarea.val()) !== "")
-                : ($(this).find("input[type='radio']:checked, input[type='checkbox']:checked").length > 0);
-
-            if (!hasAnswer)
-            {
-                allAnswered = false;
-
-                return false;
-            }
-        });
-
-        return allAnswered;
-    }
-
-    // Function to enable Submit button once every required question has an answer (this variant has no Privacy Policy checkbox \u2014 else keep Submit button disabled)
-    function enableDisableSubmit()
-    {
-        if (allRequiredQuestionsAnswered())
-        {
-            $("#btnSubmit").prop("disabled", false);
-
-            $("#btnSubmit").removeClass("disabled");
-        }
-        else
-        {
-            $("#btnSubmit").prop("disabled", true);
-
-            $("#btnSubmit").addClass("disabled");
-        }
-    }
-
-    function validateModal()
-    {
-        // Check whether any questions in the form have been answered
-        submitModalAnsweredAny = $('[data-pt-api="y"][name^=Q]').filter((i, el) => el.checked).length > 0;
-
-		//submitModalWithsub = $("#subscribe").is(":checked");
-        return !submitModalHasOpened && !submitModalAnsweredAny;
-    }
-
-    function closeSubmitModalWithNo()
-    {
-        if (submitModalElement)
-        {
-            submitModalElement.removeClass("popup--open");
-        }
-    }
-	
-	function closeSubmitModalWithYes()
-    {
-		$("#subscribe").val("on");
-        if (submitModalElement)
-        {
-            submitModalElement.removeClass("popup--open");
-        }
-        submitModalHasOpened = false;
-    }
-
-    function showSubmitModal(resumeCallback)
-    {
-        submitModalResume = typeof resumeCallback === "function" ? resumeCallback : null;
-
-        if (!submitModalElement) // Bind events once
-        {
-            submitModalElement = $("#submitIntentPopup");
-            submitModalElement.find("#submitIntentPopupYes, .popup__close, .popup__dimmed").on("click", closeSubmitModal);
-            submitModalElement.find("#submitIntentPopupNo").on("click", function ()
-            {
-                closeSubmitModal();
-
-                if (submitModalResume)
-                {
-                    submitModalResume();
-                    submitModalResume = null;
-                }
-            });
-        }
-
-        submitModalElement.addClass("popup--open");
-        submitModalHasOpened = true;
-    }
-
-    // Function to attach different event(s) to various element(s)
-    function attachEvent()
-    {
-        // Add Parsley Custom Validator to validate Calling Code (value should be selected in dropdown if Mobile Number is entered)
-        window.Parsley.addValidator("requiredIf", {
-            validateString : function(value, requirement)
-            {
-                if($(requirement).parsley().isValid())
-                {
-                    if (jQuery(requirement).val())
-                    {
-                        return !!value;
-                    }
-                }
-
-                return true;
-            }
-        });
-
-		// Build callingCode -> countryCode mapping from subsidiary_detail
-        var callingCodeToCountry = {};
-        $.each(subsidiary_detail, function(subsidiary, countries) {
-            $.each(countries, function(i, country) {
-                if (country.callingCode && country.callingCode !== "") {
-                    callingCodeToCountry[country.callingCode] = country.countryCode;
-                }
-            });
-        });
-
-        // Custom Parsley Validator - validate mobile number against selected calling code using libphonenumber-js
-        window.Parsley.addValidator("mobileNumberByCountry", {
-            validateString: function (value) {
-                if (value.trim() === "") return true; // empty value handled by required-if on callingCode
-
-                var callingCode = $("#callingCode").val();
-                if (!callingCode || callingCode === "0") return false;
-
-                // Digit-length correctness is left entirely to libphonenumber-js's own
-                // per-country numbering-plan metadata below (isValid()) rather than a
-                // hardcoded "9 digits for UAE, 8 for everyone else" guess \u2014 that guess
-                // was wrong for other countries this same dropdown offers (e.g. Saudi
-                // Arabia also needs 9 digits, not 8), and redundant even where it
-                // happened to be right, since isValid() already enforces the correct
-                // length for whichever country was actually selected.
-                var fullNumber = "+" + callingCode + value;
-                try {
-                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber);
-                    return phoneNumber && phoneNumber.isValid();
-                } catch (e) {
-                    return false;
-                }
-            },
-            message: "Enter a valid mobile number"
-        });
-        // Clear / reset user entered data (from Profile fields)
-        $(".btn_clear").on("click", function()
-        {
-            // Parent of element having btn_clear class
-            var parent = $(this).parent();
-
-            // Find input field present in parent container (having element with btn_clear class)
-            var inputField = parent.find("input");
-
-            // If input field is present
-            if (inputField.length === 1)
-            {
-                // Reset input field value
-                inputField.val("");
-
-                // Remove Parsley validation message
-                inputField.parsley().reset();
-
-                // Find second parent (parent element's parent) of element having btn_clear class
-                var secondParent = parent.parent();
-
-                // Find dropdown field present in secodn parent container
-                var ddSelect = secondParent.find("select");
-
-                // If dropdown is present && is dependent on input field
-                if((ddSelect.length === 1) && (ddSelect.attr("data-parsley-required-if") != undefined) && (ddSelect.attr("data-parsley-required-if") == ("#" + inputField.attr("id"))))
-                {
-                    // Reset dropdown value
-                    ddSelect.val(secondParent.find("select option:first-child").val());
-
-                    // Remove Parsley validation message
-                    ddSelect.parsley().reset();
-                }
-            }
-        });
-
-        // Attach event to reset Calling Code if Mobile Number is removed
-        $("#mobileNumber").on("change", resetCallingCode);
-
-        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any required question's answer(s)
-        $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);
-
-        $("div.form_check_group > div.form_check_module").find("textarea").on("change keyup", enableDisableSubmit);
-        // Floating submit button (outside form) \u2014 trigger Parsley validation on click
-        // $("#btnSubmit").on("click", function ()
-        // {
-            // var $form = $("#dataForm").parsley();
-
-            // if ($form.isValid())
-            // {
-                // validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
-            // }
-            // else
-            // {
-                // $form.validate();
-            // }
-        // });
-
-
-        // For Calling Code & Mobile Number fields, override Parsley method to change DOM position of validation message
-        window.Parsley.on('field:error', function()
-        {
-            if(this.$element.attr("id") == "callingCode")
-            {
-                $("#callingCode").parent().prev().after($("#callingCode").next("span.parsley-errors"));
-            }
-
-            if(this.$element.attr("id") == "mobileNumber")
-            {
-                $("#mobileNumber").before($("#mobileNumber").next("span.parsley-errors"));
-				// Force red color on mobile number validation errors
-                $("#mobileNumber").next("span.parsley-errors").find("span.parsley-error").css("color", "red");
-            }
-        });
-    }
-
-    // Function to carry out task(s) at the start of Form submit process
-    function preSubmitProcess()
-    {
-		//submitFlag = true;
-        // Disable Submit button
-        $("#btnSubmit").attr("disabled", true).addClass("disabled");
-
-        showOverlay();
-
-        // Hide error message
-        $("#apiError").hide();
-    }
-
-    // Function to show Overlay (with Loader)
-    function showOverlay()
-    {
-        if( $("#overlay").css("display") == "none")
-        {
-            $("#overlay").css("display", "block");
-        }
-    }
-
-    // Function to hide Overlay (with Loader)
-    function hideOverlay()
-    {
-        if( $("#overlay").css("display") == "block")
-        {
-            $("#overlay").css("display", "none");
-        }
-    }
-
-    // Function to show div confirming that data was successfully sent to server
-    function showSuccess()
-    {
-        // Hide div having Form fields
-        $("div.container_oc").css("display", "none");
-
-        // Empty div (having Form fields)
-        $("div.container_oc").empty();
-
-        // Hide div having Error message
-        $("#hrErr").css("display", "none");
-
-        // Empty div (having Error message)
-        $("#hrErr").empty();
-
-        // Scroll to Top
-        window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-        });
-
-        // Show div having Success message
-        $("#hrTy").css("display", "block");
-
-        // Set Timeout for Redirection
-		window.top.location.href = fields[language]["redirectAfterSuccessUrl"];
-        //setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 10) * 1000));
-
-        hideOverlay();
-
-        // Empty div (having Ovelary with Loader)
-        $("#overlay").empty();
-
-        // Adobe Analytics Tracking - Submit Form Event
-        if (param?.analytics?.enabled) {
-            _satellite.track("submit_form");
-        }
-    }
-
-    // Function to show div informing about error
-    function showError()
-    {
-        // Hide div having Form fields
-        $("div.container_oc").css("display", "none");
-
-        // Empty div (having Form fields)
-        $("div.container_oc").empty();
-
-        // Hide div having Success message
-        $("#hrTy").css("display", "none");
-
-        // Empty div (having Success message)
-        $("#hrTy").empty();
-
-        // Scroll to Top
-        window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-        });
-
-        // Show div having Error message
-        $("#hrErr").css("display", "block");
-
-        hideOverlay();
-
-        // Empty div (having Ovelary with Loader)
-        $("#overlay").empty();
-    }
-
-    // Function to parse User Agent to get Platform Type
-    function getPlatformType()
-    {
-        var userAgent = navigator.userAgent.toString();
-
-        var platformType = "web";
-
-        if(!!(window.EcommAndroidClient || window.flutter_inappwebview) || userAgent.indexOf('samsung-mobile-app') > -1)
-        {
-            platformType = "app";
-        }
-
-        return platformType;
-    }
-
-    // Function to Identify HHP using Calling Code & Mobile Number
-    function identifyHHP(callingCode, mobileNumber)
-    {
-        var hhp =  "";
-
-        if (callingCode != null && callingCode != "" && mobileNumber != "")
-        {
-            hhp = (callingCode + mobileNumber);
-        }
-
-        return hhp;
-    }
-
-    // Function to handle error occurred during API call
-    function apiCallErrorHandler(isSubmitClicked)
-    {
-        if(isSubmitClicked)
-        {
-            // Show error message
-            $("#apiError").show();
-
-            // Enable Submit button so that user can try again
-            enableDisableSubmit();
-
-            // Scroll to Bottom
-            window.scrollTo({
-                top: document.body.scrollHeight,
-                behavior: "smooth"
-            });
-        }
-
-        hideOverlay();
-    }
-    
-
-    // Function to Send Data to API
-    function sendData(request, isSubmitClicked)
-    {
-        try
-        {
-            fetch(param["apiEndpoint"], {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(request)
-            })
-            .then(response =>
-            {
-                if(!(response.ok) || response.status != "200")
-                {
-                    apiCallErrorHandler(isSubmitClicked);
-                }
-                else
-                {
-                    if(isSubmitClicked)
-                    {
-                        showSuccess();
-                    }
-                    else
-                    {
-                        hideOverlay();
-                    }
-                }
-            }).
-            catch(error =>
-            {
-                apiCallErrorHandler(isSubmitClicked);
-            });
-        }
-        catch(err)
-        {
-            apiCallErrorHandler(isSubmitClicked);
-        }
-    }
- // iOS or MacOS \xED\u0152\x90\xEB\xB3\u201E \xED\u2022\xA8\xEC\u02C6\u02DC
-    function isIOS() {
-        var ua = navigator.userAgent || navigator.vendor || window.opera;
-        var iOSClassic = /iPhone|iPad|iPod/.test(ua);
-        var iPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        var MacOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints <= 1);
-        var hasMacUA = /Macintosh/.test(ua) && !iPadOS;
-        return iOSClassic || iPadOS || MacOS || hasMacUA;
-    }
-    // Function to create Request data based on User Input & call method to trigger API
-    function mapParam(userResponse, isSubmitClicked)
-    {
-		if(isSubmitClicked === false ? userResponse["Q1"] = "": userResponse["Q1"] = userResponse["Q1"]);
-        var dtmCurrent = new Date();
-
-        var requestBody = {
-            app_yn: (getPlatformType() === "app" ? "Y" : "N"),
-			channel: ch === "" ? param["channel"]["oneClick"] : ch,
-			channel_detail: chd === "" ? param["channelDetail"]["oneClick"] : chd,
-            cid: userResponse["campaignId"],
-            country_alpha_2: userResponse["countryCode"],
-            deliveryId: userResponse["deliveryId"],
-            email: userResponse["email"] || "",
-            first_name: userResponse["firstName"] || "",
-            hhp: identifyHHP(userResponse["callingCode"], userResponse["mobileNumber"]),
-            imei: "",
-            language: userResponse["language"],
-            last_name: userResponse["lastName"] || "",
-            mid: "",
-            pin_code: userResponse["zipCode"] || "",
-            privacy_policy_yn: "Y",//((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),
-            project: param["project"],
-            q01Answer: userResponse["Q1"],
-            q02Answer: userResponse["Q2"],
-            q03Answer: userResponse["Q3"],
-            q04Answer: userResponse["Q4"],
-            q05Answer: userResponse["Q5"],
-            q06Answer: "",
-            q07Answer: "",
-            q08Answer: "",
-            q09Answer: "",
-            q10Answer: "",
-            q11Answer: "",
-            q12Answer: "",
-            q13Answer: "",
-            q14Answer: "",
-            q15Answer: "",
-            q16Answer: "",
-            q17Answer: "",
-            q18Answer: "",
-            q19Answer: "",
-            q20Answer: "",
-            recipientId: userResponse["recipientId"],
-            registerDatetime: dtmCurrent.toISOString(),
-            source: param["source"]["oneClick"],
-            subscribe_yn: "Y",//((isSubmitClicked === true) ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),
-            tm_yn: "",
-            uniqueid: dtmCurrent.getTime() + "_" + crypto.randomUUID() + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),
-            VoucherRequired: param["voucherRequired"],
-			oneclickFlag: "Y",
-            submitFlag: (isSubmitClicked === true ? "Y" : "N"),
-            iosFlag: (isIOS() ? "Y" : "N")
-        };
-
-        sendData(requestBody, isSubmitClicked);
-    }
-
-    // Function to Process User Input & transfer flow for further processing
-    // This methoed will be called:
-    // 1 - When the page is viewed - This call will register Recipient as HR (blank / default data will be passed for form fields)
-    // 2 - When user clicks the Submit button - This call will send User Response to API
-    // Input variable received by this method is to differentiate between the 2 method calls mentioned above
-    function processFormData(isSubmitClicked)
-    {
-        var formElements = document.getElementById("dataForm");
-
-        var elementId,
-            elementName,
-            objectValue,
-            cBrBData = {},
-            formData = [],
-            elementDataAttr,
-            userResponse = {};
-
-        // Process all the Form Fields
-        for (i = 0; i < formElements.length; i++)
-        {
-            if (formElements.elements[i].type != "hidden")
-            {
-                elementId = formElements.elements[i].id;
-
-                elementName = formElements.elements[i].name;
-
-                elementDataAttr = formElements.elements[i].getAttribute("data-pt-api");
-
-                if (elementDataAttr && elementDataAttr.trim() !== "" && elementDataAttr.trim() === "y")
-                {
-                    if (formElements.elements[i].type == "radio")
-                    {
-                        if (!cBrBData[elementName])
-                        {
-                            cBrBData[elementName] = [];
-                        }
-
-                        if ($("#" + elementId).is(":checked"))
-                        {
-                            cBrBData[elementName].push($("#" + elementId).val());
-                        }
-                    }
-                    else if (formElements.elements[i].type == "checkbox")
-                    {
-                        if (!cBrBData[elementName])
-                        {
-                            cBrBData[elementName] = [];
-                        }
-
-                        if ($("#" + elementId).is(":checked"))
-                        {
-                            cBrBData[elementName].push($("#" + elementId).val());
-                        }
-                    }
-                    else
-                    {
-                        objectValue = $("#" + elementId).val();
-
-                        formData.push({name: elementName, value: objectValue});
-                    }
-                }
-            }
-        }
-
-        Object.keys(cBrBData).forEach(function (key)
-        {
-            formData.push({ name: key, value: cBrBData[key].join("|") });
-        });
-
-        // Move data from Array to Key / Value pair
-        for (var i=0, len=formData.length; i < len; i++)
-        {
-            userResponse[formData[i]["name"]] = formData[i]["value"];
-        }
-
-        // If Country Code dropdown is present in form, then pick the value from dropdown -- This is already handled above along with other fields (no special handling required).
-        // If Country Code dropdown is not present in form, then pick the value from URL (parsed from Language).
-        if(userResponse["countryCode"] == null || userResponse["countryCode"] == undefined)
-        {
-            userResponse["countryCode"] = countryCode;
-        }
-
-        // Add data determined earlier (from URL Parameter) to Key / Value pair
-        userResponse["campaignId"] = campaignId;
-
-        userResponse["deliveryId"] = deliveryId;
-
-        userResponse["recipientId"] = recipientId;
-
-        userResponse["language"] = language;
-		
-		userResponse["subscribe"] = $("#subscribe").val();
-		
-        userResponse["channel"] = ch;
-
-        userResponse["channel_detail"] = chd;
-
-        //userResponse["Q1"] = q01 === "" ? userResponse["Q1"]: q01;
-
-        // Call function to map API Parameter with User Response & send data to server
-        mapParam(userResponse, isSubmitClicked);
-    }
-
-    try
-    {
-        showOverlay();
-
-        // Get Parameter Value from URL
-        var frameUrlParam = new URLSearchParams(window.location.search);
-
-        var language = frameUrlParam.get("lang") || param["fallbackLanguage"];
-
-        var campaignId = frameUrlParam.get("cid") || "";
-
-        var deliveryId = frameUrlParam.get("did") || "";
-
-        var recipientId = frameUrlParam.get("id") || "";
-
-        var countryCode = language.substring(language.indexOf("_") + 1);
-
-		//Coomment-CEJ-q01 
-        var q01 = frameUrlParam.get("q01") || "";	
-		
-		var ch = frameUrlParam.get("ch") || "";
-			
-		var chd = frameUrlParam.get("chd") || "";
-		
-		//var submitFlag = false;
-
-        setPageContent();
-
-        validateRequiredUrlParam();
-
-        setFieldData();
-
-        setQuestionAndAnswerData();
-
-        setValidationMessage();
-
-        populateCallingCodeDropdown();
-
-        attachEvent();
-		
-		//Coomment-CEJ-q01 
-		if(q01 !== "")
-		{
-			setAnswerDataFromparam(q01);
-		}
-		
-		enableDisableSubmit();
-
-        // Load and display submit modal when form is submitted, or none of answers are selected
-        var submitModalElement = null;
-        var submitModalResume = null;
-        var submitModalHasOpened = false;
-        var submitModalAnsweredAny = false;
-
-        // Call method to send data to API and register Recipient as HR
-        // Varaible false passed to method call confirms that the Submit button wasn't clicked
-		processFormData(false);
-
-        function processValidatedSubmit()
-        {
-            preSubmitProcess();
-
-            // Varaible true passed to method call confirms that the Submit button wasn clicked
-            processFormData(true);
-        }
-
-        var parsleyConfig = {
-            errorsWrapper: '<span class="parsley-errors"></span>',
-            errorTemplate: '<span class="parsley-error"></span>',
-            excluded: 'input[type=button], input[type=submit], input[type=reset], input[type=hidden], input[class=noValidate]',
-        }
-
-        // Carry out following after the submit button is clicked
-        $("#btnSubmit").on("click", function() {
-            $("#dataForm").trigger("submit");
-        });
-        $("form").parsley(parsleyConfig).on("form:submit", function ()
-        {
-           validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
-
-           return false;
-        });
-    }
-    catch(err)
-    {
-        showError();
-    }
-});
-
-//OC_JS Final Update 08/07/2027 10:30:00 UAE
-//All update align with MENAO and SUWON.
-//All data tested.
-//Commented on 08/07/2027 15:22:00 UAE
+var REFERENCE_OC_JS = `// Once the document is ready\r
+$(document).ready(function ()\r
+{    \r
+    \r
+\r
+    // Function to set content for Page Language & Error Message\r
+    // It is kept separate instead of being defined within setFieldData to provide handling in case data is not available in config for received language\r
+    // If data is not available in config for received language, fallbackLanguage will be used\r
+    function setPageContent()\r
+    {\r
+        // HTML Language\r
+        $("html").attr("lang", language.substring(0, language.indexOf("_")));\r
+\r
+        // HTML Direction (RTL/LTR)\r
+        var rtlLangs = ["ar", "he", "ku", "fa", "ur", "yi"];\r
+        var langSubtag = language.substring(0, language.indexOf("_"));\r
+        $("html").attr("dir", rtlLangs.indexOf(langSubtag) !== -1 ? "rtl" : "ltr");\r
+\r
+        // Error Message container content\r
+        var heading = "",\r
+            subHeading = "",\r
+            subHeadingUrl = "",\r
+            subHeadingUrlText = "";\r
+\r
+        try\r
+        {\r
+            heading = page_error[language]["hrErr"]["heading"];\r
+\r
+            subHeading = page_error[language]["hrErr"]["subHeading"];\r
+\r
+            subHeadingUrl = page_error[language]["hrErr"]["subHeadingUrl"];\r
+\r
+            subHeadingUrlText = page_error[language]["hrErr"]["subHeadingUrlText"];\r
+        }\r
+        catch(err)\r
+        {\r
+            heading = page_error[param["fallbackLanguage"]]["hrErr"]["heading"];\r
+\r
+            subHeading = page_error[param["fallbackLanguage"]]["hrErr"]["subHeading"];\r
+\r
+            subHeadingUrl = page_error[param["fallbackLanguage"]]["hrErr"]["subHeadingUrl"];\r
+\r
+            subHeadingUrlText = page_error[param["fallbackLanguage"]]["hrErr"]["subHeadingUrlText"];\r
+        }\r
+        finally\r
+        {\r
+            $("div#hrErr").find("h3").html(heading);\r
+\r
+            $("div#hrErr").find("a").attr("href", subHeadingUrl);\r
+\r
+            $("div#hrErr").find("a").html(subHeadingUrlText);\r
+\r
+            $("div#hrErr").find("p").html(subHeading + $("div#hrErr").find("p").html());\r
+        }\r
+    }\r
+    \r
+    \r
+\r
+    \r
+\r
+    // Function to check all the Param(s) expected in URL are available or not\r
+    function validateRequiredUrlParam()\r
+    {\r
+        if(recipientId == "" || recipientId == null || recipientId == undefined)\r
+        {\r
+            throw new Error("Recipient Id Missing");\r
+        }\r
+    }\r
+\r
+    // Function to get value for passed key from fields JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder\r
+    function setFieldData()\r
+    {\r
+        // Heading\r
+        $("div.top_cont h2").html(fields[language]["headingBeforeBreak"] + $("div.top_cont h2").html() + fields[language]["headingAfterBreak"]);\r
+\r
+        // Campaign Subheading\r
+        $("div.top_cont p.top_subheading").html(fields[language]["campaignSubheading"]);\r
+\r
+        // Required Field Note\r
+        $("div.top_cont p").not(".top_subheading").html($("div.top_cont p").not(".top_subheading").html() + fields[language]["requiredField"]);\r
+\r
+        // Profile Field(s)\r
+        $("div.form_top_group").find("div.form_text_bx").each(function()\r
+        {\r
+            // Field Label\r
+            var pFormLabel = $(this).find("p.form_label");\r
+            \r
+            pFormLabel.html(fields[language]["label"][pFormLabel.parent().find("input, select").attr("id")] + pFormLabel.html());\r
+\r
+            // Field Placeholder\r
+            $(this).find("input, select").each(function()\r
+            {\r
+                if($(this).attr("placeholder") != undefined)\r
+                {\r
+                    $(this).attr("placeholder", fields[language]["placeholder"][$(this).attr("id")])\r
+                }\r
+            });\r
+        });\r
+\r
+        // Privacy Policy & Subscribe\r
+        $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()\r
+        {\r
+            // Label\r
+            var ckbLabel = $(this).find("label");\r
+\r
+            ckbLabel.html(fields[language][ckbLabel.attr("for")] + ckbLabel.html());\r
+\r
+            // Link within Label\r
+            var ckbLabelLink = ckbLabel.find("a");\r
+\r
+            // Is present\r
+            if(ckbLabelLink.length === 1)\r
+            {\r
+                ckbLabelLink.children("img").attr("alt", fields[language][ckbLabel.attr("for") + "Link"]["imageAlt"]);\r
+\r
+                ckbLabelLink.children("img").attr("src", fields[language][ckbLabel.attr("for") + "Link"]["image"]);\r
+\r
+                ckbLabelLink.html(fields[language][ckbLabel.attr("for") + "Link"]["label"] + ckbLabelLink.html());\r
+\r
+                ckbLabelLink.attr("href", fields[language][ckbLabel.attr("for") + "Link"]["url"]);\r
+            }\r
+        });\r
+\r
+        // Submit Button\r
+        $("#btnSubmit").html(fields[language]["submitButton"]);\r
+        \r
+        // Thank You page / section\r
+        $("div#hrTy").find("h3").html(fields[language]["hrTy"]["heading"]);\r
+\r
+        $("div#hrTy").find("a").attr("href", fields[language]["hrTy"]["subHeadingUrl"]);\r
+\r
+        $("div#hrTy").find("a").html(fields[language]["hrTy"]["subHeadingUrlText"]);\r
+\r
+        $("div#hrTy").find("p").html(fields[language]["hrTy"]["subHeading"] + $("div#hrTy").find("p").html());\r
+    }\r
+\r
+    // Function to get value for passed key from questions & answers JSON constant variable (present in Translation JS) based on Language AND set it in respective placeholder\r
+    function setQuestionAndAnswerData()\r
+    {\r
+        $("div.form_check_group > div.form_check_module").each(function()\r
+        {\r
+            var questionId = $(this).attr("id");\r
+\r
+            // Question\r
+            $(this).find("div.form_check_title h3").html(questions[language][questionId]["heading"] + $(this).find("div.form_check_title h3").html());\r
+\r
+            $(this).find("div.form_check_title p").html(questions[language][questionId]["subheading"]);\r
+\r
+            // Answer (radio / checkbox only \u2014 a shortText input shares the same\r
+            // "name" attribute but has no <label> sibling to populate, and a\r
+            // dropdown's <option>s are populated separately below)\r
+            $(this).find("input[name='" + questionId + "'][type='radio'], input[name='" + questionId + "'][type='checkbox']").each(function()\r
+            {\r
+                var input = $(this);\r
+\r
+                var label = input.next();\r
+\r
+                if (label.children().length == 0)\r
+                {\r
+                    // Answer with Text inside <label>\r
+                    label.html(answers[language][questionId][input.val()]);\r
+                }\r
+                else if (label.children().length == 1)\r
+                {\r
+                    // Answer with Text inside <p> (within <label>)\r
+                    label.children("p").html(answers[language][questionId][input.val()]);\r
+                }\r
+                else if (label.children().length == 2)\r
+                {\r
+                    // Answer with Text & Image (within <label>)\r
+                    label.children("p").html(answers[language][questionId][input.val()]["label"]);\r
+\r
+                    label.children("img").attr("src", answers[language][questionId][input.val()]["image"]);\r
+\r
+                    label.children("img").attr("alt", answers[language][questionId][input.val()]["imageAlt"]);\r
+                }\r
+            });\r
+\r
+            // Answer (dropdown options)\r
+            $(this).find("select").each(function()\r
+            {\r
+                var select = $(this);\r
+\r
+                $.each(answers[language][questionId], function(val, text)\r
+                {\r
+                    select.append($("<option></option>").val(val).html(text));\r
+                });\r
+            });\r
+        });\r
+    }\r
+	\r
+	function setAnswerDataFromparam(q01)\r
+	{\r
+		//isSubmitClicked = true;\r
+		$("#Q1"+q01).prop('checked', true);\r
+	}\r
+\r
+    // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message\r
+    function setValidationMessage()\r
+    {\r
+        $("input[data-parsley-error-message], select[data-parsley-error-message]").each(function()\r
+        {\r
+            $(this).attr("data-parsley-error-message", validation_messages[language][$(this).attr("id") + "Error"]);\r
+        });\r
+\r
+        $("input[data-parsley-type-message]").each(function()\r
+        {\r
+            $(this).attr("data-parsley-type-message", validation_messages[language][$(this).attr("id") + "Type"]);\r
+        });\r
+\r
+        $("input[data-parsley-length-message]").each(function()\r
+        {\r
+            $(this).attr("data-parsley-length-message", validation_messages[language][$(this).attr("id") + "Length"]);\r
+        });\r
+\r
+         $("#apiError").html(validation_messages[language]["apiError"]);\r
+        $("#submitIntentPopupMessage1").text(validation_messages[language]["modalMessage_1"]);\r
+        $("#submitIntentPopupMessage2").text(validation_messages[language]["modalMessage_2"]);\r
+        $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);\r
+        $("#submitIntentPopupNo").text(validation_messages[language]["modalButtonNo"]);\r
+		\r
+		$("input[data-parsley-mobile-number-by-country-message]").each(function()\r
+        {\r
+            $(this).attr("data-parsley-mobile-number-by-country-message", validation_messages[language][$(this).attr("id") + "Error"]);\r
+        });\r
+    }\r
+\r
+    // Function to populate Calling Code dropdown\r
+    function populateCallingCodeDropdown()\r
+    {\r
+        // Get Subsidiary from Country Code (parsed from Language)\r
+        var subsidiary = country_subsidiary[countryCode];\r
+\r
+        // Calling Code dropdown\r
+        var ddCallingCode = $("#callingCode");\r
+\r
+        // Set Default Value in Calling Code dropdown\r
+        //ddCallingCode.append($("<option></option>").val("0").html(fields[language]["callingCodeDropdownFirstEntry"]));\r
+\r
+        // Disable First / Default Entry in Calling Code dropdown\r
+        $("#callingCode option:first-child").attr("disabled", "disabled").prop("selected", true);\r
+\r
+        // Set Option(s) in Calling Code dropdown\r
+        $.each(subsidiary_detail[subsidiary], function (val, text)\r
+        {\r
+            // If Calling Code is not blank\r
+            if (text.callingCode != "")\r
+            {\r
+                ddCallingCode.append($("<option></option>").val(text.callingCode).html(text.countryName[language] + " (+" + text.callingCode + ")"));\r
+            }\r
+        });\r
+    }\r
+\r
+    // Function to reset selected value in Calling Code dropdown if Mobile Number is removed\r
+    function resetCallingCode()\r
+    {\r
+        if($("#mobileNumber").val() == "")\r
+        {\r
+            // Reset value\r
+            $("#callingCode").val("0");\r
+\r
+            // Remove Parsley validation message\r
+            $("#callingCode").parsley().reset();\r
+        }\r
+    }\r
+\r
+    // Function to check whether every question marked required (rendered with a "*") currently has an answer\r
+    function allRequiredQuestionsAnswered()\r
+    {\r
+        var allAnswered = true;\r
+\r
+        $("div.form_check_group > div.form_check_module").each(function()\r
+        {\r
+            if ($(this).find("div.form_check_title .star").length === 0)\r
+            {\r
+                return;\r
+            }\r
+\r
+            var textarea = $(this).find("textarea");\r
+\r
+            var select = $(this).find("select");\r
+\r
+            var shortTextInput = $(this).find("input[type='text']");\r
+\r
+            var hasAnswer = (textarea.length > 0)\r
+                ? ($.trim(textarea.val()) !== "")\r
+                : (select.length > 0)\r
+                    ? (select.val() !== "")\r
+                    : (shortTextInput.length > 0)\r
+                        ? ($.trim(shortTextInput.val()) !== "")\r
+                        : ($(this).find("input[type='radio']:checked, input[type='checkbox']:checked").length > 0);\r
+\r
+            if (!hasAnswer)\r
+            {\r
+                allAnswered = false;\r
+\r
+                return false;\r
+            }\r
+        });\r
+\r
+        return allAnswered;\r
+    }\r
+\r
+    // Function to enable Submit button once every required question has an answer (this variant has no Privacy Policy checkbox \u2014 else keep Submit button disabled)\r
+    function enableDisableSubmit()\r
+    {\r
+        if (allRequiredQuestionsAnswered())\r
+        {\r
+            $("#btnSubmit").prop("disabled", false);\r
+\r
+            $("#btnSubmit").removeClass("disabled");\r
+        }\r
+        else\r
+        {\r
+            $("#btnSubmit").prop("disabled", true);\r
+\r
+            $("#btnSubmit").addClass("disabled");\r
+        }\r
+    }\r
+\r
+    function validateModal()\r
+    {\r
+        // Check whether any questions in the form have been answered\r
+        submitModalAnsweredAny = $('[data-pt-api="y"][name^=Q]').filter((i, el) => el.checked).length > 0;\r
+\r
+		//submitModalWithsub = $("#subscribe").is(":checked");\r
+        return !submitModalHasOpened && !submitModalAnsweredAny;\r
+    }\r
+\r
+    function closeSubmitModalWithNo()\r
+    {\r
+        if (submitModalElement)\r
+        {\r
+            submitModalElement.removeClass("popup--open");\r
+        }\r
+    }\r
+	\r
+	function closeSubmitModalWithYes()\r
+    {\r
+		$("#subscribe").val("on");\r
+        if (submitModalElement)\r
+        {\r
+            submitModalElement.removeClass("popup--open");\r
+        }\r
+        submitModalHasOpened = false;\r
+    }\r
+\r
+    function showSubmitModal(resumeCallback)\r
+    {\r
+        submitModalResume = typeof resumeCallback === "function" ? resumeCallback : null;\r
+\r
+        if (!submitModalElement) // Bind events once\r
+        {\r
+            submitModalElement = $("#submitIntentPopup");\r
+            submitModalElement.find("#submitIntentPopupYes, .popup__close, .popup__dimmed").on("click", closeSubmitModal);\r
+            submitModalElement.find("#submitIntentPopupNo").on("click", function ()\r
+            {\r
+                closeSubmitModal();\r
+\r
+                if (submitModalResume)\r
+                {\r
+                    submitModalResume();\r
+                    submitModalResume = null;\r
+                }\r
+            });\r
+        }\r
+\r
+        submitModalElement.addClass("popup--open");\r
+        submitModalHasOpened = true;\r
+    }\r
+\r
+    // Function to attach different event(s) to various element(s)\r
+    function attachEvent()\r
+    {\r
+        // Add Parsley Custom Validator to validate Calling Code (value should be selected in dropdown if Mobile Number is entered)\r
+        window.Parsley.addValidator("requiredIf", {\r
+            validateString : function(value, requirement)\r
+            {\r
+                if($(requirement).parsley().isValid())\r
+                {\r
+                    if (jQuery(requirement).val())\r
+                    {\r
+                        return !!value;\r
+                    }\r
+                }\r
+\r
+                return true;\r
+            }\r
+        });\r
+\r
+		// Build callingCode -> countryCode mapping from subsidiary_detail\r
+        var callingCodeToCountry = {};\r
+        $.each(subsidiary_detail, function(subsidiary, countries) {\r
+            $.each(countries, function(i, country) {\r
+                if (country.callingCode && country.callingCode !== "") {\r
+                    callingCodeToCountry[country.callingCode] = country.countryCode;\r
+                }\r
+            });\r
+        });\r
+\r
+        // Custom Parsley Validator - validate mobile number against selected calling code using libphonenumber-js\r
+        window.Parsley.addValidator("mobileNumberByCountry", {\r
+            validateString: function (value) {\r
+                if (value.trim() === "") return true; // empty value handled by required-if on callingCode\r
+\r
+                var callingCode = $("#callingCode").val();\r
+                if (!callingCode || callingCode === "0") return false;\r
+\r
+                // Digit-length correctness is left entirely to libphonenumber-js's own\r
+                // per-country numbering-plan metadata below (isValid()) rather than a\r
+                // hardcoded "9 digits for UAE, 8 for everyone else" guess \u2014 that guess\r
+                // was wrong for other countries this same dropdown offers (e.g. Saudi\r
+                // Arabia also needs 9 digits, not 8), and redundant even where it\r
+                // happened to be right, since isValid() already enforces the correct\r
+                // length for whichever country was actually selected.\r
+                var fullNumber = "+" + callingCode + value;\r
+                try {\r
+                    var phoneNumber = libphonenumber.parsePhoneNumberFromString(fullNumber);\r
+                    return phoneNumber && phoneNumber.isValid();\r
+                } catch (e) {\r
+                    return false;\r
+                }\r
+            },\r
+            message: "Enter a valid mobile number"\r
+        });\r
+        // Clear / reset user entered data (from Profile fields)\r
+        $(".btn_clear").on("click", function()\r
+        {\r
+            // Parent of element having btn_clear class\r
+            var parent = $(this).parent();\r
+\r
+            // Find input field present in parent container (having element with btn_clear class)\r
+            var inputField = parent.find("input");\r
+\r
+            // If input field is present\r
+            if (inputField.length === 1)\r
+            {\r
+                // Reset input field value\r
+                inputField.val("");\r
+\r
+                // Remove Parsley validation message\r
+                inputField.parsley().reset();\r
+\r
+                // Find second parent (parent element's parent) of element having btn_clear class\r
+                var secondParent = parent.parent();\r
+\r
+                // Find dropdown field present in secodn parent container\r
+                var ddSelect = secondParent.find("select");\r
+\r
+                // If dropdown is present && is dependent on input field\r
+                if((ddSelect.length === 1) && (ddSelect.attr("data-parsley-required-if") != undefined) && (ddSelect.attr("data-parsley-required-if") == ("#" + inputField.attr("id"))))\r
+                {\r
+                    // Reset dropdown value\r
+                    ddSelect.val(secondParent.find("select option:first-child").val());\r
+\r
+                    // Remove Parsley validation message\r
+                    ddSelect.parsley().reset();\r
+                }\r
+            }\r
+        });\r
+\r
+        // Attach event to reset Calling Code if Mobile Number is removed\r
+        $("#mobileNumber").on("change", resetCallingCode);\r
+\r
+        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any required question's answer(s)\r
+        $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);\r
+\r
+        $("div.form_check_group > div.form_check_module").find("textarea, input[type='text']").on("change keyup", enableDisableSubmit);\r
+\r
+        $("div.form_check_group > div.form_check_module").find("select").on("change", enableDisableSubmit);\r
+        // Floating submit button (outside form) \u2014 trigger Parsley validation on click\r
+        // $("#btnSubmit").on("click", function ()\r
+        // {\r
+            // var $form = $("#dataForm").parsley();\r
+\r
+            // if ($form.isValid())\r
+            // {\r
+                // validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();\r
+            // }\r
+            // else\r
+            // {\r
+                // $form.validate();\r
+            // }\r
+        // });\r
+\r
+\r
+        // For Calling Code & Mobile Number fields, override Parsley method to change DOM position of validation message\r
+        window.Parsley.on('field:error', function()\r
+        {\r
+            if(this.$element.attr("id") == "callingCode")\r
+            {\r
+                $("#callingCode").parent().prev().after($("#callingCode").next("span.parsley-errors"));\r
+            }\r
+\r
+            if(this.$element.attr("id") == "mobileNumber")\r
+            {\r
+                $("#mobileNumber").before($("#mobileNumber").next("span.parsley-errors"));\r
+				// Force red color on mobile number validation errors\r
+                $("#mobileNumber").next("span.parsley-errors").find("span.parsley-error").css("color", "red");\r
+            }\r
+        });\r
+    }\r
+\r
+    // Function to carry out task(s) at the start of Form submit process\r
+    function preSubmitProcess()\r
+    {\r
+		//submitFlag = true;\r
+        // Disable Submit button\r
+        $("#btnSubmit").attr("disabled", true).addClass("disabled");\r
+\r
+        showOverlay();\r
+\r
+        // Hide error message\r
+        $("#apiError").hide();\r
+    }\r
+\r
+    // Function to show Overlay (with Loader)\r
+    function showOverlay()\r
+    {\r
+        if( $("#overlay").css("display") == "none")\r
+        {\r
+            $("#overlay").css("display", "block");\r
+        }\r
+    }\r
+\r
+    // Function to hide Overlay (with Loader)\r
+    function hideOverlay()\r
+    {\r
+        if( $("#overlay").css("display") == "block")\r
+        {\r
+            $("#overlay").css("display", "none");\r
+        }\r
+    }\r
+\r
+    // Function to show div confirming that data was successfully sent to server\r
+    function showSuccess()\r
+    {\r
+        // Hide div having Form fields\r
+        $("div.container_oc").css("display", "none");\r
+\r
+        // Empty div (having Form fields)\r
+        $("div.container_oc").empty();\r
+\r
+        // Hide div having Error message\r
+        $("#hrErr").css("display", "none");\r
+\r
+        // Empty div (having Error message)\r
+        $("#hrErr").empty();\r
+\r
+        // Scroll to Top\r
+        window.scrollTo({\r
+        top: 0,\r
+        behavior: "smooth"\r
+        });\r
+\r
+        // Show div having Success message\r
+        $("#hrTy").css("display", "block");\r
+\r
+        // Set Timeout for Redirection\r
+		window.top.location.href = fields[language]["redirectAfterSuccessUrl"];\r
+        //setTimeout(function (){ window.top.location.href = fields[language]["redirectAfterSuccessUrl"]; }, (parseInt(param["redirectAfterSuccessInSecond"], 10) * 1000));\r
+\r
+        hideOverlay();\r
+\r
+        // Empty div (having Ovelary with Loader)\r
+        $("#overlay").empty();\r
+\r
+        // Adobe Analytics Tracking - Submit Form Event\r
+        if (param?.analytics?.enabled) {\r
+            _satellite.track("submit_form");\r
+        }\r
+    }\r
+\r
+    // Function to show div informing about error\r
+    function showError()\r
+    {\r
+        // Hide div having Form fields\r
+        $("div.container_oc").css("display", "none");\r
+\r
+        // Empty div (having Form fields)\r
+        $("div.container_oc").empty();\r
+\r
+        // Hide div having Success message\r
+        $("#hrTy").css("display", "none");\r
+\r
+        // Empty div (having Success message)\r
+        $("#hrTy").empty();\r
+\r
+        // Scroll to Top\r
+        window.scrollTo({\r
+        top: 0,\r
+        behavior: "smooth"\r
+        });\r
+\r
+        // Show div having Error message\r
+        $("#hrErr").css("display", "block");\r
+\r
+        hideOverlay();\r
+\r
+        // Empty div (having Ovelary with Loader)\r
+        $("#overlay").empty();\r
+    }\r
+\r
+    // Function to parse User Agent to get Platform Type\r
+    function getPlatformType()\r
+    {\r
+        var userAgent = navigator.userAgent.toString();\r
+\r
+        var platformType = "web";\r
+\r
+        if(!!(window.EcommAndroidClient || window.flutter_inappwebview) || userAgent.indexOf('samsung-mobile-app') > -1)\r
+        {\r
+            platformType = "app";\r
+        }\r
+\r
+        return platformType;\r
+    }\r
+\r
+    // Function to Identify HHP using Calling Code & Mobile Number\r
+    function identifyHHP(callingCode, mobileNumber)\r
+    {\r
+        var hhp =  "";\r
+\r
+        if (callingCode != null && callingCode != "" && mobileNumber != "")\r
+        {\r
+            hhp = (callingCode + mobileNumber);\r
+        }\r
+\r
+        return hhp;\r
+    }\r
+\r
+    // Function to handle error occurred during API call\r
+    function apiCallErrorHandler(isSubmitClicked)\r
+    {\r
+        if(isSubmitClicked)\r
+        {\r
+            // Show error message\r
+            $("#apiError").show();\r
+\r
+            // Enable Submit button so that user can try again\r
+            enableDisableSubmit();\r
+\r
+            // Scroll to Bottom\r
+            window.scrollTo({\r
+                top: document.body.scrollHeight,\r
+                behavior: "smooth"\r
+            });\r
+        }\r
+\r
+        hideOverlay();\r
+    }\r
+    \r
+\r
+    // Function to Send Data to API\r
+    function sendData(request, isSubmitClicked)\r
+    {\r
+        try\r
+        {\r
+            fetch(param["apiEndpoint"], {\r
+                method: "POST",\r
+                headers: {\r
+                    "Content-Type": "application/json"\r
+                },\r
+                body: JSON.stringify(request)\r
+            })\r
+            .then(response =>\r
+            {\r
+                if(!(response.ok) || response.status != "200")\r
+                {\r
+                    apiCallErrorHandler(isSubmitClicked);\r
+                }\r
+                else\r
+                {\r
+                    if(isSubmitClicked)\r
+                    {\r
+                        showSuccess();\r
+                    }\r
+                    else\r
+                    {\r
+                        hideOverlay();\r
+                    }\r
+                }\r
+            }).\r
+            catch(error =>\r
+            {\r
+                apiCallErrorHandler(isSubmitClicked);\r
+            });\r
+        }\r
+        catch(err)\r
+        {\r
+            apiCallErrorHandler(isSubmitClicked);\r
+        }\r
+    }\r
+ // iOS or MacOS \xED\u0152\x90\xEB\xB3\u201E \xED\u2022\xA8\xEC\u02C6\u02DC\r
+    function isIOS() {\r
+        var ua = navigator.userAgent || navigator.vendor || window.opera;\r
+        var iOSClassic = /iPhone|iPad|iPod/.test(ua);\r
+        var iPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);\r
+        var MacOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints <= 1);\r
+        var hasMacUA = /Macintosh/.test(ua) && !iPadOS;\r
+        return iOSClassic || iPadOS || MacOS || hasMacUA;\r
+    }\r
+    // Function to create Request data based on User Input & call method to trigger API\r
+    function mapParam(userResponse, isSubmitClicked)\r
+    {\r
+		if(isSubmitClicked === false ? userResponse["Q1"] = "": userResponse["Q1"] = userResponse["Q1"]);\r
+        var dtmCurrent = new Date();\r
+\r
+        var requestBody = {\r
+            app_yn: (getPlatformType() === "app" ? "Y" : "N"),\r
+			channel: ch === "" ? param["channel"]["oneClick"] : ch,\r
+			channel_detail: chd === "" ? param["channelDetail"]["oneClick"] : chd,\r
+            cid: userResponse["campaignId"],\r
+            country_alpha_2: userResponse["countryCode"],\r
+            deliveryId: userResponse["deliveryId"],\r
+            email: userResponse["email"] || "",\r
+            first_name: userResponse["firstName"] || "",\r
+            hhp: identifyHHP(userResponse["callingCode"], userResponse["mobileNumber"]),\r
+            imei: "",\r
+            language: userResponse["language"],\r
+            last_name: userResponse["lastName"] || "",\r
+            mid: "",\r
+            pin_code: userResponse["zipCode"] || "",\r
+            privacy_policy_yn: "Y",//((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),\r
+            project: param["project"],\r
+            q01Answer: userResponse["Q1"],\r
+            q02Answer: userResponse["Q2"],\r
+            q03Answer: userResponse["Q3"],\r
+            q04Answer: userResponse["Q4"],\r
+            q05Answer: userResponse["Q5"],\r
+            q06Answer: "",\r
+            q07Answer: "",\r
+            q08Answer: "",\r
+            q09Answer: "",\r
+            q10Answer: "",\r
+            q11Answer: "",\r
+            q12Answer: "",\r
+            q13Answer: "",\r
+            q14Answer: "",\r
+            q15Answer: "",\r
+            q16Answer: "",\r
+            q17Answer: "",\r
+            q18Answer: "",\r
+            q19Answer: "",\r
+            q20Answer: "",\r
+            recipientId: userResponse["recipientId"],\r
+            registerDatetime: dtmCurrent.toISOString(),\r
+            source: param["source"]["oneClick"],\r
+            subscribe_yn: "Y",//((isSubmitClicked === true) ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),\r
+            tm_yn: "",\r
+            uniqueid: dtmCurrent.getTime() + "_" + crypto.randomUUID() + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),\r
+            VoucherRequired: param["voucherRequired"],\r
+			oneclickFlag: "Y",\r
+            submitFlag: (isSubmitClicked === true ? "Y" : "N"),\r
+            iosFlag: (isIOS() ? "Y" : "N")\r
+        };\r
+\r
+        sendData(requestBody, isSubmitClicked);\r
+    }\r
+\r
+    // Function to Process User Input & transfer flow for further processing\r
+    // This methoed will be called:\r
+    // 1 - When the page is viewed - This call will register Recipient as HR (blank / default data will be passed for form fields)\r
+    // 2 - When user clicks the Submit button - This call will send User Response to API\r
+    // Input variable received by this method is to differentiate between the 2 method calls mentioned above\r
+    function processFormData(isSubmitClicked)\r
+    {\r
+        var formElements = document.getElementById("dataForm");\r
+\r
+        var elementId,\r
+            elementName,\r
+            objectValue,\r
+            cBrBData = {},\r
+            formData = [],\r
+            elementDataAttr,\r
+            userResponse = {};\r
+\r
+        // Process all the Form Fields\r
+        for (i = 0; i < formElements.length; i++)\r
+        {\r
+            if (formElements.elements[i].type != "hidden")\r
+            {\r
+                elementId = formElements.elements[i].id;\r
+\r
+                elementName = formElements.elements[i].name;\r
+\r
+                elementDataAttr = formElements.elements[i].getAttribute("data-pt-api");\r
+\r
+                if (elementDataAttr && elementDataAttr.trim() !== "" && elementDataAttr.trim() === "y")\r
+                {\r
+                    if (formElements.elements[i].type == "radio")\r
+                    {\r
+                        if (!cBrBData[elementName])\r
+                        {\r
+                            cBrBData[elementName] = [];\r
+                        }\r
+\r
+                        if ($("#" + elementId).is(":checked"))\r
+                        {\r
+                            cBrBData[elementName].push($("#" + elementId).val());\r
+                        }\r
+                    }\r
+                    else if (formElements.elements[i].type == "checkbox")\r
+                    {\r
+                        if (!cBrBData[elementName])\r
+                        {\r
+                            cBrBData[elementName] = [];\r
+                        }\r
+\r
+                        if ($("#" + elementId).is(":checked"))\r
+                        {\r
+                            cBrBData[elementName].push($("#" + elementId).val());\r
+                        }\r
+                    }\r
+                    else\r
+                    {\r
+                        objectValue = $("#" + elementId).val();\r
+\r
+                        formData.push({name: elementName, value: objectValue});\r
+                    }\r
+                }\r
+            }\r
+        }\r
+\r
+        Object.keys(cBrBData).forEach(function (key)\r
+        {\r
+            formData.push({ name: key, value: cBrBData[key].join("|") });\r
+        });\r
+\r
+        // Move data from Array to Key / Value pair\r
+        for (var i=0, len=formData.length; i < len; i++)\r
+        {\r
+            userResponse[formData[i]["name"]] = formData[i]["value"];\r
+        }\r
+\r
+        // If Country Code dropdown is present in form, then pick the value from dropdown -- This is already handled above along with other fields (no special handling required).\r
+        // If Country Code dropdown is not present in form, then pick the value from URL (parsed from Language).\r
+        if(userResponse["countryCode"] == null || userResponse["countryCode"] == undefined)\r
+        {\r
+            userResponse["countryCode"] = countryCode;\r
+        }\r
+\r
+        // Add data determined earlier (from URL Parameter) to Key / Value pair\r
+        userResponse["campaignId"] = campaignId;\r
+\r
+        userResponse["deliveryId"] = deliveryId;\r
+\r
+        userResponse["recipientId"] = recipientId;\r
+\r
+        userResponse["language"] = language;\r
+		\r
+		userResponse["subscribe"] = $("#subscribe").val();\r
+		\r
+        userResponse["channel"] = ch;\r
+\r
+        userResponse["channel_detail"] = chd;\r
+\r
+        //userResponse["Q1"] = q01 === "" ? userResponse["Q1"]: q01;\r
+\r
+        // Call function to map API Parameter with User Response & send data to server\r
+        mapParam(userResponse, isSubmitClicked);\r
+    }\r
+\r
+    try\r
+    {\r
+        showOverlay();\r
+\r
+        // Get Parameter Value from URL\r
+        var frameUrlParam = new URLSearchParams(window.location.search);\r
+\r
+        var language = frameUrlParam.get("lang") || param["fallbackLanguage"];\r
+\r
+        var campaignId = frameUrlParam.get("cid") || "";\r
+\r
+        var deliveryId = frameUrlParam.get("did") || "";\r
+\r
+        var recipientId = frameUrlParam.get("id") || "";\r
+\r
+        var countryCode = language.substring(language.indexOf("_") + 1);\r
+\r
+		//Coomment-CEJ-q01 \r
+        var q01 = frameUrlParam.get("q01") || "";	\r
+		\r
+		var ch = frameUrlParam.get("ch") || "";\r
+			\r
+		var chd = frameUrlParam.get("chd") || "";\r
+		\r
+		//var submitFlag = false;\r
+\r
+        setPageContent();\r
+\r
+        validateRequiredUrlParam();\r
+\r
+        setFieldData();\r
+\r
+        setQuestionAndAnswerData();\r
+\r
+        setValidationMessage();\r
+\r
+        populateCallingCodeDropdown();\r
+\r
+        attachEvent();\r
+		\r
+		//Coomment-CEJ-q01 \r
+		if(q01 !== "")\r
+		{\r
+			setAnswerDataFromparam(q01);\r
+		}\r
+		\r
+		enableDisableSubmit();\r
+\r
+        // Load and display submit modal when form is submitted, or none of answers are selected\r
+        var submitModalElement = null;\r
+        var submitModalResume = null;\r
+        var submitModalHasOpened = false;\r
+        var submitModalAnsweredAny = false;\r
+\r
+        // Call method to send data to API and register Recipient as HR\r
+        // Varaible false passed to method call confirms that the Submit button wasn't clicked\r
+		processFormData(false);\r
+\r
+        function processValidatedSubmit()\r
+        {\r
+            preSubmitProcess();\r
+\r
+            // Varaible true passed to method call confirms that the Submit button wasn clicked\r
+            processFormData(true);\r
+        }\r
+\r
+        var parsleyConfig = {\r
+            errorsWrapper: '<span class="parsley-errors"></span>',\r
+            errorTemplate: '<span class="parsley-error"></span>',\r
+            excluded: 'input[type=button], input[type=submit], input[type=reset], input[type=hidden], input[class=noValidate]',\r
+        }\r
+\r
+        // Carry out following after the submit button is clicked\r
+        $("#btnSubmit").on("click", function() {\r
+            $("#dataForm").trigger("submit");\r
+        });\r
+        $("form").parsley(parsleyConfig).on("form:submit", function ()\r
+        {\r
+           validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();\r
+\r
+           return false;\r
+        });\r
+    }\r
+    catch(err)\r
+    {\r
+        showError();\r
+    }\r
+});\r
+\r
+//OC_JS Final Update 08/07/2027 10:30:00 UAE\r
+//All update align with MENAO and SUWON.\r
+//All data tested.\r
+//Commented on 08/07/2027 15:22:00 UAE\r
 //Commented on 14/07/2027 11:22:00 UAE`;
 
 // src/codegen/js/buildOcJs.ts
@@ -5787,16 +6032,22 @@ function defaultBuilderConfig() {
   };
 }
 export {
+  CALLING_CODES,
   ENGLISH_LOCALE,
+  RTL_LANGS,
   defaultBuilderConfig,
+  findCallingCodeEntry,
   formDefinitionSchema,
   generateSolution,
+  isRtlLangSubtag,
   isSupportedExcelFile,
+  langDisplayName,
   mapWorkbook,
   parseWorkbook,
   resolveFileNames,
   resolveLocales,
   resolveLocalizedText,
+  validateFormDefinition,
   validateWorkbook
 };
 //# sourceMappingURL=index.js.map
