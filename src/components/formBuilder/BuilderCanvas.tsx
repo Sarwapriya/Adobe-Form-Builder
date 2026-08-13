@@ -27,6 +27,7 @@ import {
   Paper,
   Stack,
   Switch,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -34,26 +35,72 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import type { ControlType, QuestionDefinition } from "@formbuilder/shared";
+import type { ControlType, FormVariant, QuestionDefinition } from "@formbuilder/shared";
 import { resolveLocalizedText } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
-import { CONTROL_TYPE_LABEL, createQuestion, renumberQuestions } from "./formBuilderHelpers";
+import { CONTROL_TYPE_LABEL, consentVariants, createConsent, createQuestion, questionVariants, renumberConsents, renumberQuestions } from "./formBuilderHelpers";
 
 const ADD_QUESTION_TYPES: ControlType[] = ["shortText", "text", "dropdown", "radio", "checkbox"];
+const VARIANT_LABEL: Record<FormVariant, string> = { ff: "Full Form", oc: "One-Click" };
+
+/** Clickable "Full Form" / "One-Click" tags shared by question rows and consent
+ * rows alike — a tag is disabled (not hidden) when the form itself doesn't have
+ * that variant enabled (see VariantConfigPanel), so there's always a visible
+ * reason a tag can't be toggled rather than it silently disappearing. */
+function VariantChips({
+  shownIn,
+  formVariants,
+  onToggle,
+}: {
+  shownIn: FormVariant[];
+  formVariants: FormVariant[];
+  onToggle: (variant: FormVariant, checked: boolean) => void;
+}) {
+  return (
+    <Stack direction="row" spacing={0.5} onClick={(e) => e.stopPropagation()}>
+      {(["ff", "oc"] as FormVariant[]).map((variant) => {
+        const enabledForForm = formVariants.includes(variant);
+        const shown = shownIn.includes(variant);
+        const chip = (
+          <Chip
+            key={variant}
+            label={VARIANT_LABEL[variant]}
+            size="small"
+            clickable={enabledForForm}
+            variant={shown ? "filled" : "outlined"}
+            color={shown && enabledForForm ? "primary" : "default"}
+            sx={{ opacity: enabledForForm ? 1 : 0.4 }}
+            onClick={enabledForForm ? () => onToggle(variant, !shown) : undefined}
+          />
+        );
+        return enabledForForm ? (
+          chip
+        ) : (
+          <Tooltip key={variant} title={`${VARIANT_LABEL[variant]} is disabled for this form — enable it under Form variants above.`}>
+            <span>{chip}</span>
+          </Tooltip>
+        );
+      })}
+    </Stack>
+  );
+}
 
 interface QuestionRowProps {
   question: QuestionDefinition;
   index: number;
   total: number;
   selected: boolean;
+  formVariants: FormVariant[];
   onSelect: () => void;
   onMove: (delta: number) => void;
   onDelete: () => void;
+  onToggleVariant: (variant: FormVariant, checked: boolean) => void;
 }
 
-function QuestionRow({ question, index, total, selected, onSelect, onMove, onDelete }: QuestionRowProps) {
+function QuestionRow({ question, index, total, selected, formVariants, onSelect, onMove, onDelete, onToggleVariant }: QuestionRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: question.id });
   const defaultLocale = useFormBuilderStore((s) => s.definition?.meta.defaultLocale ?? "en_GB");
+  const shownIn = questionVariants(question);
 
   return (
     <Box
@@ -86,6 +133,7 @@ function QuestionRow({ question, index, total, selected, onSelect, onMove, onDel
           {question.answers.length > 0 ? ` · ${question.answers.length} option${question.answers.length === 1 ? "" : "s"}` : ""}
         </Typography>
       </Box>
+      <VariantChips shownIn={shownIn} formVariants={formVariants} onToggle={onToggleVariant} />
       <Stack direction="row" spacing={0}>
         <IconButton
           size="small"
@@ -141,6 +189,7 @@ export function BuilderCanvas({
 }) {
   const questions = useFormBuilderStore((s) => s.definition?.questions ?? []);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
+  const formVariants = useFormBuilderStore((s): FormVariant[] => s.config?.variants ?? ["ff", "oc"]);
   const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
 
   const sensors = useSensors(
@@ -177,6 +226,18 @@ export function BuilderCanvas({
     if (selectedQuestionId === id) onSelectQuestion(null);
   }
 
+  function handleToggleVariant(id: string, variant: FormVariant, checked: boolean) {
+    updateDefinition((d) => ({
+      ...d,
+      questions: d.questions.map((q) => {
+        if (q.id !== id) return q;
+        const current = questionVariants(q);
+        const next = checked ? [...current, variant] : current.filter((v) => v !== variant);
+        return { ...q, visibleInVariants: next };
+      }),
+    }));
+  }
+
   return (
     <Paper sx={{ p: 2, borderRadius: 3 }}>
       <Stack direction="row" alignItems="center" sx={{ mb: 1.5 }}>
@@ -200,34 +261,57 @@ export function BuilderCanvas({
           No questions yet — click "Add question" to add one.
         </Typography>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={questions.map((q) => q.id)} strategy={verticalListSortingStrategy}>
-            <Stack spacing={1}>
-              {questions.map((q, i) => (
-                <QuestionRow
-                  key={q.id}
-                  question={q}
-                  index={i}
-                  total={questions.length}
-                  selected={selectedQuestionId === q.id}
-                  onSelect={() => onSelectQuestion(q.id)}
-                  onMove={(delta) => moveQuestion(i, delta)}
-                  onDelete={() => handleDeleteQuestion(q.id)}
-                />
-              ))}
-            </Stack>
-          </SortableContext>
-        </DndContext>
+        <>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
+            Click a question's "Full Form" / "One-Click" tag to control which variant(s) it appears in.
+          </Typography>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={questions.map((q) => q.id)} strategy={verticalListSortingStrategy}>
+              <Stack spacing={1}>
+                {questions.map((q, i) => (
+                  <QuestionRow
+                    key={q.id}
+                    question={q}
+                    index={i}
+                    total={questions.length}
+                    selected={selectedQuestionId === q.id}
+                    formVariants={formVariants}
+                    onSelect={() => onSelectQuestion(q.id)}
+                    onMove={(delta) => moveQuestion(i, delta)}
+                    onDelete={() => handleDeleteQuestion(q.id)}
+                    onToggleVariant={(variant, checked) => handleToggleVariant(q.id, variant, checked)}
+                  />
+                ))}
+              </Stack>
+            </SortableContext>
+          </DndContext>
+        </>
       )}
     </Paper>
   );
 }
 
-/** Presence toggles for the four predefined profile fields — these render in a
- * fixed area of the generated form (`.form_top_group`, always before the
- * question modules) rather than an interleavable position, so they're
- * add/remove toggles here rather than part of the draggable question list;
- * see renderProfileField.ts's own fixed field order. */
+interface PredefinedFieldItem {
+  key: "firstName" | "lastName" | "email" | "mobileNumber";
+  label: string;
+  shownIn: string;
+}
+
+interface ConsentToggleItem {
+  key: "privacyPolicy" | "marketingOptin";
+  label: string;
+}
+
+/** Presence toggles for the predefined profile fields — these render in a fixed
+ * area of the generated form (`.form_top_group`, always before the question
+ * modules — see renderProfileField.ts) rather than an interleavable position, so
+ * they're add/remove toggles here rather than part of the draggable question
+ * list. Which variant(s) show each of these is fixed by pageTemplate.ts (Full
+ * Form: all four; One-Click: Mobile Number only) — not admin-configurable, so the
+ * caption is purely informational. Consent checkboxes (Privacy Policy, Marketing
+ * Opt-in, and any admin-added ones below) render in the same "before submit"
+ * `.form_bottom_check_group` but, unlike these four, their variant visibility
+ * *is* configurable — see VariantChips/ConsentVisibilityControls. */
 export function PredefinedFieldToggles({
   selectedField,
   onSelectField,
@@ -236,16 +320,22 @@ export function PredefinedFieldToggles({
   onSelectField: (field: string | null) => void;
 }) {
   const fields = useFormBuilderStore((s) => s.definition?.fields);
+  const defaultLocale = useFormBuilderStore((s) => s.definition?.meta.defaultLocale ?? "en_GB");
+  const formVariants = useFormBuilderStore((s): FormVariant[] => s.config?.variants ?? ["ff", "oc"]);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
 
-  const items: Array<{ key: "firstName" | "lastName" | "email" | "mobileNumber"; label: string }> = [
-    { key: "firstName", label: "First Name" },
-    { key: "lastName", label: "Last Name" },
-    { key: "email", label: "Email" },
-    { key: "mobileNumber", label: "Mobile Number" },
+  const profileItems: PredefinedFieldItem[] = [
+    { key: "firstName", label: "First Name", shownIn: "Full Form only" },
+    { key: "lastName", label: "Last Name", shownIn: "Full Form only" },
+    { key: "email", label: "Email", shownIn: "Full Form only" },
+    { key: "mobileNumber", label: "Mobile Number", shownIn: "Full Form + One-Click" },
+  ];
+  const consentToggleItems: ConsentToggleItem[] = [
+    { key: "privacyPolicy", label: "Privacy Policy Consent" },
+    { key: "marketingOptin", label: "Marketing Opt-in" },
   ];
 
-  function toggle(key: (typeof items)[number]["key"], enabled: boolean) {
+  function toggleProfileField(key: PredefinedFieldItem["key"], enabled: boolean) {
     updateDefinition((d) => {
       const nextFields = { ...d.fields };
       if (!enabled) {
@@ -254,41 +344,184 @@ export function PredefinedFieldToggles({
       } else if (key === "mobileNumber") {
         nextFields.mobileNumber = { labelByLocale: { [d.meta.defaultLocale]: "Mobile Number" }, dropdownFirstEntryByLocale: {}, countries: [] };
       } else {
-        nextFields[key] = { labelByLocale: { [d.meta.defaultLocale]: items.find((i) => i.key === key)!.label } };
+        const label = profileItems.find((i) => i.key === key)!.label;
+        nextFields[key] = { labelByLocale: { [d.meta.defaultLocale]: label } };
       }
       return { ...d, fields: nextFields };
     });
   }
 
+  function toggleConsentField(key: ConsentToggleItem["key"], enabled: boolean) {
+    updateDefinition((d) => {
+      const nextFields = { ...d.fields };
+      if (!enabled) {
+        delete nextFields[key];
+        if (selectedField === key) onSelectField(null);
+      } else if (key === "privacyPolicy") {
+        nextFields.privacyPolicy = { textByLocale: { [d.meta.defaultLocale]: "I agree to the" }, linkUrlByLocale: {} };
+      } else {
+        const label = consentToggleItems.find((i) => i.key === key)!.label;
+        nextFields[key] = { labelByLocale: { [d.meta.defaultLocale]: label } };
+      }
+      return { ...d, fields: nextFields };
+    });
+  }
+
+  function toggleConsentVariant(key: ConsentToggleItem["key"], variant: FormVariant, checked: boolean) {
+    updateDefinition((d) => {
+      const current = d.fields[key];
+      if (!current) return d;
+      const currentVariants = consentVariants(current);
+      const next = checked ? [...currentVariants, variant] : currentVariants.filter((v) => v !== variant);
+      return { ...d, fields: { ...d.fields, [key]: { ...current, visibleInVariants: next } } };
+    });
+  }
+
   if (!fields) return null;
+  const currentFields = fields;
+  const additionalConsents = currentFields.additionalConsents ?? [];
+
+  function addConsent() {
+    updateDefinition((d) => {
+      const consent = createConsent((d.fields.additionalConsents?.length ?? 0) + 1);
+      onSelectField(consent.id);
+      return { ...d, fields: { ...d.fields, additionalConsents: [...(d.fields.additionalConsents ?? []), consent] } };
+    });
+  }
+
+  function moveConsent(index: number, delta: number) {
+    const toIndex = index + delta;
+    if (toIndex < 0 || toIndex >= additionalConsents.length) return;
+    updateDefinition((d) => {
+      const list = [...(d.fields.additionalConsents ?? [])];
+      const [moved] = list.splice(index, 1);
+      list.splice(toIndex, 0, moved);
+      return { ...d, fields: { ...d.fields, additionalConsents: renumberConsents(list) } };
+    });
+  }
+
+  function handleToggleAdditionalConsentVariant(id: string, variant: FormVariant, checked: boolean) {
+    updateDefinition((d) => ({
+      ...d,
+      fields: {
+        ...d.fields,
+        additionalConsents: (d.fields.additionalConsents ?? []).map((c) => {
+          if (c.id !== id) return c;
+          const current = consentVariants(c);
+          const next = checked ? [...current, variant] : current.filter((v) => v !== variant);
+          return { ...c, visibleInVariants: next };
+        }),
+      },
+    }));
+  }
+
+  function renderItem(item: PredefinedFieldItem, i: number) {
+    return (
+      <Box key={item.key}>
+        {i > 0 && <Divider sx={{ my: 0.5 }} />}
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Box>
+            <Chip
+              label={item.label}
+              size="small"
+              variant={selectedField === item.key ? "filled" : "outlined"}
+              color={selectedField === item.key ? "primary" : "default"}
+              onClick={() => (currentFields[item.key] ? onSelectField(item.key) : undefined)}
+              sx={{ cursor: currentFields[item.key] ? "pointer" : "default" }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+              {item.shownIn}
+            </Typography>
+          </Box>
+          <Switch size="small" checked={!!currentFields[item.key]} onChange={(e) => toggleProfileField(item.key, e.target.checked)} />
+        </Box>
+      </Box>
+    );
+  }
+
+  function renderConsentToggleItem(item: ConsentToggleItem, i: number) {
+    const value = currentFields[item.key];
+    return (
+      <Box key={item.key}>
+        {i > 0 && <Divider sx={{ my: 0.5 }} />}
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+          <Chip
+            label={item.label}
+            size="small"
+            variant={selectedField === item.key ? "filled" : "outlined"}
+            color={selectedField === item.key ? "primary" : "default"}
+            onClick={() => (value ? onSelectField(item.key) : undefined)}
+            sx={{ cursor: value ? "pointer" : "default" }}
+          />
+          {value && (
+            <VariantChips
+              shownIn={consentVariants(value)}
+              formVariants={formVariants}
+              onToggle={(variant, checked) => toggleConsentVariant(item.key, variant, checked)}
+            />
+          )}
+          <Switch size="small" checked={!!value} onChange={(e) => toggleConsentField(item.key, e.target.checked)} sx={{ ml: "auto" }} />
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
       <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
         Predefined fields
       </Typography>
-      <Stack spacing={0.5}>
-        {items.map((item, i) => (
-          <Box key={item.key}>
-            {i > 0 && <Divider sx={{ my: 0.5 }} />}
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <Chip
-                label={item.label}
-                size="small"
-                variant={selectedField === item.key ? "filled" : "outlined"}
-                color={selectedField === item.key ? "primary" : "default"}
-                onClick={() => (fields[item.key] ? onSelectField(item.key) : undefined)}
-                sx={{ cursor: fields[item.key] ? "pointer" : "default" }}
-              />
-              <Switch
-                size="small"
-                checked={!!fields[item.key]}
-                onChange={(e) => toggle(item.key, e.target.checked)}
-              />
+      <Stack spacing={0.5}>{profileItems.map(renderItem)}</Stack>
+
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mt: 2.5, mb: 0.25 }}>
+        Consent
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
+        Shown just before the Submit button. Click a "Full Form" / "One-Click" tag to control which variant(s) show it.
+      </Typography>
+      <Stack spacing={0.5}>{consentToggleItems.map(renderConsentToggleItem)}</Stack>
+
+      {additionalConsents.length > 0 && (
+        <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+          {additionalConsents.map((consent, i) => (
+            <Box key={consent.id}>
+              <Divider sx={{ my: 0.5 }} />
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                <Chip
+                  label={resolveLocalizedText(consent.textByLocale, defaultLocale, defaultLocale) || consent.id}
+                  size="small"
+                  variant={selectedField === consent.id ? "filled" : "outlined"}
+                  color={selectedField === consent.id ? "primary" : "default"}
+                  onClick={() => onSelectField(consent.id)}
+                  sx={{ cursor: "pointer", maxWidth: 140 }}
+                />
+                <VariantChips
+                  shownIn={consentVariants(consent)}
+                  formVariants={formVariants}
+                  onToggle={(variant, checked) => handleToggleAdditionalConsentVariant(consent.id, variant, checked)}
+                />
+                <Stack direction="row" spacing={0} sx={{ ml: "auto" }}>
+                  <IconButton size="small" aria-label="Move up" disabled={i === 0} onClick={() => moveConsent(i, -1)}>
+                    <ArrowUpwardIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    aria-label="Move down"
+                    disabled={i === additionalConsents.length - 1}
+                    onClick={() => moveConsent(i, 1)}
+                  >
+                    <ArrowDownwardIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              </Box>
             </Box>
-          </Box>
-        ))}
-      </Stack>
+          ))}
+        </Stack>
+      )}
+
+      <Button size="small" startIcon={<AddIcon />} onClick={addConsent} sx={{ mt: 1 }}>
+        Add another consent
+      </Button>
     </Paper>
   );
 }

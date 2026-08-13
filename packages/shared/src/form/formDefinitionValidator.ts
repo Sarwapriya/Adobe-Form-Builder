@@ -62,8 +62,41 @@ export function validateFormDefinition(form: FormDefinition): ValidationResult {
     }
   }
 
-  if (form.fields.privacyPolicy && !form.fields.privacyPolicy.linkUrlByLocale?.[form.meta.defaultLocale]) {
-    warnings.push(warn("The Privacy Policy field has no link URL for the default locale."));
+  if (form.fields.privacyPolicy) {
+    if (!form.fields.privacyPolicy.linkUrlByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Privacy Policy field has no link URL for the default locale."));
+    }
+    if (!form.fields.privacyPolicy.textByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Privacy Policy field has no consent text for the default locale."));
+    }
+    if (form.fields.privacyPolicy.visibleInVariants && form.fields.privacyPolicy.visibleInVariants.length === 0) {
+      warnings.push(warn("The Privacy Policy field isn't shown in Full Form or One-Click — it won't appear anywhere until you enable at least one."));
+    }
+  }
+
+  if (form.fields.marketingOptin?.visibleInVariants && form.fields.marketingOptin.visibleInVariants.length === 0) {
+    warnings.push(warn("The Marketing Opt-in field isn't shown in Full Form or One-Click — it won't appear anywhere until you enable at least one."));
+  }
+
+  if (form.fields.additionalConsents) {
+    checkDuplicates(
+      form.fields.additionalConsents.map((c) => c.id),
+      (id) => `Consent id "${id}" is used more than once.`,
+      errors,
+    );
+    checkSequential(
+      form.fields.additionalConsents.map((c) => c.order),
+      "Additional consents",
+      errors,
+    );
+    for (const consent of form.fields.additionalConsents) {
+      if (!consent.textByLocale?.[form.meta.defaultLocale]) {
+        warnings.push(warn(`Consent "${consent.id}" has no text for the default locale.`));
+      }
+      if (consent.visibleInVariants && consent.visibleInVariants.length === 0) {
+        warnings.push(warn(`Consent "${consent.id}" isn't shown in Full Form or One-Click — it won't appear anywhere until you enable at least one.`));
+      }
+    }
   }
 
   return { errors, warnings };
@@ -93,6 +126,9 @@ function checkQuestion(q: QuestionDefinition, errors: Issue[], warnings: Issue[]
   }
   if (!q.headingByLocale || Object.keys(q.headingByLocale).length === 0) {
     warnings.push(warn(`Question ${q.id} has no heading text.`));
+  }
+  if (q.visibleInVariants && q.visibleInVariants.length === 0) {
+    warnings.push(warn(`Question ${q.id} isn't shown in Full Form or One-Click — it won't appear anywhere until you enable at least one.`));
   }
 }
 

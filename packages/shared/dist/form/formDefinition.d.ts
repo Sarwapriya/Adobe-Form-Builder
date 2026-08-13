@@ -15,8 +15,10 @@ export interface LocaleInfo {
     code: LocaleCode;
     langSubtag: LangSubtag;
     isRtl: boolean;
-    /** Which Excel column this locale's text came from. */
-    sourceColumn: "en_GB" | "C" | "D";
+    /** Which Excel column this locale's text came from — "builder" for a locale an
+     * admin added directly in the Form Builder (no Excel column exists for it; never
+     * produced by mapper.ts, which only ever sets "en_GB"/"C"/"D"). */
+    sourceColumn: "en_GB" | "C" | "D" | "builder";
     /** Display name for the builder UI's language selector. */
     label: string;
 }
@@ -43,6 +45,13 @@ export interface QuestionDefinition {
     required: boolean;
     /** Empty for controlType "text". */
     answers: AnswerDefinition[];
+    /** Which output variant(s) render this question — pageTemplate.ts filters
+     * `form.questions` by this before rendering each variant's question modules
+     * (the DOM-driven reference JS then just never sees a module it wasn't given,
+     * no per-variant script changes needed). Excel-sourced forms never set this
+     * (mapper.ts has no such concept), so `undefined`/absent means "every
+     * variant" everywhere this is read — a builder-only, additive concept. */
+    visibleInVariants?: Array<"ff" | "oc">;
 }
 export interface LocalizedFieldMeta {
     labelByLocale: Record<LocaleCode, string>;
@@ -66,10 +75,52 @@ export interface PrivacyPolicyMeta {
      * "link text" translation — codegen renders the URL against generic anchor text. */
     textByLocale: Record<LocaleCode, string>;
     linkUrlByLocale: Record<LocaleCode, string>;
+    /** Whether checking this gates Submit (see `enableDisableSubmit()`'s generic
+     * required-consent scan in both FF.js/OC.js). Absent means `true` — Excel-sourced
+     * forms never set this and have always been required, so this preserves that
+     * default exactly. Builder-configurable. */
+    required?: boolean;
+    /** Which output variant(s) render this checkbox — same filtering pageTemplate.ts
+     * applies to `visibleInVariants` on QuestionDefinition, and the same "absent means
+     * every variant" convention would be wrong here: Excel-sourced/pre-existing forms
+     * (and every consent created before this field existed) have always rendered Full
+     * Form only, so absent means `["ff"]`, not both — see pageTemplate.ts. */
+    visibleInVariants?: Array<"ff" | "oc">;
 }
 export interface TermsAndConditionsMeta {
     textByLocale: Record<LocaleCode, string>;
     urlByLocale: Record<LocaleCode, string>;
+}
+/** Marketing Opt-in's own shape — a LocalizedFieldMeta (just a label, like
+ * firstName/lastName) plus the same required/visibility knobs PrivacyPolicyMeta and
+ * ConsentDefinition have, so all three consent-style checkboxes are configured
+ * identically. */
+export interface ConsentToggleMeta extends LocalizedFieldMeta {
+    /** Absent means `false` — Marketing Opt-in has always been optional/non-blocking. */
+    required?: boolean;
+    /** Absent means `["ff"]` — see PrivacyPolicyMeta.visibleInVariants. */
+    visibleInVariants?: Array<"ff" | "oc">;
+}
+/**
+ * An admin-added consent checkbox beyond the two fixed slots (Privacy Policy,
+ * Marketing Opt-in) — an open-ended list, unlike those two, so `id` follows a
+ * "consentExtraN" convention rather than a fixed name. Configured the same way as
+ * the two fixed slots (required/visibleInVariants) and the same way as
+ * QuestionDefinition's own visibleInVariants — see enableDisableSubmit()'s generic
+ * required-consent scan (both FF.js/OC.js) and mapParam()'s generic "consentExtra"
+ * payload collection, neither of which needed per-id changes to support this.
+ * Builder-only; never set on an Excel-sourced form (no equivalent Excel row exists). */
+export interface ConsentDefinition {
+    /** "consentExtra1".."consentExtraN" */
+    id: string;
+    order: number;
+    textByLocale: Record<LocaleCode, string>;
+    /** Optional — same shape as PrivacyPolicyMeta's own link, rendered only when set. */
+    linkUrlByLocale?: Record<LocaleCode, string>;
+    /** Absent means `false` — additional consents have always been optional. */
+    required?: boolean;
+    /** Absent means `["ff"]` — see PrivacyPolicyMeta.visibleInVariants. */
+    visibleInVariants?: Array<"ff" | "oc">;
 }
 /**
  * Each field is optional and presence-driven: a workbook that never defines a
@@ -85,7 +136,9 @@ export interface ProfileFieldSet {
      * comment. Never set on an Excel-sourced form. */
     mobileNumber?: MobileNumberFieldMeta;
     privacyPolicy?: PrivacyPolicyMeta;
-    marketingOptin?: LocalizedFieldMeta;
+    marketingOptin?: ConsentToggleMeta;
+    /** Admin-added consent checkboxes beyond the two above — see ConsentDefinition. */
+    additionalConsents?: ConsentDefinition[];
     termsAndConditions?: TermsAndConditionsMeta;
     submitButton: LocalizedFieldMeta;
     /** Varies per locale in the source (translators sometimes leave country-specific

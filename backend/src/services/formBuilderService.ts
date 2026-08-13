@@ -53,6 +53,19 @@ function defaultConfig(): BuilderConfig {
   return { ...defaultBuilderConfig(), variants: ["ff", "oc"] };
 }
 
+/** The calling standard user's own latest-contribution progress for a form — drives
+ * the 4-stage status bar on "My Forms" (Submitted → Reviewed by admin → Approved →
+ * Published). `reviewedAt`/`publishedAt` being set is what actually advances the
+ * bar; `status` alone distinguishes "approved, awaiting publish" from "published",
+ * and separately flags "rejected" (shown as a reset/outlined-red bar instead of the
+ * normal progression — see ContributionStatusBar.tsx). */
+export interface ContributionProgress {
+  status: "pending" | "approved" | "rejected";
+  submittedAt: Date;
+  reviewedAt: Date | null;
+  publishedAt: Date | null;
+}
+
 export interface FormListItem {
   id: string;
   name: string;
@@ -63,6 +76,11 @@ export interface FormListItem {
   createdAt: Date;
   updatedAt: Date;
   publishedVersionNumber: number | null;
+  /** Only ever populated by formAccessService's subsidiary-scoped listing, never by
+   * admin's own listForms (there's no single "calling user" whose contribution
+   * would apply) — null if they've never submitted one, undefined from the admin
+   * listing so the two call sites stay distinguishable. */
+  myContributionProgress?: ContributionProgress | null;
 }
 
 function toListItem(form: Form, publishedVersionNumber: number | null = null): FormListItem {
@@ -113,6 +131,25 @@ export async function createForm(input: CreateFormInput): Promise<FormListItem> 
 
   return AppDataSource.transaction(async (manager) => {
     const formId = crypto.randomUUID();
+
+    // Forms.id must exist before a FormVersion row can reference it as
+    // FormVersions.formId (a NOT NULL FK) — create the Form row first (with
+    // currentDraftVersionId temporarily null), then the FormVersion, then
+    // backfill the pointer, rather than inserting in dependency-violating order.
+    const formRepo = manager.getRepository(Form);
+    await formRepo.save(
+      formRepo.create({
+        id: formId,
+        name,
+        subsidiaryId,
+        projectCode: projectCode ?? null,
+        status: "draft",
+        currentDraftVersionId: null,
+        publishedVersionId: null,
+        createdByUserId: userId,
+      }),
+    );
+
     const versionRepo = manager.getRepository(FormVersion);
     const draftVersion = await versionRepo.save(
       versionRepo.create({
@@ -125,19 +162,8 @@ export async function createForm(input: CreateFormInput): Promise<FormListItem> 
       }),
     );
 
-    const formRepo = manager.getRepository(Form);
-    const form = await formRepo.save(
-      formRepo.create({
-        id: formId,
-        name,
-        subsidiaryId,
-        projectCode: projectCode ?? null,
-        status: "draft",
-        currentDraftVersionId: draftVersion.id,
-        publishedVersionId: null,
-        createdByUserId: userId,
-      }),
-    );
+    await formRepo.update(formId, { currentDraftVersionId: draftVersion.id });
+    const form = await formRepo.findOneOrFail({ where: { id: formId } });
 
     return toListItem(form);
   });
@@ -286,6 +312,15 @@ export async function publishForm(formId: string, userId: string): Promise<Publi
       publishedVersionId: draftVersion.id,
       updatedAt: publishedAt,
     });
+    // Any subsidiary contribution approved (merged onto the draft) since the last
+    // publish is going live right now along with everything else in this draft —
+    // stamp it so the submitter's status bar can show "Published" instead of
+    // "Approved" (see formContributionService.approveContribution, which
+    // deliberately never publishes on its own).
+    await manager.query(
+      `UPDATE FormContributions SET publishedAt = @0 WHERE formId = @1 AND status = 'approved' AND publishedAt IS NULL`,
+      [publishedAt, formId],
+    );
   });
 
   // Clone the just-published content into a fresh draft — further edits must never

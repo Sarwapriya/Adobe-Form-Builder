@@ -145,6 +145,26 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
         : "",
     };
 
+    // Admin-added consent checkboxes beyond the two fixed slots above — keyed by
+    // each one's own id (matching pageTemplate.ts's markup), same convention as
+    // privacyPolicy/subscribe, so the reference FF.js's *existing*, fully generic
+    // checkbox-label/link population loop (keyed off each `.form_bottom_check`
+    // div's own `for` attribute) picks these up automatically. No script changes
+    // needed for text/link population — only mapParam()'s payload construction
+    // needed a small generic addition (see buildFfJs.ts's reference source).
+    for (const consent of f.additionalConsents ?? []) {
+      const localeRecord = fields[locale] as Record<string, unknown>;
+      localeRecord[consent.id] = resolveLocalizedText(consent.textByLocale, locale, defaultLocale);
+      if (consent.linkUrlByLocale) {
+        localeRecord[`${consent.id}Link`] = {
+          label: "",
+          image: "",
+          imageAlt: "",
+          url: resolveLocalizedText(consent.linkUrlByLocale, locale, defaultLocale),
+        };
+      }
+    }
+
     pageError[locale] = { hrErr: resolvePageCopy(form.pageError, locale, defaultLocale) };
 
     const questionsForLocale: Record<string, { heading: string; subheading: string }> = {};

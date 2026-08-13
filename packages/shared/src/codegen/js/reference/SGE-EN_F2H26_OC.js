@@ -97,8 +97,11 @@ $(document).ready(function ()
             });
         });
 
-        // Privacy Policy & Subscribe
-        $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()
+        // Privacy Policy, Subscribe, & any admin-added consent checkboxes — selector
+        // doesn't require a form_bottom_group parent since this consent group (when
+        // configured to appear in One-Click) sits outside one, next to the floating
+        // form_bottom_bar rather than wrapped with it.
+        $("div.form_bottom_check_group").find("div.form_bottom_check").each(function()
         {
             // Label
             var ckbLabel = $(this).find("label");
@@ -301,10 +304,38 @@ $(document).ready(function ()
         return allAnswered;
     }
 
-    // Function to enable Submit button once every required question has an answer (this variant has no Privacy Policy checkbox — else keep Submit button disabled)
+    // Function to check whether every consent checkbox marked required (rendered with
+    // a "*" in its label) is currently checked — one-click forms have no consent
+    // checkboxes by default, in which case this is a no-op (nothing to find, so
+    // nothing to fail on), but an admin can opt one in for this variant (see
+    // ConsentDefinition/PrivacyPolicyMeta/ConsentToggleMeta's visibleInVariants in
+    // formDefinition.ts), same as Full Form.
+    function allRequiredConsentsChecked()
+    {
+        var allChecked = true;
+
+        $("div.form_bottom_check_group > div.form_bottom_check").each(function()
+        {
+            if ($(this).find("label .star").length === 0)
+            {
+                return;
+            }
+
+            if (!$(this).find("input[type='checkbox']").is(":checked"))
+            {
+                allChecked = false;
+
+                return false;
+            }
+        });
+
+        return allChecked;
+    }
+
+    // Function to enable Submit button once every required consent (if any are configured for this variant) is checked & every required question has an answer (else keep Submit button disabled)
     function enableDisableSubmit()
     {
-        if (allRequiredQuestionsAnswered())
+        if (allRequiredConsentsChecked() && allRequiredQuestionsAnswered())
         {
             $("#btnSubmit").prop("disabled", false);
 
@@ -461,6 +492,9 @@ $(document).ready(function ()
 
         // Attach event to reset Calling Code if Mobile Number is removed
         $("#mobileNumber").on("change", resetCallingCode);
+
+        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any consent checkbox configured for this variant (none by default) & any required question's answer(s)
+        $("div.form_bottom_check_group input[type='checkbox']").on("change", enableDisableSubmit);
 
         // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any required question's answer(s)
         $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);
@@ -721,7 +755,14 @@ $(document).ready(function ()
             last_name: userResponse["lastName"] || "",
             mid: "",
             pin_code: userResponse["zipCode"] || "",
-            privacy_policy_yn: "Y",//((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),
+            // One-Click has no Privacy Policy checkbox by default (recipients already
+            // consented via the channel that delivered their link, hence "Y" always) —
+            // but an admin can opt one into this variant (see PrivacyPolicyMeta's
+            // visibleInVariants), in which case its real checked state is used instead
+            // of the assumed default. `userResponse["privacyPolicy"]` is only ever set
+            // at all when that checkbox actually exists in the DOM (see the data-pt-api
+            // scan below), so its presence is exactly the signal needed here.
+            privacy_policy_yn: (userResponse["privacyPolicy"] !== undefined ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),
             project: param["project"],
             q01Answer: userResponse["Q1"],
             q02Answer: userResponse["Q2"],
@@ -746,7 +787,9 @@ $(document).ready(function ()
             recipientId: userResponse["recipientId"],
             registerDatetime: dtmCurrent.toISOString(),
             source: param["source"]["oneClick"],
-            subscribe_yn: "Y",//((isSubmitClicked === true) ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),
+            // Same reasoning as privacy_policy_yn above — Marketing Opt-in's own
+            // visibleInVariants controls whether #subscribe exists in this variant.
+            subscribe_yn: (userResponse["subscribe"] !== undefined ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),
             tm_yn: "",
             uniqueid: dtmCurrent.getTime() + "_" + crypto.randomUUID() + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),
             VoucherRequired: param["voucherRequired"],
@@ -754,6 +797,22 @@ $(document).ready(function ()
             submitFlag: (isSubmitClicked === true ? "Y" : "N"),
             iosFlag: (isIOS() ? "Y" : "N")
         };
+
+        // Admin-added consent checkboxes beyond the fixed privacy_policy_yn/subscribe_yn
+        // slots above (see ConsentDefinition in formDefinition.ts) — an open-ended list,
+        // so unlike those two there's no way to hardcode a fixed set of named payload
+        // keys here. Collected generically by the "consentExtra" id convention instead
+        // (assigned by domIds.ts's consentExtraId()), same as the Full Form script, so a
+        // checked consent is never silently dropped from what actually gets submitted.
+        requestBody.additionalConsents = {};
+
+        for (var consentKey in userResponse)
+        {
+            if (consentKey.indexOf("consentExtra") === 0)
+            {
+                requestBody.additionalConsents[consentKey] = (userResponse[consentKey] === "on" ? "Y" : "N");
+            }
+        }
 
         sendData(requestBody, isSubmitClicked);
     }

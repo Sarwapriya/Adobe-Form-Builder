@@ -15,3 +15,12 @@ export function answerDomKey(order: number): string {
 export function questionInputId(questionId: string, answerOrder: number): string {
   return `${questionId}${answerDomKey(answerOrder)}`;
 }
+
+/** Id for an admin-added consent checkbox (see ConsentDefinition) beyond the two
+ * fixed slots (privacyPolicy/subscribe) — the "consentExtra" prefix is also the
+ * convention the reference FF.js's mapParam() greps for generically to build the
+ * submission payload's `additionalConsents`, so this prefix must stay in sync
+ * with that script if ever renamed. */
+export function consentExtraId(order: number): string {
+  return `consentExtra${order}`;
+}

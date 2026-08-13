@@ -33,6 +33,8 @@ __export(index_exports, {
   CALLING_CODES: () => CALLING_CODES,
   ENGLISH_LOCALE: () => ENGLISH_LOCALE,
   RTL_LANGS: () => RTL_LANGS,
+  applyContribution: () => applyContribution,
+  contributionContentSchema: () => contributionContentSchema,
   defaultBuilderConfig: () => defaultBuilderConfig,
   findCallingCodeEntry: () => findCallingCodeEntry,
   formDefinitionSchema: () => formDefinitionSchema,
@@ -41,10 +43,14 @@ __export(index_exports, {
   isSupportedExcelFile: () => isSupportedExcelFile,
   langDisplayName: () => langDisplayName,
   mapWorkbook: () => mapWorkbook,
+  migrateDefaultLocale: () => migrateDefaultLocale,
   parseWorkbook: () => parseWorkbook,
   resolveFileNames: () => resolveFileNames,
   resolveLocales: () => resolveLocales,
   resolveLocalizedText: () => resolveLocalizedText,
+  translationEntrySchema: () => translationEntrySchema,
+  translationTargetSchema: () => translationTargetSchema,
+  validateContribution: () => validateContribution,
   validateFormDefinition: () => validateFormDefinition,
   validateWorkbook: () => validateWorkbook
 });
@@ -639,7 +645,7 @@ var localeInfoSchema = import_zod.z.object({
   code: import_zod.z.string(),
   langSubtag: import_zod.z.string(),
   isRtl: import_zod.z.boolean(),
-  sourceColumn: import_zod.z.enum(["en_GB", "C", "D"]),
+  sourceColumn: import_zod.z.enum(["en_GB", "C", "D", "builder"]),
   label: import_zod.z.string()
 });
 var answerDefinitionSchema = import_zod.z.object({
@@ -655,7 +661,8 @@ var questionDefinitionSchema = import_zod.z.object({
   headingByLocale: localeTextMap,
   subheadingByLocale: localeTextMap,
   required: import_zod.z.boolean(),
-  answers: import_zod.z.array(answerDefinitionSchema)
+  answers: import_zod.z.array(answerDefinitionSchema),
+  visibleInVariants: import_zod.z.array(import_zod.z.enum(["ff", "oc"])).optional()
 });
 var localizedFieldMetaSchema = import_zod.z.object({
   labelByLocale: localeTextMap,
@@ -670,11 +677,25 @@ var mobileNumberFieldMetaSchema = localizedFieldMetaSchema.extend({
 });
 var privacyPolicyMetaSchema = import_zod.z.object({
   textByLocale: localeTextMap,
-  linkUrlByLocale: localeTextMap
+  linkUrlByLocale: localeTextMap,
+  required: import_zod.z.boolean().optional(),
+  visibleInVariants: import_zod.z.array(import_zod.z.enum(["ff", "oc"])).optional()
+});
+var consentToggleMetaSchema = localizedFieldMetaSchema.extend({
+  required: import_zod.z.boolean().optional(),
+  visibleInVariants: import_zod.z.array(import_zod.z.enum(["ff", "oc"])).optional()
 });
 var termsAndConditionsMetaSchema = import_zod.z.object({
   textByLocale: localeTextMap,
   urlByLocale: localeTextMap
+});
+var consentDefinitionSchema = import_zod.z.object({
+  id: import_zod.z.string(),
+  order: import_zod.z.number(),
+  textByLocale: localeTextMap,
+  linkUrlByLocale: localeTextMap.optional(),
+  required: import_zod.z.boolean().optional(),
+  visibleInVariants: import_zod.z.array(import_zod.z.enum(["ff", "oc"])).optional()
 });
 var profileFieldSetSchema = import_zod.z.object({
   email: localizedFieldMetaSchema.optional(),
@@ -684,7 +705,8 @@ var profileFieldSetSchema = import_zod.z.object({
   callingCode: callingCodeFieldMetaSchema.optional(),
   mobileNumber: mobileNumberFieldMetaSchema.optional(),
   privacyPolicy: privacyPolicyMetaSchema.optional(),
-  marketingOptin: localizedFieldMetaSchema.optional(),
+  marketingOptin: consentToggleMetaSchema.optional(),
+  additionalConsents: import_zod.z.array(consentDefinitionSchema).optional(),
   termsAndConditions: termsAndConditionsMetaSchema.optional(),
   submitButton: localizedFieldMetaSchema,
   redirectAfterSuccessUrlByLocale: localeTextMap.optional(),
@@ -732,6 +754,85 @@ var formDefinitionSchema = import_zod.z.object({
   pageError: import_zod.z.record(import_zod.z.string(), pageCopySchema),
   thankYou: import_zod.z.record(import_zod.z.string(), pageCopySchema)
 });
+
+// src/form/localeMigration.ts
+function migrateTextMap(map, oldLocale, newLocale, removeOld) {
+  const next = { ...map };
+  if (next[oldLocale] && !next[newLocale]) {
+    next[newLocale] = next[oldLocale];
+  }
+  if (removeOld) delete next[oldLocale];
+  return next;
+}
+function migrateObjectMap(map, oldLocale, newLocale, removeOld) {
+  const next = { ...map };
+  const oldValue = next[oldLocale];
+  if (oldValue) {
+    next[newLocale] = next[newLocale] ? { ...oldValue, ...next[newLocale] } : oldValue;
+  }
+  if (removeOld) delete next[oldLocale];
+  return next;
+}
+function migrateDefaultLocale(form, newDefaultLocale, options = {}) {
+  const oldDefaultLocale = form.meta.defaultLocale;
+  if (oldDefaultLocale === newDefaultLocale) return form;
+  const removeOld = options.removeOldLocale ?? false;
+  const next = JSON.parse(JSON.stringify(form));
+  const text = (map) => migrateTextMap(map, oldDefaultLocale, newDefaultLocale, removeOld);
+  next.meta.defaultLocale = newDefaultLocale;
+  for (const q of next.questions) {
+    q.headingByLocale = text(q.headingByLocale);
+    q.subheadingByLocale = text(q.subheadingByLocale);
+    for (const a of q.answers) {
+      a.textByLocale = text(a.textByLocale);
+    }
+  }
+  const f = next.fields;
+  if (f.email) f.email.labelByLocale = text(f.email.labelByLocale);
+  if (f.firstName) f.firstName.labelByLocale = text(f.firstName.labelByLocale);
+  if (f.lastName) f.lastName.labelByLocale = text(f.lastName.labelByLocale);
+  if (f.countryCode) f.countryCode.labelByLocale = text(f.countryCode.labelByLocale);
+  if (f.callingCode) {
+    f.callingCode.labelByLocale = text(f.callingCode.labelByLocale);
+    f.callingCode.dropdownFirstEntryByLocale = text(f.callingCode.dropdownFirstEntryByLocale);
+  }
+  if (f.mobileNumber) {
+    f.mobileNumber.labelByLocale = text(f.mobileNumber.labelByLocale);
+    f.mobileNumber.dropdownFirstEntryByLocale = text(f.mobileNumber.dropdownFirstEntryByLocale);
+  }
+  if (f.privacyPolicy) {
+    f.privacyPolicy.textByLocale = text(f.privacyPolicy.textByLocale);
+    f.privacyPolicy.linkUrlByLocale = text(f.privacyPolicy.linkUrlByLocale);
+  }
+  if (f.marketingOptin) f.marketingOptin.labelByLocale = text(f.marketingOptin.labelByLocale);
+  if (f.additionalConsents) {
+    for (const c of f.additionalConsents) {
+      c.textByLocale = text(c.textByLocale);
+      if (c.linkUrlByLocale) c.linkUrlByLocale = text(c.linkUrlByLocale);
+    }
+  }
+  if (f.termsAndConditions) {
+    f.termsAndConditions.textByLocale = text(f.termsAndConditions.textByLocale);
+    f.termsAndConditions.urlByLocale = text(f.termsAndConditions.urlByLocale);
+  }
+  f.submitButton.labelByLocale = text(f.submitButton.labelByLocale);
+  if (f.redirectAfterSuccessUrlByLocale) f.redirectAfterSuccessUrlByLocale = text(f.redirectAfterSuccessUrlByLocale);
+  if (f.headingBeforeBreakByLocale) f.headingBeforeBreakByLocale = text(f.headingBeforeBreakByLocale);
+  if (f.headingAfterBreakByLocale) f.headingAfterBreakByLocale = text(f.headingAfterBreakByLocale);
+  if (f.campaignSubheadingByLocale) f.campaignSubheadingByLocale = text(f.campaignSubheadingByLocale);
+  if (f.requiredFieldNoteByLocale) f.requiredFieldNoteByLocale = text(f.requiredFieldNoteByLocale);
+  if (f.extraFieldsByLocale) {
+    const nextExtra = {};
+    for (const [key, map] of Object.entries(f.extraFieldsByLocale)) {
+      nextExtra[key] = text(map);
+    }
+    f.extraFieldsByLocale = nextExtra;
+  }
+  next.validationMessages = migrateObjectMap(next.validationMessages, oldDefaultLocale, newDefaultLocale, removeOld);
+  next.pageError = migrateObjectMap(next.pageError, oldDefaultLocale, newDefaultLocale, removeOld);
+  next.thankYou = migrateObjectMap(next.thankYou, oldDefaultLocale, newDefaultLocale, removeOld);
+  return next;
+}
 
 // src/form/callingCodes.ts
 var CALLING_CODES = [
@@ -804,8 +905,39 @@ function validateFormDefinition(form) {
       }
     }
   }
-  if (form.fields.privacyPolicy && !form.fields.privacyPolicy.linkUrlByLocale?.[form.meta.defaultLocale]) {
-    warnings.push(warn("The Privacy Policy field has no link URL for the default locale."));
+  if (form.fields.privacyPolicy) {
+    if (!form.fields.privacyPolicy.linkUrlByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Privacy Policy field has no link URL for the default locale."));
+    }
+    if (!form.fields.privacyPolicy.textByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Privacy Policy field has no consent text for the default locale."));
+    }
+    if (form.fields.privacyPolicy.visibleInVariants && form.fields.privacyPolicy.visibleInVariants.length === 0) {
+      warnings.push(warn("The Privacy Policy field isn't shown in Full Form or One-Click \u2014 it won't appear anywhere until you enable at least one."));
+    }
+  }
+  if (form.fields.marketingOptin?.visibleInVariants && form.fields.marketingOptin.visibleInVariants.length === 0) {
+    warnings.push(warn("The Marketing Opt-in field isn't shown in Full Form or One-Click \u2014 it won't appear anywhere until you enable at least one."));
+  }
+  if (form.fields.additionalConsents) {
+    checkDuplicates(
+      form.fields.additionalConsents.map((c) => c.id),
+      (id) => `Consent id "${id}" is used more than once.`,
+      errors
+    );
+    checkSequential(
+      form.fields.additionalConsents.map((c) => c.order),
+      "Additional consents",
+      errors
+    );
+    for (const consent of form.fields.additionalConsents) {
+      if (!consent.textByLocale?.[form.meta.defaultLocale]) {
+        warnings.push(warn(`Consent "${consent.id}" has no text for the default locale.`));
+      }
+      if (consent.visibleInVariants && consent.visibleInVariants.length === 0) {
+        warnings.push(warn(`Consent "${consent.id}" isn't shown in Full Form or One-Click \u2014 it won't appear anywhere until you enable at least one.`));
+      }
+    }
   }
   return { errors, warnings };
 }
@@ -833,6 +965,9 @@ function checkQuestion(q, errors, warnings) {
   if (!q.headingByLocale || Object.keys(q.headingByLocale).length === 0) {
     warnings.push(warn(`Question ${q.id} has no heading text.`));
   }
+  if (q.visibleInVariants && q.visibleInVariants.length === 0) {
+    warnings.push(warn(`Question ${q.id} isn't shown in Full Form or One-Click \u2014 it won't appear anywhere until you enable at least one.`));
+  }
 }
 function checkDuplicates(values, message, errors) {
   const seen = /* @__PURE__ */ new Set();
@@ -858,6 +993,176 @@ function err(message) {
 function warn(message) {
   return { severity: "warning", sheet: LABEL, message };
 }
+
+// src/form/contribution.ts
+function renumberAnswers(answers) {
+  return answers.map((a, i) => ({ ...a, id: `A${i + 1}`, order: i + 1 }));
+}
+function renumberQuestions(questions) {
+  return questions.map((q, i) => ({ ...q, id: `Q${i + 1}`, order: i + 1, answers: renumberAnswers(q.answers) }));
+}
+function renumberConsents(consents) {
+  return consents.map((c, i) => ({ ...c, id: `consentExtra${i + 1}`, order: i + 1 }));
+}
+function applyTranslationEntry(form, entry) {
+  const { target, locale, value } = entry;
+  switch (target.kind) {
+    case "profileLabel": {
+      const field = form.fields[target.field];
+      if (!field) return;
+      field.labelByLocale = { ...field.labelByLocale, [locale]: value };
+      return;
+    }
+    case "privacyPolicyText": {
+      if (!form.fields.privacyPolicy) return;
+      form.fields.privacyPolicy.textByLocale = { ...form.fields.privacyPolicy.textByLocale, [locale]: value };
+      return;
+    }
+    case "privacyPolicyLink": {
+      if (!form.fields.privacyPolicy) return;
+      form.fields.privacyPolicy.linkUrlByLocale = { ...form.fields.privacyPolicy.linkUrlByLocale, [locale]: value };
+      return;
+    }
+    case "consentText": {
+      const consent = form.fields.additionalConsents?.find((c) => c.id === target.consentId);
+      if (!consent) return;
+      consent.textByLocale = { ...consent.textByLocale, [locale]: value };
+      return;
+    }
+    case "consentLink": {
+      const consent = form.fields.additionalConsents?.find((c) => c.id === target.consentId);
+      if (!consent) return;
+      consent.linkUrlByLocale = { ...consent.linkUrlByLocale ?? {}, [locale]: value };
+      return;
+    }
+    case "questionHeading": {
+      const question = form.questions.find((q) => q.id === target.questionId);
+      if (!question) return;
+      question.headingByLocale = { ...question.headingByLocale, [locale]: value };
+      return;
+    }
+    case "questionSubheading": {
+      const question = form.questions.find((q) => q.id === target.questionId);
+      if (!question) return;
+      question.subheadingByLocale = { ...question.subheadingByLocale, [locale]: value };
+      return;
+    }
+    case "answerText": {
+      const question = form.questions.find((q) => q.id === target.questionId);
+      const answer = question?.answers.find((a) => a.id === target.answerId);
+      if (!answer) return;
+      answer.textByLocale = { ...answer.textByLocale, [locale]: value };
+      return;
+    }
+  }
+}
+function translationTargetExists(form, target) {
+  switch (target.kind) {
+    case "profileLabel":
+      return !!form.fields[target.field];
+    case "privacyPolicyText":
+    case "privacyPolicyLink":
+      return !!form.fields.privacyPolicy;
+    case "consentText":
+    case "consentLink":
+      return !!form.fields.additionalConsents?.some((c) => c.id === target.consentId);
+    case "questionHeading":
+    case "questionSubheading":
+      return form.questions.some((q) => q.id === target.questionId);
+    case "answerText":
+      return form.questions.some((q) => q.id === target.questionId && q.answers.some((a) => a.id === target.answerId));
+  }
+}
+function describeTarget(target) {
+  switch (target.kind) {
+    case "profileLabel":
+      return target.field;
+    case "privacyPolicyText":
+    case "privacyPolicyLink":
+      return "Privacy Policy";
+    case "consentText":
+    case "consentLink":
+      return `consent "${target.consentId}"`;
+    case "questionHeading":
+    case "questionSubheading":
+      return `question "${target.questionId}"`;
+    case "answerText":
+      return `answer "${target.answerId}" on question "${target.questionId}"`;
+  }
+}
+function applyContribution(base, content) {
+  const next = JSON.parse(JSON.stringify(base));
+  for (const entry of content.translations) {
+    applyTranslationEntry(next, entry);
+  }
+  if (content.newQuestions.length > 0) {
+    next.questions = renumberQuestions([...next.questions, ...content.newQuestions]);
+  }
+  if (content.newConsents.length > 0) {
+    next.fields.additionalConsents = renumberConsents([...next.fields.additionalConsents ?? [], ...content.newConsents]);
+  }
+  return next;
+}
+var LABEL2 = "Form Contribution";
+function err2(message) {
+  return { severity: "error", sheet: LABEL2, message };
+}
+function warn2(message) {
+  return { severity: "warning", sheet: LABEL2, message };
+}
+function validateContribution(base, content) {
+  const errors = [];
+  const warnings = [];
+  const translatableLocales = new Set(base.locales.map((l) => l.code));
+  for (const entry of content.translations) {
+    if (!translatableLocales.has(entry.locale)) {
+      errors.push(err2(`"${entry.locale}" isn't an existing locale on this form.`));
+      continue;
+    }
+    if (!translationTargetExists(base, entry.target)) {
+      errors.push(err2(`${describeTarget(entry.target)} no longer exists on this form \u2014 it may have been removed since you started.`));
+    }
+  }
+  for (const q of content.newQuestions) {
+    const isChoiceType = q.controlType === "radio" || q.controlType === "checkbox" || q.controlType === "dropdown";
+    const heading = resolveLocalizedText(q.headingByLocale, base.meta.defaultLocale, base.meta.defaultLocale);
+    if (isChoiceType && q.answers.length === 0) {
+      errors.push(err2(`New question "${heading || q.id}" (${q.controlType}) has no options.`));
+    }
+    if (!heading) {
+      warnings.push(warn2(`A new question has no heading text for "${base.meta.defaultLocale}".`));
+    }
+  }
+  for (const c of content.newConsents) {
+    if (!resolveLocalizedText(c.textByLocale, base.meta.defaultLocale, base.meta.defaultLocale)) {
+      warnings.push(warn2(`A new consent has no text for "${base.meta.defaultLocale}".`));
+    }
+  }
+  return { errors, warnings };
+}
+
+// src/form/contributionZod.ts
+var import_zod2 = require("zod");
+var translationTargetSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({ kind: import_zod2.z.literal("profileLabel"), field: import_zod2.z.enum(["firstName", "lastName", "email", "mobileNumber", "marketingOptin"]) }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("privacyPolicyText") }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("privacyPolicyLink") }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("consentText"), consentId: import_zod2.z.string() }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("consentLink"), consentId: import_zod2.z.string() }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("questionHeading"), questionId: import_zod2.z.string() }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("questionSubheading"), questionId: import_zod2.z.string() }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("answerText"), questionId: import_zod2.z.string(), answerId: import_zod2.z.string() })
+]);
+var translationEntrySchema = import_zod2.z.object({
+  target: translationTargetSchema,
+  locale: import_zod2.z.string(),
+  value: import_zod2.z.string()
+});
+var contributionContentSchema = import_zod2.z.object({
+  translations: import_zod2.z.array(translationEntrySchema),
+  newQuestions: import_zod2.z.array(questionDefinitionSchema),
+  newConsents: import_zod2.z.array(consentDefinitionSchema)
+});
 
 // src/codegen/css/referenceCssContent.ts
 var REFERENCE_CSS = `a,
@@ -3048,6 +3353,16 @@ function resolveFileNames(form, config) {
   };
 }
 
+// src/codegen/js/escaping.ts
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+var LINE_SEPARATOR_RE = new RegExp("\u2028", "g");
+var PARAGRAPH_SEPARATOR_RE = new RegExp("\u2029", "g");
+function safeJsonForScript(value) {
+  return JSON.stringify(value, null, 2).replace(LINE_SEPARATOR_RE, "\\u2028").replace(PARAGRAPH_SEPARATOR_RE, "\\u2029").replace(/<\/(script)/gi, "<\\/$1");
+}
+
 // src/codegen/html/fragments/renderProfileField.ts
 function renderProfileFields(fields) {
   const parts = [];
@@ -3089,16 +3404,6 @@ function answerDomKey(order) {
 }
 function questionInputId(questionId, answerOrder) {
   return `${questionId}${answerDomKey(answerOrder)}`;
-}
-
-// src/codegen/js/escaping.ts
-function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-var LINE_SEPARATOR_RE = new RegExp("\u2028", "g");
-var PARAGRAPH_SEPARATOR_RE = new RegExp("\u2029", "g");
-function safeJsonForScript(value) {
-  return JSON.stringify(value, null, 2).replace(LINE_SEPARATOR_RE, "\\u2028").replace(PARAGRAPH_SEPARATOR_RE, "\\u2029").replace(/<\/(script)/gi, "<\\/$1");
 }
 
 // src/codegen/html/fragments/renderQuestionModule.ts
@@ -3156,10 +3461,34 @@ function renderPage(form, config, variant, fileNames) {
       mobileNumber: form.fields.mobileNumber
     }
   );
-  const questionsHtml = form.questions.map(renderQuestionModule).join("");
-  const privacyBlock = !isOc && form.fields.privacyPolicy ? '<div class="form_bottom_check_group"><div class="form_bottom_check"><input id="privacyPolicy" name="privacyPolicy" type="checkbox" data-pt-api="y"><label for="privacyPolicy"><span></span><br><a href="#" target="_blank" id="privacyPolicyLink"><span></span></a><span class="star">*</span></label></div>' + (form.fields.marketingOptin ? '<div class="form_bottom_check form_bottom_check2"><input id="subscribe" name="subscribe" type="checkbox" data-pt-api="y"><label for="subscribe"><span></span></label></div>' : "") + "</div>" : "";
+  const questionsHtml = form.questions.filter((q) => !q.visibleInVariants || q.visibleInVariants.includes(variant)).map(renderQuestionModule).join("");
+  const consentChecks = [];
+  if (form.fields.privacyPolicy && (form.fields.privacyPolicy.visibleInVariants ?? ["ff"]).includes(variant)) {
+    const star = form.fields.privacyPolicy.required !== false ? '<span class="star">*</span>' : "";
+    consentChecks.push(
+      `<div class="form_bottom_check"><input id="privacyPolicy" name="privacyPolicy" type="checkbox" data-pt-api="y"><label for="privacyPolicy"><span></span><br><a href="#" target="_blank" id="privacyPolicyLink"><span></span></a>${star}</label></div>`
+    );
+  }
+  if (form.fields.marketingOptin && (form.fields.marketingOptin.visibleInVariants ?? ["ff"]).includes(variant)) {
+    const star = form.fields.marketingOptin.required ? '<span class="star">*</span>' : "";
+    consentChecks.push(
+      `<div class="form_bottom_check form_bottom_check2"><input id="subscribe" name="subscribe" type="checkbox" data-pt-api="y"><label for="subscribe"><span></span>${star}</label></div>`
+    );
+  }
+  if (form.fields.additionalConsents) {
+    for (const consent of form.fields.additionalConsents) {
+      if (!(consent.visibleInVariants ?? ["ff"]).includes(variant)) continue;
+      const id = escapeHtml(consent.id);
+      const link = consent.linkUrlByLocale ? `<br><a href="#" target="_blank" id="${id}Link"><span></span></a>` : "";
+      const star = consent.required ? '<span class="star">*</span>' : "";
+      consentChecks.push(
+        `<div class="form_bottom_check form_bottom_check2"><input id="${id}" name="${id}" type="checkbox" data-pt-api="y"><label for="${id}"><span></span>${link}${star}</label></div>`
+      );
+    }
+  }
+  const privacyBlock = consentChecks.length > 0 ? `<div class="form_bottom_check_group">${consentChecks.join("")}</div>` : "";
   const submitBlock = '<button class="disabled" disabled id="btnSubmit"></button><div class="error" id="apiError" style="display:none"></div>' + termsLink(isOc ? "form_bottom_terms" : "");
-  const bottomGroup = isOc ? `<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>` : `<div class="form_bottom_group">${privacyBlock}${submitBlock}</div>`;
+  const bottomGroup = isOc ? `${privacyBlock}<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>` : `<div class="form_bottom_group">${privacyBlock}${submitBlock}</div>`;
   const topHeading = '<h2><br class="b_850"><span></span></h2>';
   const topSubheading = '<p class="top_subheading"></p>';
   return `<!doctype html>
@@ -4061,6 +4390,18 @@ function buildDataJs(form, config, fileNames) {
       hrTy: resolvePageCopy(form.thankYou, locale, defaultLocale),
       redirectAfterSuccessUrl: f.redirectAfterSuccessUrlByLocale ? resolveLocalizedText(f.redirectAfterSuccessUrlByLocale, locale, defaultLocale) : ""
     };
+    for (const consent of f.additionalConsents ?? []) {
+      const localeRecord = fields[locale];
+      localeRecord[consent.id] = resolveLocalizedText(consent.textByLocale, locale, defaultLocale);
+      if (consent.linkUrlByLocale) {
+        localeRecord[`${consent.id}Link`] = {
+          label: "",
+          image: "",
+          imageAlt: "",
+          url: resolveLocalizedText(consent.linkUrlByLocale, locale, defaultLocale)
+        };
+      }
+    }
     pageError[locale] = { hrErr: resolvePageCopy(form.pageError, locale, defaultLocale) };
     const questionsForLocale = {};
     const answersForLocale = {};
@@ -4215,8 +4556,10 @@ $(document).ready(function ()\r
             });\r
         });\r
 \r
-        // Privacy Policy & Subscribe\r
-        $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()\r
+        // Privacy Policy, Subscribe, & any admin-added consent checkboxes \u2014 selector\r
+        // doesn't require a form_bottom_group parent since OC's own consent group (if\r
+        // any is configured) sits outside one, next to its floating form_bottom_bar.\r
+        $("div.form_bottom_check_group").find("div.form_bottom_check").each(function()\r
         {\r
             // Label\r
             var ckbLabel = $(this).find("label");\r
@@ -4451,10 +4794,37 @@ $(document).ready(function ()\r
         return allAnswered;\r
     }\r
 \r
-    // Function to enable Submit button if Privacy Policy is checked & every required question has an answer (else keep Submit button disabled)\r
+    // Function to check whether every consent checkbox marked required (rendered with\r
+    // a "*" in its label) is currently checked \u2014 generic over Privacy Policy,\r
+    // Subscribe, and any admin-added consent, instead of a single hardcoded id, so\r
+    // any of them can be marked required (see ConsentDefinition/PrivacyPolicyMeta/\r
+    // ConsentToggleMeta's own required flag in formDefinition.ts).\r
+    function allRequiredConsentsChecked()\r
+    {\r
+        var allChecked = true;\r
+\r
+        $("div.form_bottom_check_group > div.form_bottom_check").each(function()\r
+        {\r
+            if ($(this).find("label .star").length === 0)\r
+            {\r
+                return;\r
+            }\r
+\r
+            if (!$(this).find("input[type='checkbox']").is(":checked"))\r
+            {\r
+                allChecked = false;\r
+\r
+                return false;\r
+            }\r
+        });\r
+\r
+        return allChecked;\r
+    }\r
+\r
+    // Function to enable Submit button if every required consent is checked & every required question has an answer (else keep Submit button disabled)\r
     function enableDisableSubmit()\r
     {\r
-        if ($("#privacyPolicy").is(":checked") && allRequiredQuestionsAnswered())\r
+        if (allRequiredConsentsChecked() && allRequiredQuestionsAnswered())\r
         {\r
             $("#btnSubmit").prop("disabled", false);\r
 \r
@@ -4605,8 +4975,8 @@ $(document).ready(function ()\r
         // Attach event to reset Calling Code if Mobile Number is removed\r
         $("#mobileNumber").on("change", resetCallingCode);\r
 \r
-        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of Privacy Policy & any required question's answer(s)\r
-        $("#privacyPolicy").on("change", enableDisableSubmit);\r
+        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any consent checkbox (Privacy Policy, Subscribe, or an admin-added consent) & any required question's answer(s)\r
+        $("div.form_bottom_check_group input[type='checkbox']").on("change", enableDisableSubmit);\r
 \r
         $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);\r
 \r
@@ -4897,6 +5267,22 @@ $(document).ready(function ()\r
             iosFlag: (isIOS() ? "Y" : "N")\r
         };\r
 \r
+        // Admin-added consent checkboxes beyond the fixed privacy_policy_yn/subscribe_yn\r
+        // slots above (see ConsentDefinition in formDefinition.ts) \u2014 an open-ended list,\r
+        // so unlike those two there's no way to hardcode a fixed set of named payload\r
+        // keys here. Collected generically by the "consentExtra" id convention instead\r
+        // (assigned by domIds.ts's consentExtraId()) so a checked consent is never\r
+        // silently dropped from what actually gets submitted.\r
+        requestBody.additionalConsents = {};\r
+\r
+        for (var consentKey in userResponse)\r
+        {\r
+            if (consentKey.indexOf("consentExtra") === 0)\r
+            {\r
+                requestBody.additionalConsents[consentKey] = (userResponse[consentKey] === "on" ? "Y" : "N");\r
+            }\r
+        }\r
+\r
         return requestBody;\r
     }\r
 \r
@@ -5178,8 +5564,11 @@ $(document).ready(function ()\r
             });\r
         });\r
 \r
-        // Privacy Policy & Subscribe\r
-        $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()\r
+        // Privacy Policy, Subscribe, & any admin-added consent checkboxes \u2014 selector\r
+        // doesn't require a form_bottom_group parent since this consent group (when\r
+        // configured to appear in One-Click) sits outside one, next to the floating\r
+        // form_bottom_bar rather than wrapped with it.\r
+        $("div.form_bottom_check_group").find("div.form_bottom_check").each(function()\r
         {\r
             // Label\r
             var ckbLabel = $(this).find("label");\r
@@ -5382,10 +5771,38 @@ $(document).ready(function ()\r
         return allAnswered;\r
     }\r
 \r
-    // Function to enable Submit button once every required question has an answer (this variant has no Privacy Policy checkbox \u2014 else keep Submit button disabled)\r
+    // Function to check whether every consent checkbox marked required (rendered with\r
+    // a "*" in its label) is currently checked \u2014 one-click forms have no consent\r
+    // checkboxes by default, in which case this is a no-op (nothing to find, so\r
+    // nothing to fail on), but an admin can opt one in for this variant (see\r
+    // ConsentDefinition/PrivacyPolicyMeta/ConsentToggleMeta's visibleInVariants in\r
+    // formDefinition.ts), same as Full Form.\r
+    function allRequiredConsentsChecked()\r
+    {\r
+        var allChecked = true;\r
+\r
+        $("div.form_bottom_check_group > div.form_bottom_check").each(function()\r
+        {\r
+            if ($(this).find("label .star").length === 0)\r
+            {\r
+                return;\r
+            }\r
+\r
+            if (!$(this).find("input[type='checkbox']").is(":checked"))\r
+            {\r
+                allChecked = false;\r
+\r
+                return false;\r
+            }\r
+        });\r
+\r
+        return allChecked;\r
+    }\r
+\r
+    // Function to enable Submit button once every required consent (if any are configured for this variant) is checked & every required question has an answer (else keep Submit button disabled)\r
     function enableDisableSubmit()\r
     {\r
-        if (allRequiredQuestionsAnswered())\r
+        if (allRequiredConsentsChecked() && allRequiredQuestionsAnswered())\r
         {\r
             $("#btnSubmit").prop("disabled", false);\r
 \r
@@ -5542,6 +5959,9 @@ $(document).ready(function ()\r
 \r
         // Attach event to reset Calling Code if Mobile Number is removed\r
         $("#mobileNumber").on("change", resetCallingCode);\r
+\r
+        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any consent checkbox configured for this variant (none by default) & any required question's answer(s)\r
+        $("div.form_bottom_check_group input[type='checkbox']").on("change", enableDisableSubmit);\r
 \r
         // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any required question's answer(s)\r
         $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);\r
@@ -5802,7 +6222,14 @@ $(document).ready(function ()\r
             last_name: userResponse["lastName"] || "",\r
             mid: "",\r
             pin_code: userResponse["zipCode"] || "",\r
-            privacy_policy_yn: "Y",//((isSubmitClicked === true) ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),\r
+            // One-Click has no Privacy Policy checkbox by default (recipients already\r
+            // consented via the channel that delivered their link, hence "Y" always) \u2014\r
+            // but an admin can opt one into this variant (see PrivacyPolicyMeta's\r
+            // visibleInVariants), in which case its real checked state is used instead\r
+            // of the assumed default. \`userResponse["privacyPolicy"]\` is only ever set\r
+            // at all when that checkbox actually exists in the DOM (see the data-pt-api\r
+            // scan below), so its presence is exactly the signal needed here.\r
+            privacy_policy_yn: (userResponse["privacyPolicy"] !== undefined ? (userResponse["privacyPolicy"] === "on" ? "Y" : "N") : "Y"),\r
             project: param["project"],\r
             q01Answer: userResponse["Q1"],\r
             q02Answer: userResponse["Q2"],\r
@@ -5827,7 +6254,9 @@ $(document).ready(function ()\r
             recipientId: userResponse["recipientId"],\r
             registerDatetime: dtmCurrent.toISOString(),\r
             source: param["source"]["oneClick"],\r
-            subscribe_yn: "Y",//((isSubmitClicked === true) ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),\r
+            // Same reasoning as privacy_policy_yn above \u2014 Marketing Opt-in's own\r
+            // visibleInVariants controls whether #subscribe exists in this variant.\r
+            subscribe_yn: (userResponse["subscribe"] !== undefined ? (userResponse["subscribe"] === "on" ? "Y" : "N") : "Y"),\r
             tm_yn: "",\r
             uniqueid: dtmCurrent.getTime() + "_" + crypto.randomUUID() + "_" + Math.floor(Math.random() * 1e12).toString().padStart(12, "0"),\r
             VoucherRequired: param["voucherRequired"],\r
@@ -5835,6 +6264,22 @@ $(document).ready(function ()\r
             submitFlag: (isSubmitClicked === true ? "Y" : "N"),\r
             iosFlag: (isIOS() ? "Y" : "N")\r
         };\r
+\r
+        // Admin-added consent checkboxes beyond the fixed privacy_policy_yn/subscribe_yn\r
+        // slots above (see ConsentDefinition in formDefinition.ts) \u2014 an open-ended list,\r
+        // so unlike those two there's no way to hardcode a fixed set of named payload\r
+        // keys here. Collected generically by the "consentExtra" id convention instead\r
+        // (assigned by domIds.ts's consentExtraId()), same as the Full Form script, so a\r
+        // checked consent is never silently dropped from what actually gets submitted.\r
+        requestBody.additionalConsents = {};\r
+\r
+        for (var consentKey in userResponse)\r
+        {\r
+            if (consentKey.indexOf("consentExtra") === 0)\r
+            {\r
+                requestBody.additionalConsents[consentKey] = (userResponse[consentKey] === "on" ? "Y" : "N");\r
+            }\r
+        }\r
 \r
         sendData(requestBody, isSubmitClicked);\r
     }\r
@@ -6088,6 +6533,8 @@ function defaultBuilderConfig() {
   CALLING_CODES,
   ENGLISH_LOCALE,
   RTL_LANGS,
+  applyContribution,
+  contributionContentSchema,
   defaultBuilderConfig,
   findCallingCodeEntry,
   formDefinitionSchema,
@@ -6096,10 +6543,14 @@ function defaultBuilderConfig() {
   isSupportedExcelFile,
   langDisplayName,
   mapWorkbook,
+  migrateDefaultLocale,
   parseWorkbook,
   resolveFileNames,
   resolveLocales,
   resolveLocalizedText,
+  translationEntrySchema,
+  translationTargetSchema,
+  validateContribution,
   validateFormDefinition,
   validateWorkbook
 });

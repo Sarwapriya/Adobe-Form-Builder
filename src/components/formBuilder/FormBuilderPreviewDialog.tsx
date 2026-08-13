@@ -19,8 +19,35 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
   const [locale, setLocale] = useState<string>(definition?.meta.defaultLocale ?? "en_GB");
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
 
+  const availableVariants = config?.variants ?? ["ff"];
+
+  // The dialog's own `variant` state can go stale relative to the form's actual
+  // configured variants (e.g. it defaults to "ff", but the admin may have only
+  // enabled One-Click) — resync to whatever's actually available whenever the
+  // dialog opens or the enabled variants change, so the preview never silently
+  // renders a variant the admin didn't ask for.
+  useEffect(() => {
+    if (!open) return;
+    if (!availableVariants.includes(variant)) setVariant(availableVariants[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, availableVariants.join(",")]);
+
+  // The dialog's own `locale` state can likewise go stale relative to the form's
+  // actual locale list — e.g. the admin removes the locale currently selected for
+  // preview (including the default). Resync to the form's default locale whenever
+  // the currently-selected one is no longer on the form, so the preview never asks
+  // the generated behavior JS for a locale that doesn't exist in data.js (which
+  // throws and breaks the whole iframe rather than just rendering blank).
+  const localeCodes = definition?.locales.map((l) => l.code).join(",") ?? "";
+  useEffect(() => {
+    if (!open || !definition) return;
+    if (!definition.locales.some((l) => l.code === locale)) setLocale(definition.meta.defaultLocale);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, localeCodes, definition?.meta.defaultLocale]);
+
   useEffect(() => {
     if (!open || !definition || !config) return;
+    if (!availableVariants.includes(variant)) return;
     const previewConfig = { ...config, variants: [variant] };
     const files = generateSolution(definition, previewConfig);
     const fileNames = resolveFileNames(definition, previewConfig);
@@ -29,9 +56,8 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
     const url = URL.createObjectURL(blob);
     setIframeUrl(url);
     return () => URL.revokeObjectURL(url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, definition, config, variant, locale]);
-
-  const availableVariants = config?.variants ?? ["ff"];
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>

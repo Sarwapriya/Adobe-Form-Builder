@@ -102,8 +102,10 @@ $(document).ready(function ()
             });
         });
 
-        // Privacy Policy & Subscribe
-        $("div.form_bottom_group > div.form_bottom_check_group").find("div.form_bottom_check").each(function()
+        // Privacy Policy, Subscribe, & any admin-added consent checkboxes — selector
+        // doesn't require a form_bottom_group parent since OC's own consent group (if
+        // any is configured) sits outside one, next to its floating form_bottom_bar.
+        $("div.form_bottom_check_group").find("div.form_bottom_check").each(function()
         {
             // Label
             var ckbLabel = $(this).find("label");
@@ -338,10 +340,37 @@ $(document).ready(function ()
         return allAnswered;
     }
 
-    // Function to enable Submit button if Privacy Policy is checked & every required question has an answer (else keep Submit button disabled)
+    // Function to check whether every consent checkbox marked required (rendered with
+    // a "*" in its label) is currently checked — generic over Privacy Policy,
+    // Subscribe, and any admin-added consent, instead of a single hardcoded id, so
+    // any of them can be marked required (see ConsentDefinition/PrivacyPolicyMeta/
+    // ConsentToggleMeta's own required flag in formDefinition.ts).
+    function allRequiredConsentsChecked()
+    {
+        var allChecked = true;
+
+        $("div.form_bottom_check_group > div.form_bottom_check").each(function()
+        {
+            if ($(this).find("label .star").length === 0)
+            {
+                return;
+            }
+
+            if (!$(this).find("input[type='checkbox']").is(":checked"))
+            {
+                allChecked = false;
+
+                return false;
+            }
+        });
+
+        return allChecked;
+    }
+
+    // Function to enable Submit button if every required consent is checked & every required question has an answer (else keep Submit button disabled)
     function enableDisableSubmit()
     {
-        if ($("#privacyPolicy").is(":checked") && allRequiredQuestionsAnswered())
+        if (allRequiredConsentsChecked() && allRequiredQuestionsAnswered())
         {
             $("#btnSubmit").prop("disabled", false);
 
@@ -492,8 +521,8 @@ $(document).ready(function ()
         // Attach event to reset Calling Code if Mobile Number is removed
         $("#mobileNumber").on("change", resetCallingCode);
 
-        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of Privacy Policy & any required question's answer(s)
-        $("#privacyPolicy").on("change", enableDisableSubmit);
+        // Attach event to check Submit button state (enabled / disabled) on check / uncheck of any consent checkbox (Privacy Policy, Subscribe, or an admin-added consent) & any required question's answer(s)
+        $("div.form_bottom_check_group input[type='checkbox']").on("change", enableDisableSubmit);
 
         $("div.form_check_group > div.form_check_module").find("input[type='radio'], input[type='checkbox']").on("change", enableDisableSubmit);
 
@@ -783,6 +812,22 @@ $(document).ready(function ()
             submitFlag: (isSubmitClicked === true ? "Y" : "N"),
             iosFlag: (isIOS() ? "Y" : "N")
         };
+
+        // Admin-added consent checkboxes beyond the fixed privacy_policy_yn/subscribe_yn
+        // slots above (see ConsentDefinition in formDefinition.ts) — an open-ended list,
+        // so unlike those two there's no way to hardcode a fixed set of named payload
+        // keys here. Collected generically by the "consentExtra" id convention instead
+        // (assigned by domIds.ts's consentExtraId()) so a checked consent is never
+        // silently dropped from what actually gets submitted.
+        requestBody.additionalConsents = {};
+
+        for (var consentKey in userResponse)
+        {
+            if (consentKey.indexOf("consentExtra") === 0)
+            {
+                requestBody.additionalConsents[consentKey] = (userResponse[consentKey] === "on" ? "Y" : "N");
+            }
+        }
 
         return requestBody;
     }

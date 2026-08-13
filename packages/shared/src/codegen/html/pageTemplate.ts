@@ -1,6 +1,7 @@
 import type { FormDefinition } from "../../form/formDefinition";
 import type { FileNames } from "../fileNames";
 import type { BuilderConfig, FormVariant } from "../types";
+import { escapeHtml } from "../js/escaping";
 import { renderProfileFields } from "./fragments/renderProfileField";
 import { renderQuestionModule } from "./fragments/renderQuestionModule";
 
@@ -64,32 +65,79 @@ export function renderPage(form: FormDefinition, config: BuilderConfig, variant:
         },
   );
 
-  const questionsHtml = form.questions.map(renderQuestionModule).join("");
+  // visibleInVariants is a builder-only, additive concept (see formDefinition.ts) —
+  // absent/undefined means "every variant", so Excel-sourced forms (which never set
+  // it) render identically to before this existed. The reference FF.js/OC.js scripts
+  // are entirely DOM-driven (they iterate whatever `.form_check_module` elements are
+  // actually present), so simply not emitting a question's module here is enough —
+  // no per-variant script changes needed.
+  const questionsHtml = form.questions
+    .filter((q) => !q.visibleInVariants || q.visibleInVariants.includes(variant))
+    .map(renderQuestionModule)
+    .join("");
 
-  const privacyBlock =
-    !isOc && form.fields.privacyPolicy
-      ? '<div class="form_bottom_check_group">' +
-        '<div class="form_bottom_check">' +
+  // Consent checkboxes. Each of the three consent-style fields is independently
+  // configurable — which variant(s) it renders in, and whether checking it gates
+  // Submit — the same way QuestionDefinition.visibleInVariants works, and "absent
+  // means Full Form only, not required" preserves every existing form's behavior
+  // exactly (that was the only behavior before these knobs existed). The reference
+  // FF.js/OC.js scripts are entirely DOM-driven here: the checkbox-label/link
+  // population loop, the required-consent Submit gate, and the change-event binding
+  // all key off whatever `.form_bottom_check_group` + `.form_bottom_check` markup is
+  // actually present (see enableDisableSubmit()'s generic scan in both scripts), so
+  // rendering these for OC too — previously impossible, the reference's own OC
+  // markup has this entire block commented out — needed no further script changes
+  // beyond that one generic selector relaxation. mapParam()'s submission payload
+  // separately needed a small generic addition (the "consentExtra" scan) so a
+  // checked-but-unnamed-in-the-fixed-schema consent isn't silently dropped.
+  const consentChecks: string[] = [];
+  if (form.fields.privacyPolicy && (form.fields.privacyPolicy.visibleInVariants ?? ["ff"]).includes(variant)) {
+    const star = form.fields.privacyPolicy.required !== false ? '<span class="star">*</span>' : "";
+    consentChecks.push(
+      '<div class="form_bottom_check">' +
         '<input id="privacyPolicy" name="privacyPolicy" type="checkbox" data-pt-api="y">' +
         '<label for="privacyPolicy"><span></span><br>' +
-        '<a href="#" target="_blank" id="privacyPolicyLink"><span></span></a><span class="star">*</span></label>' +
-        "</div>" +
-        (form.fields.marketingOptin
-          ? '<div class="form_bottom_check form_bottom_check2">' +
-            '<input id="subscribe" name="subscribe" type="checkbox" data-pt-api="y">' +
-            '<label for="subscribe"><span></span></label>' +
-            "</div>"
-          : "") +
-        "</div>"
-      : "";
+        `<a href="#" target="_blank" id="privacyPolicyLink"><span></span></a>${star}</label>` +
+        "</div>",
+    );
+  }
+  if (form.fields.marketingOptin && (form.fields.marketingOptin.visibleInVariants ?? ["ff"]).includes(variant)) {
+    const star = form.fields.marketingOptin.required ? '<span class="star">*</span>' : "";
+    consentChecks.push(
+      '<div class="form_bottom_check form_bottom_check2">' +
+        '<input id="subscribe" name="subscribe" type="checkbox" data-pt-api="y">' +
+        `<label for="subscribe"><span></span>${star}</label>` +
+        "</div>",
+    );
+  }
+  if (form.fields.additionalConsents) {
+    for (const consent of form.fields.additionalConsents) {
+      if (!(consent.visibleInVariants ?? ["ff"]).includes(variant)) continue;
+      const id = escapeHtml(consent.id);
+      const link = consent.linkUrlByLocale ? `<br><a href="#" target="_blank" id="${id}Link"><span></span></a>` : "";
+      const star = consent.required ? '<span class="star">*</span>' : "";
+      consentChecks.push(
+        '<div class="form_bottom_check form_bottom_check2">' +
+          `<input id="${id}" name="${id}" type="checkbox" data-pt-api="y">` +
+          `<label for="${id}"><span></span>${link}${star}</label>` +
+          "</div>",
+      );
+    }
+  }
+  const privacyBlock = consentChecks.length > 0 ? `<div class="form_bottom_check_group">${consentChecks.join("")}</div>` : "";
 
   const submitBlock =
     '<button class="disabled" disabled id="btnSubmit"></button>' +
     '<div class="error" id="apiError" style="display:none"></div>' +
     termsLink(isOc ? "form_bottom_terms" : "");
 
+  // OC's floating form_bottom_bar has no room for the consent group inside it (it's
+  // a fixed-position bar with just the submit button/terms link — see reference
+  // CSS), so when any consent renders for OC it sits as its own sibling block
+  // immediately before the bar, mirroring where the reference's own (permanently
+  // commented-out) OC consent markup sits relative to it.
   const bottomGroup = isOc
-    ? `<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>`
+    ? `${privacyBlock}<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>`
     : `<div class="form_bottom_group">${privacyBlock}${submitBlock}</div>`;
 
   const topHeading = '<h2><br class="b_850"><span></span></h2>';

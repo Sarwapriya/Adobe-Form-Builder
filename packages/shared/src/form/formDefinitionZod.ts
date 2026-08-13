@@ -12,7 +12,7 @@ export const localeInfoSchema = z.object({
   code: z.string(),
   langSubtag: z.string(),
   isRtl: z.boolean(),
-  sourceColumn: z.enum(["en_GB", "C", "D"]),
+  sourceColumn: z.enum(["en_GB", "C", "D", "builder"]),
   label: z.string(),
 });
 
@@ -31,6 +31,7 @@ export const questionDefinitionSchema = z.object({
   subheadingByLocale: localeTextMap,
   required: z.boolean(),
   answers: z.array(answerDefinitionSchema),
+  visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
 });
 
 const localizedFieldMetaSchema = z.object({
@@ -50,11 +51,27 @@ const mobileNumberFieldMetaSchema = localizedFieldMetaSchema.extend({
 const privacyPolicyMetaSchema = z.object({
   textByLocale: localeTextMap,
   linkUrlByLocale: localeTextMap,
+  required: z.boolean().optional(),
+  visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
+});
+
+const consentToggleMetaSchema = localizedFieldMetaSchema.extend({
+  required: z.boolean().optional(),
+  visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
 });
 
 const termsAndConditionsMetaSchema = z.object({
   textByLocale: localeTextMap,
   urlByLocale: localeTextMap,
+});
+
+export const consentDefinitionSchema = z.object({
+  id: z.string(),
+  order: z.number(),
+  textByLocale: localeTextMap,
+  linkUrlByLocale: localeTextMap.optional(),
+  required: z.boolean().optional(),
+  visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
 });
 
 export const profileFieldSetSchema = z.object({
@@ -65,7 +82,8 @@ export const profileFieldSetSchema = z.object({
   callingCode: callingCodeFieldMetaSchema.optional(),
   mobileNumber: mobileNumberFieldMetaSchema.optional(),
   privacyPolicy: privacyPolicyMetaSchema.optional(),
-  marketingOptin: localizedFieldMetaSchema.optional(),
+  marketingOptin: consentToggleMetaSchema.optional(),
+  additionalConsents: z.array(consentDefinitionSchema).optional(),
   termsAndConditions: termsAndConditionsMetaSchema.optional(),
   submitButton: localizedFieldMetaSchema,
   redirectAfterSuccessUrlByLocale: localeTextMap.optional(),

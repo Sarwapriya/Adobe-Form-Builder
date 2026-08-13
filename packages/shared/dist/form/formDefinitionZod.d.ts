@@ -18,6 +18,7 @@ export declare const localeInfoSchema: z.ZodObject<{
         en_GB: "en_GB";
         C: "C";
         D: "D";
+        builder: "builder";
     }>;
     label: z.ZodString;
 }, z.core.$strip>;
@@ -52,6 +53,21 @@ export declare const questionDefinitionSchema: z.ZodObject<{
             alt: z.ZodOptional<z.ZodString>;
         }, z.core.$strip>>;
     }, z.core.$strip>>;
+    visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+        ff: "ff";
+        oc: "oc";
+    }>>>;
+}, z.core.$strip>;
+export declare const consentDefinitionSchema: z.ZodObject<{
+    id: z.ZodString;
+    order: z.ZodNumber;
+    textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+    linkUrlByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    required: z.ZodOptional<z.ZodBoolean>;
+    visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+        ff: "ff";
+        oc: "oc";
+    }>>>;
 }, z.core.$strip>;
 export declare const profileFieldSetSchema: z.ZodObject<{
     email: z.ZodOptional<z.ZodObject<{
@@ -84,11 +100,32 @@ export declare const profileFieldSetSchema: z.ZodObject<{
     privacyPolicy: z.ZodOptional<z.ZodObject<{
         textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
         linkUrlByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+        required: z.ZodOptional<z.ZodBoolean>;
+        visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+            ff: "ff";
+            oc: "oc";
+        }>>>;
     }, z.core.$strip>>;
     marketingOptin: z.ZodOptional<z.ZodObject<{
         labelByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
         placeholderByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+        required: z.ZodOptional<z.ZodBoolean>;
+        visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+            ff: "ff";
+            oc: "oc";
+        }>>>;
     }, z.core.$strip>>;
+    additionalConsents: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        order: z.ZodNumber;
+        textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+        linkUrlByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+        required: z.ZodOptional<z.ZodBoolean>;
+        visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+            ff: "ff";
+            oc: "oc";
+        }>>>;
+    }, z.core.$strip>>>;
     termsAndConditions: z.ZodOptional<z.ZodObject<{
         textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
         urlByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
@@ -143,6 +180,7 @@ export declare const formDefinitionSchema: z.ZodObject<{
             en_GB: "en_GB";
             C: "C";
             D: "D";
+            builder: "builder";
         }>;
         label: z.ZodString;
     }, z.core.$strip>>;
@@ -168,6 +206,10 @@ export declare const formDefinitionSchema: z.ZodObject<{
                 alt: z.ZodOptional<z.ZodString>;
             }, z.core.$strip>>;
         }, z.core.$strip>>;
+        visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+            ff: "ff";
+            oc: "oc";
+        }>>>;
     }, z.core.$strip>>;
     fields: z.ZodObject<{
         email: z.ZodOptional<z.ZodObject<{
@@ -200,11 +242,32 @@ export declare const formDefinitionSchema: z.ZodObject<{
         privacyPolicy: z.ZodOptional<z.ZodObject<{
             textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
             linkUrlByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+            required: z.ZodOptional<z.ZodBoolean>;
+            visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+                ff: "ff";
+                oc: "oc";
+            }>>>;
         }, z.core.$strip>>;
         marketingOptin: z.ZodOptional<z.ZodObject<{
             labelByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
             placeholderByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+            required: z.ZodOptional<z.ZodBoolean>;
+            visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+                ff: "ff";
+                oc: "oc";
+            }>>>;
         }, z.core.$strip>>;
+        additionalConsents: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            id: z.ZodString;
+            order: z.ZodNumber;
+            textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+            linkUrlByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+            required: z.ZodOptional<z.ZodBoolean>;
+            visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+                ff: "ff";
+                oc: "oc";
+            }>>>;
+        }, z.core.$strip>>>;
         termsAndConditions: z.ZodOptional<z.ZodObject<{
             textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
             urlByLocale: z.ZodRecord<z.ZodString, z.ZodString>;

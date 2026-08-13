@@ -5,7 +5,8 @@ import { useFormBuilderStore } from "../../store/formBuilderStore";
 /** Campaign heading/subheading + submit button label — the page-level copy
  * rendered above the form's fields (see pageTemplate.ts's `<h2>`/`.top_subheading`
  * markup and renderProfileField.ts's submit button, both sourced from these
- * same FormDefinition.fields entries). */
+ * same FormDefinition.fields entries). Which output variant(s) get generated
+ * is configured separately — see VariantConfigPanel. */
 export function CampaignHeaderPanel() {
   const definition = useFormBuilderStore((s) => s.definition);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
@@ -29,6 +30,7 @@ export function CampaignHeaderPanel() {
           size="small"
           fullWidth
           value={heading}
+          helperText="Shown as the main title above the form."
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -41,6 +43,7 @@ export function CampaignHeaderPanel() {
           size="small"
           fullWidth
           value={subheading}
+          helperText="Optional supporting line under the heading."
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,

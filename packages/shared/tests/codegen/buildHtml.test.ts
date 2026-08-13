@@ -103,6 +103,28 @@ describe("buildFfHtml", () => {
   });
 });
 
+describe("per-question variant visibility (visibleInVariants)", () => {
+  it("filters question modules independently per variant, and renders both when unset (Excel-sourced-form back-compat)", () => {
+    const form = sampleFormDefinition();
+    // Fixture ships 3 questions (Q1/Q2/Q3), unset visibleInVariants by default.
+    form.questions[0].visibleInVariants = ["ff"];
+    form.questions[1].visibleInVariants = ["oc"];
+    // Q3 stays unset — must still appear in both variants.
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+
+    const ffDoc = new DOMParser().parseFromString(buildFfHtml(form, config, fileNames).contents, "text/html");
+    expect(ffDoc.querySelector("#Q1")).not.toBeNull();
+    expect(ffDoc.querySelector("#Q2")).toBeNull();
+    expect(ffDoc.querySelector("#Q3")).not.toBeNull();
+
+    const ocDoc = new DOMParser().parseFromString(buildOcHtml(form, config, fileNames).contents, "text/html");
+    expect(ocDoc.querySelector("#Q1")).toBeNull();
+    expect(ocDoc.querySelector("#Q2")).not.toBeNull();
+    expect(ocDoc.querySelector("#Q3")).not.toBeNull();
+  });
+});
+
 describe("buildOcHtml", () => {
   it("omits name/email fields and privacy checkboxes, uses a floating submit bar", () => {
     const form = sampleFormDefinition();

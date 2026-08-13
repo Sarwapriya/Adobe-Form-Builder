@@ -106,6 +106,28 @@ ALTER TABLE Forms ADD CONSTRAINT FK_Forms_publishedVersionId FOREIGN KEY (publis
 CREATE INDEX IX_FormVersions_formId ON FormVersions(formId);
 CREATE INDEX IX_Forms_subsidiaryId ON Forms(subsidiaryId);
 
+-- A subsidiary-scoped standard user's proposed translations/additions to a
+-- *published* Form — see FormContribution.ts's own doc comment. content is JSON
+-- (@formbuilder/shared's ContributionContent); approving one merges it onto the
+-- form's current draft and republishes (formContributionService.approveContribution).
+CREATE TABLE FormContributions (
+    id                UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    formId            UNIQUEIDENTIFIER NOT NULL REFERENCES Forms(id),
+    submittedByUserId UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
+    baseVersionId     UNIQUEIDENTIFIER NULL REFERENCES FormVersions(id),
+    status            NVARCHAR(20) NOT NULL DEFAULT 'pending',
+    content           NVARCHAR(MAX) NOT NULL,
+    note              NVARCHAR(MAX) NULL,
+    reviewNote        NVARCHAR(MAX) NULL,
+    reviewedByUserId  UNIQUEIDENTIFIER NULL REFERENCES Users(id),
+    submittedAt       DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET(),
+    reviewedAt        DATETIMEOFFSET(7) NULL,
+    publishedAt       DATETIMEOFFSET(7) NULL
+);
+CREATE INDEX IX_FormContributions_formId ON FormContributions(formId);
+CREATE INDEX IX_FormContributions_submittedByUserId ON FormContributions(submittedByUserId);
+CREATE INDEX IX_FormContributions_status ON FormContributions(status);
+
 -- Owned by either an Upload (Excel-authored) or a FormVersion (builder-authored) —
 -- exactly one of uploadId/formVersionId is set, enforced by the CHECK constraint
 -- below (Forms/FormVersions are declared further down this file).

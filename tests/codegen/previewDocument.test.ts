@@ -26,4 +26,19 @@ describe("buildPreviewDocument", () => {
     const fileNames = resolveFileNames(form, config);
     expect(() => buildPreviewDocument(files, "oc", "en_GB", fileNames)).toThrow(new RegExp(fileNames.ocHtml.replace(".", "\\.")));
   });
+
+  it("fakes a recipient id for the OC preview, since the reference OC script shows an error screen instead of the form when ?id= is missing", () => {
+    const form = sampleFormDefinition();
+    const config = { ...defaultBuilderConfig(), variants: ["ff", "oc"] as FormVariant[] };
+    const files = generateSolution(form, config);
+    const fileNames = resolveFileNames(form, config);
+
+    const ocDoc = buildPreviewDocument(files, "oc", "en_GB", fileNames);
+    expect(ocDoc).toContain('n==="id"&&I?I:g(n)');
+    expect(ocDoc).toContain('var I="preview-recipient"');
+
+    // FF never gates on ?id=, so it's left unfaked — no behavior change there.
+    const ffDoc = buildPreviewDocument(files, "ff", "en_GB", fileNames);
+    expect(ffDoc).toContain('var I=""');
+  });
 });

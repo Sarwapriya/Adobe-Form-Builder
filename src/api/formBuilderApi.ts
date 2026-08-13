@@ -1,8 +1,19 @@
 import type { BuilderConfig, FormDefinition, Issue, ValidationResult } from "@formbuilder/shared";
 import { apiClient, ApiError } from "./apiClient";
+import type { ContributionSummary } from "./subsidiaryFormsApi";
 
 export type FormStatus = "draft" | "published" | "unpublished";
 export type FormVersionStatus = "draft" | "published" | "archived";
+
+/** The calling standard user's own latest-contribution progress for a form — drives
+ * the 4-stage status bar on "My Forms" (Submitted → Reviewed by admin → Approved →
+ * Published). See ContributionStatusBar.tsx for how the fields map to bar state. */
+export interface ContributionProgress {
+  status: "pending" | "approved" | "rejected";
+  submittedAt: string;
+  reviewedAt: string | null;
+  publishedAt: string | null;
+}
 
 export interface FormListItem {
   id: string;
@@ -14,6 +25,9 @@ export interface FormListItem {
   createdAt: string;
   updatedAt: string;
   publishedVersionNumber: number | null;
+  /** Only populated by the subsidiary-user "My Forms" listing (`/api/v1/forms`) —
+   * null if they've never submitted one. Always undefined from the admin listing. */
+  myContributionProgress?: ContributionProgress | null;
 }
 
 export interface FormVersionContent {
@@ -132,6 +146,23 @@ export function previewForm(formId: string, variant: "ff" | "oc" = "ff"): Promis
 
 export function downloadFormZip(formId: string): Promise<Blob> {
   return apiClient.getBlob(`/api/v1/admin/forms/${formId}/download`);
+}
+
+// Subsidiary-user contribution review — see subsidiaryFormsApi.ts's own
+// ContributionSummary for the submitting side; re-exported here so both sides share
+// one shape rather than two independently-drifting copies.
+export type { ContributionSummary, ContributionStatus } from "./subsidiaryFormsApi";
+
+export function listFormContributions(formId: string): Promise<ContributionSummary[]> {
+  return apiClient.get(`/api/v1/admin/forms/${formId}/contributions`);
+}
+
+export function approveContribution(formId: string, contributionId: string, reviewNote?: string): Promise<void> {
+  return apiClient.post<void>(`/api/v1/admin/forms/${formId}/contributions/${contributionId}/approve`, { reviewNote });
+}
+
+export function rejectContribution(formId: string, contributionId: string, reviewNote?: string): Promise<void> {
+  return apiClient.post<void>(`/api/v1/admin/forms/${formId}/contributions/${contributionId}/reject`, { reviewNote });
 }
 
 export type { Issue, ValidationResult };

@@ -1,6 +1,26 @@
-import type { AnswerDefinition, ControlType, QuestionDefinition } from "@formbuilder/shared";
+import type { AnswerDefinition, ConsentDefinition, ControlType, FormVariant, QuestionDefinition } from "@formbuilder/shared";
 
 const DEFAULT_LOCALE = "en_GB";
+
+/** Matches domIds.ts's consentExtraId() convention — kept in sync since the reference
+ * FF.js/OC.js's mapParam() greps for this exact "consentExtra" prefix. */
+export function createConsent(order: number): ConsentDefinition {
+  return { id: `consentExtra${order}`, order, textByLocale: { [DEFAULT_LOCALE]: "I agree to the" }, required: false, visibleInVariants: ["ff"] };
+}
+
+/** Renumbers order (and re-derives sequential "consentExtraN" ids) after an
+ * insert/delete/reorder — same reasoning as renumberQuestions/renumberAnswers. */
+export function renumberConsents(consents: ConsentDefinition[]): ConsentDefinition[] {
+  return consents.map((c, i) => ({ ...c, id: `consentExtra${i + 1}`, order: i + 1 }));
+}
+
+/** `visibleInVariants` absent means "Full Form only" for every consent-style field
+ * (PrivacyPolicyMeta/ConsentToggleMeta/ConsentDefinition) — unlike questions, which
+ * default to "both" — since that's the only behavior any of them has ever had (see
+ * each type's own doc comment in formDefinition.ts). */
+export function consentVariants(c: { visibleInVariants?: FormVariant[] }): FormVariant[] {
+  return c.visibleInVariants ?? ["ff"];
+}
 
 export function createAnswer(order: number): AnswerDefinition {
   return { id: `A${order}`, order, textByLocale: { [DEFAULT_LOCALE]: `Option ${order}` } };
@@ -17,7 +37,16 @@ export function createQuestion(controlType: ControlType, order: number): Questio
     subheadingByLocale: {},
     required: true,
     answers: CHOICE_TYPES.includes(controlType) ? [createAnswer(1), createAnswer(2)] : [],
+    visibleInVariants: ["ff", "oc"],
   };
+}
+
+/** `visibleInVariants` is optional/absent on Excel-sourced or pre-existing questions
+ * (see formDefinition.ts) — treat absence as "visible in both" everywhere the UI needs
+ * to read it, matching what pageTemplate.ts/formDefinitionValidator.ts do at the
+ * generation/validation layer. */
+export function questionVariants(q: Pick<QuestionDefinition, "visibleInVariants">): FormVariant[] {
+  return q.visibleInVariants ?? ["ff", "oc"];
 }
 
 /** Renumbers `order` (and re-derives sequential ids matching the existing

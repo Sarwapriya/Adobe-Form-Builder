@@ -143,10 +143,10 @@ export function FormBuilderListPage() {
         </Box>
         <Stack spacing={0.2} sx={{ flexGrow: 1 }}>
           <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            Form Builder
+            Form Initiator
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Visually create and publish web forms without an Excel workbook.
+            Visually build, preview, and publish web forms — no Excel workbook required.
           </Typography>
         </Stack>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>

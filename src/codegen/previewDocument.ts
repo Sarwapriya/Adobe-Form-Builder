@@ -13,6 +13,16 @@ import type { FileNames, FormVariant, GeneratedFile } from "@formbuilder/shared"
  * `previewLocale` is injected into the iframe by monkey-patching `URLSearchParams`
  * so the behavior JS (which reads `?lang=` from the URL) sees the correct locale
  * even though `blob:` URLs can't carry query parameters.
+ *
+ * The One-Click reference script (`SGE-EN_F2H26_OC.js`) is written for real
+ * per-recipient delivery links — it reads a `?id=` (recipient id) parameter and,
+ * if it's missing, deliberately throws and swaps the whole form out for an
+ * "invalid link" error screen (`validateRequiredUrlParam()`/`showError()`). A
+ * `blob:` preview URL never has one, so an OC preview would always render the
+ * error screen instead of the form. Faking a placeholder id (OC-only — FF reads
+ * the same param but never gates on it, so leaving FF's untouched is safest) is
+ * the same trick as the locale override above: supply what the *unmodified*
+ * reference script expects, rather than special-casing the preview around it.
  */
 export function buildPreviewDocument(
   files: GeneratedFile[],
@@ -28,18 +38,20 @@ export function buildPreviewDocument(
   const behaviorJs = files.find((f) => f.path === jsPath)?.contents ?? "";
   if (!html) throw new Error(`No generated ${htmlPath} file to preview.`);
 
+  const previewId = variant === "oc" ? "preview-recipient" : "";
+
   // Inject a small script before the behavior JS so that `new URLSearchParams(...)`
-  // returns the preview locale when the behavior JS asks for the "lang" parameter.
-  // This bridges the gap: the reference JS only reads language from `?lang=`, but
-  // blob: URLs can't carry query strings.
-  const langOverride =
-    `<script>(function(){var L="${previewLocale}";var O=window.URLSearchParams;` +
+  // returns the preview locale (and, for OC, a placeholder recipient id) when the
+  // behavior JS asks for "lang"/"id" — the reference JS only reads these from the
+  // URL, but blob: URLs can't carry query strings.
+  const paramOverride =
+    `<script>(function(){var L="${previewLocale}";var I="${previewId}";var O=window.URLSearchParams;` +
     `window.URLSearchParams=function(s){var p=new O(s||"");var g=p.get.bind(p);` +
-    `p.get=function(n){return n==="lang"?L:g(n)};return p};` +
+    `p.get=function(n){return n==="lang"?L:n==="id"&&I?I:g(n)};return p};` +
     `window.URLSearchParams.prototype=O.prototype})();</script>\n`;
 
   return html
     .replace(`<link rel="stylesheet" href="${fileNames.css}">`, `<style>${css}</style>`)
     .replace(`<script src="${fileNames.dataJs}"></script>`, `<script>${dataJs}</script>`)
-    .replace(`<script src="${jsPath}"></script>`, `${langOverride}<script>${behaviorJs}</script>`);
+    .replace(`<script src="${jsPath}"></script>`, `${paramOverride}<script>${behaviorJs}</script>`);
 }

@@ -18,6 +18,7 @@ import {
   updateDraft,
   type ListFormsOptions,
 } from "../services/formBuilderService";
+import { approveContribution, listContributionsForForm, rejectContribution } from "../services/formContributionService";
 import type { FormStatus } from "../entities/Form";
 
 export const formBuilderRouter = Router();
@@ -189,5 +190,51 @@ formBuilderRouter.get(
     res.set("Content-Type", "application/zip");
     res.set("Content-Disposition", `attachment; filename="${result.fileName}"`);
     res.send(Buffer.from(result.buffer!));
+  }),
+);
+
+formBuilderRouter.get(
+  "/:id/contributions",
+  asyncHandler(async (req, res) => {
+    const contributions = await listContributionsForForm(req.params.id);
+    res.json(contributions);
+  }),
+);
+
+const reviewContributionSchema = z.object({ reviewNote: z.string().trim().max(2000).optional() });
+
+formBuilderRouter.post(
+  "/:id/contributions/:contributionId/approve",
+  validateBody(reviewContributionSchema),
+  asyncHandler(async (req, res) => {
+    const { reviewNote } = req.body as z.infer<typeof reviewContributionSchema>;
+    const result = await approveContribution(req.params.contributionId, req.auth!.sub, reviewNote);
+    if (result.outcome === "not_found") {
+      res.status(404).json({ error: "contribution not found" });
+      return;
+    }
+    if (result.outcome === "not_pending") {
+      res.status(409).json({ error: "contribution has already been reviewed" });
+      return;
+    }
+    res.status(204).send();
+  }),
+);
+
+formBuilderRouter.post(
+  "/:id/contributions/:contributionId/reject",
+  validateBody(reviewContributionSchema),
+  asyncHandler(async (req, res) => {
+    const { reviewNote } = req.body as z.infer<typeof reviewContributionSchema>;
+    const outcome = await rejectContribution(req.params.contributionId, req.auth!.sub, reviewNote);
+    if (outcome === "not_found") {
+      res.status(404).json({ error: "contribution not found" });
+      return;
+    }
+    if (outcome === "not_pending") {
+      res.status(409).json({ error: "contribution has already been reviewed" });
+      return;
+    }
+    res.status(204).send();
   }),
 );

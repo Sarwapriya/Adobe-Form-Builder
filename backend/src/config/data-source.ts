@@ -13,6 +13,7 @@ import { QaRun } from "../entities/QaRun";
 import { QaTestCaseResult } from "../entities/QaTestCaseResult";
 import { Form } from "../entities/Form";
 import { FormVersion } from "../entities/FormVersion";
+import { FormContribution } from "../entities/FormContribution";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 import { SubmittedOnlyVersioning1720000000000 } from "../migrations/1720000000000-SubmittedOnlyVersioning";
@@ -27,6 +28,8 @@ import { AddProjectCodeDateRange1800000000000 } from "../migrations/180000000000
 import { AddUploadVariants1810000000000 } from "../migrations/1810000000000-AddUploadVariants";
 import { AddFormBuilder1820000000000 } from "../migrations/1820000000000-AddFormBuilder";
 import { AddFormVersionToGeneratedFiles1830000000000 } from "../migrations/1830000000000-AddFormVersionToGeneratedFiles";
+import { AddFormContributions1840000000000 } from "../migrations/1840000000000-AddFormContributions";
+import { AddContributionPublishedAt1850000000000 } from "../migrations/1850000000000-AddContributionPublishedAt";
 
 const entities = [
   Upload,
@@ -42,6 +45,7 @@ const entities = [
   QaTestCaseResult,
   Form,
   FormVersion,
+  FormContribution,
 ];
 const migrations = [
   InitSchema1700000000000,
@@ -58,6 +62,8 @@ const migrations = [
   AddUploadVariants1810000000000,
   AddFormBuilder1820000000000,
   AddFormVersionToGeneratedFiles1830000000000,
+  AddFormContributions1840000000000,
+  AddContributionPublishedAt1850000000000,
 ];
 
 /**

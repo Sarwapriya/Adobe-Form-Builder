@@ -4,9 +4,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import { arrayMove } from "@dnd-kit/sortable";
+import type { FormVariant } from "@formbuilder/shared";
 import { resolveLocalizedText } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
-import { CONTROL_TYPE_LABEL, createAnswer, renumberAnswers } from "./formBuilderHelpers";
+import { CONTROL_TYPE_LABEL, createAnswer, questionVariants, renumberAnswers } from "./formBuilderHelpers";
 
 const CHOICE_TYPES = new Set(["radio", "checkbox", "dropdown"]);
 
@@ -17,6 +18,7 @@ const CHOICE_TYPES = new Set(["radio", "checkbox", "dropdown"]);
 export function QuestionEditorPanel({ questionId }: { questionId: string }) {
   const definition = useFormBuilderStore((s) => s.definition);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
+  const formVariants = useFormBuilderStore((s) => s.config?.variants ?? ["ff", "oc"]);
   const defaultLocale = definition?.meta.defaultLocale ?? "en_GB";
   const question = definition?.questions.find((q) => q.id === questionId);
 
@@ -25,12 +27,18 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
   const heading = resolveLocalizedText(question.headingByLocale, defaultLocale, defaultLocale);
   const subheading = resolveLocalizedText(question.subheadingByLocale, defaultLocale, defaultLocale);
   const isChoiceType = CHOICE_TYPES.has(question.controlType);
+  const shownIn = questionVariants(question);
 
   function patchQuestion(patch: Partial<typeof question>) {
     updateDefinition((d) => ({
       ...d,
       questions: d.questions.map((q) => (q.id === questionId ? { ...q, ...patch } : q)),
     }));
+  }
+
+  function toggleVariant(variant: FormVariant, checked: boolean) {
+    const next = checked ? [...shownIn, variant] : shownIn.filter((v) => v !== variant);
+    patchQuestion({ visibleInVariants: next } as Partial<typeof question>);
   }
 
   function patchAnswerText(answerId: string, text: string) {
@@ -97,6 +105,39 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
         control={<Switch checked={question.required} onChange={(e) => patchQuestion({ required: e.target.checked })} />}
         label="Required"
       />
+
+      <Box>
+        <Typography variant="body2" fontWeight={600} sx={{ mb: 0.25 }}>
+          Shown in
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+          Which output variant(s) include this question.
+        </Typography>
+        <Stack direction="row" spacing={1}>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                disabled={!formVariants.includes("ff")}
+                checked={shownIn.includes("ff")}
+                onChange={(e) => toggleVariant("ff", e.target.checked)}
+              />
+            }
+            label="Full Form"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                disabled={!formVariants.includes("oc")}
+                checked={shownIn.includes("oc")}
+                onChange={(e) => toggleVariant("oc", e.target.checked)}
+              />
+            }
+            label="One-Click"
+          />
+        </Stack>
+      </Box>
 
       {isChoiceType && (
         <Box>
