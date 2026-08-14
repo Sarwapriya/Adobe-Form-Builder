@@ -147,6 +147,26 @@ export function setUserActive(id: string, isActive: boolean): Promise<CreatedUse
   return apiClient.patch<CreatedUser & { isActive: boolean }>(`/api/v1/admin/users/${id}`, { isActive });
 }
 
+export interface UpdateUserProfileInput {
+  username?: string;
+  email?: string;
+  role?: AdminUserRole;
+  /** `null` clears it (only valid when the resulting role isn't "standard");
+   * `undefined` (omit the key) leaves it as-is. */
+  subsidiaryId?: string | null;
+}
+
+/**
+ * Updates a user's account details (username/email/role/subsidiary) —
+ * superadmin only, any target including themselves. Distinct from
+ * setUserActive (isActive only) and setUserNotificationEmail (contact
+ * address only) above — enforced server-side in admin.router.ts's PATCH
+ * /users/:id/profile.
+ */
+export function updateUserProfile(id: string, input: UpdateUserProfileInput): Promise<AdminUserListItem> {
+  return apiClient.patch<AdminUserListItem>(`/api/v1/admin/users/${id}/profile`, input);
+}
+
 /**
  * Updates a user's own up-to-two separate notification-email addresses
  * (`null` or `""` clears a slot; an omitted field leaves it as-is). Any user
@@ -238,30 +258,6 @@ export function setSubsidiaryNotificationEmails(
   notificationEmail2: string | null | undefined,
 ): Promise<Subsidiary> {
   return apiClient.patch<Subsidiary>(`/api/v1/admin/subsidiaries/${id}`, { notificationEmail1, notificationEmail2 });
-}
-
-export interface GlobalNotificationEmails {
-  notificationEmail1: string | null;
-  notificationEmail2: string | null;
-}
-
-/** GET /api/v1/admin/settings/notification-emails — the two admin-configurable
- * global addresses that receive the existing upload/submission notification
- * emails (distinct from each subsidiary's own two extra addresses above). */
-export function getGlobalNotificationEmails(): Promise<GlobalNotificationEmails> {
-  return apiClient.get<GlobalNotificationEmails>("/api/v1/admin/settings/notification-emails");
-}
-
-/** `null` (or `""`, normalized server-side) clears a slot, `undefined` (simply
- * omit the key) leaves it as-is. */
-export function setGlobalNotificationEmails(
-  notificationEmail1: string | null | undefined,
-  notificationEmail2: string | null | undefined,
-): Promise<GlobalNotificationEmails> {
-  return apiClient.patch<GlobalNotificationEmails>("/api/v1/admin/settings/notification-emails", {
-    notificationEmail1,
-    notificationEmail2,
-  });
 }
 
 /** Permanently removes a subsidiary (and any subsidiary-project blocks

@@ -33,30 +33,3 @@ export async function setAdminSetting(key: string, value: string | null): Promis
     await repo.save(repo.create({ key, value: trimmed }));
   }
 }
-
-export interface GlobalNotificationEmails {
-  notificationEmail1: string | null;
-  notificationEmail2: string | null;
-}
-
-/** The two admin-configurable global notification addresses — used by
- * sendUploadNotification/sendSubmissionNotification (see emailService.ts).
- * `notificationEmail1` reuses the pre-existing single "notificationEmail" key
- * for backward compatibility with whatever an admin already had set directly
- * in the database before this UI existed; `notificationEmail2` is new. */
-export async function getGlobalNotificationEmails(): Promise<GlobalNotificationEmails> {
-  const [notificationEmail1, notificationEmail2] = await Promise.all([
-    getAdminSetting("notificationEmail"),
-    getAdminSetting("notificationEmail2"),
-  ]);
-  return { notificationEmail1, notificationEmail2 };
-}
-
-export async function setGlobalNotificationEmails(input: Partial<GlobalNotificationEmails>): Promise<void> {
-  if ("notificationEmail1" in input) {
-    await setAdminSetting("notificationEmail", input.notificationEmail1 ?? null);
-  }
-  if ("notificationEmail2" in input) {
-    await setAdminSetting("notificationEmail2", input.notificationEmail2 ?? null);
-  }
-}

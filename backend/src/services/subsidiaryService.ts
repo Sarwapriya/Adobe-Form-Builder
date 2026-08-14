@@ -10,6 +10,15 @@ export function listSubsidiaries(): Promise<Subsidiary[]> {
   return AppDataSource.getRepository(Subsidiary).find({ order: { name: "ASC" } });
 }
 
+/** Looked up by name (not id) — User.subsidiaryId/AccessTokenPayload.subsidiaryId
+ * both store the subsidiary's *name*, not its uuid (see Subsidiary.ts's own
+ * doc comment) — used by subsidiary.router.ts's GET/PATCH /mine so a
+ * subsidiary-scoped standard user can find/update their own row from just
+ * their JWT claim, without needing to know its id. */
+export function findSubsidiaryByName(name: string): Promise<Subsidiary | null> {
+  return AppDataSource.getRepository(Subsidiary).findOne({ where: { name } });
+}
+
 /** Only the active ones — what the upload form's and user-creation form's
  * "Subsidiary" dropdowns offer to any authenticated user (a disabled
  * subsidiary shouldn't even appear as an option, not just be rejected on

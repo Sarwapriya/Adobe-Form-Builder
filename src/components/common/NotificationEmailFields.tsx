@@ -2,13 +2,13 @@ import type { ReactNode } from "react";
 import { Button, Stack, TextField, Typography, type SxProps, type Theme } from "@mui/material";
 
 /**
- * The "2 email fields + Save button" widget, previously hand-copied 3 times
- * (UserManagementPage, SubsidiaryManager's SubsidiaryNotificationRow,
- * GlobalNotificationSettings) with slightly different container styling.
- * `dirty` is caller-computed rather than derived internally, since each of
- * the 3 original call sites used a slightly different dirty-check semantic
- * (trimmed vs untrimmed vs none) — keeping that logic in the caller makes
- * this extraction behavior-preserving everywhere it's used.
+ * The "2 email fields + Save button" widget, shared by UserManagementPage's
+ * per-user notification-email popover, SubsidiaryManager's
+ * SubsidiaryNotificationRow, and MySubsidiaryPage.
+ * `dirty` is caller-computed rather than derived internally, since different
+ * call sites use different dirty-check semantics (trimmed vs untrimmed vs
+ * always-dirty) — keeping that logic in the caller keeps this component
+ * behavior-agnostic.
  */
 export function NotificationEmailFields({
   value1,

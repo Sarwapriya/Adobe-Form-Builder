@@ -18,6 +18,7 @@ import { FormBuilderEditorPage } from "./pages/FormBuilderEditorPage.tsx";
 import { MyFormsListPage } from "./pages/MyFormsListPage.tsx";
 import { MyFormTranslatePage } from "./pages/MyFormTranslatePage.tsx";
 import { MySubmissionsPage } from "./pages/MySubmissionsPage.tsx";
+import { MySubsidiaryPage } from "./pages/MySubsidiaryPage.tsx";
 
 export default function App() {
   const silentRefresh = useAuthStore((s) => s.silentRefresh);
@@ -45,6 +46,7 @@ export default function App() {
               <Route path="my-forms" element={<MyFormsListPage />} />
               <Route path="my-forms/:id" element={<MyFormTranslatePage />} />
               <Route path="my-submissions" element={<MySubmissionsPage />} />
+              <Route path="my-subsidiary" element={<MySubsidiaryPage />} />
               <Route element={<AdminRoute />}>
                 <Route path="admin" element={<AdminDashboardPage />} />
                 <Route path="admin/history" element={<AdminHistoryPage />} />

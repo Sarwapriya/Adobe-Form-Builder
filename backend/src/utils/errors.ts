@@ -19,6 +19,17 @@ export class ConflictError extends Error {
   }
 }
 
+/** A well-formed request that fails a business rule not expressible in the
+ * route's own zod schema alone (e.g. it depends on the target row's existing
+ * state) — see authService.updateUser's own "standard user needs a
+ * subsidiary" check. */
+export class ValidationError extends Error {
+  constructor(message = "Validation failed") {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
 /** Thrown when an upload is attempted against a project code an admin has
  * closed — see projectCodeService.assertProjectCodeOpenForUpload. */
 export class ProjectCodeClosedError extends Error {

@@ -6,6 +6,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   MenuItem,
   Paper,
@@ -29,6 +33,7 @@ import {
   listUsers,
   setUserActive,
   setUserNotificationEmail,
+  updateUserProfile,
   type AdminUserListItem,
   type AdminUserRole,
 } from "../api/adminApi";
@@ -63,6 +68,7 @@ export function UserManagementPage() {
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<AdminUserListItem | null>(null);
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -154,11 +160,15 @@ export function UserManagementPage() {
     }
   }
 
-  // Anyone may set their own notification email; only a superadmin may set
-  // someone else's (enforced authoritatively server-side too — see
-  // admin.router.ts's PATCH /users/:id/notification-email).
+  // A superadmin may edit anyone's, including their own. A plain admin may
+  // edit their own, any other admin's (same role), and any subsidiary
+  // (standard) user's — but not a superadmin's. Enforced authoritatively
+  // server-side too — see admin.router.ts's PATCH
+  // /users/:id/notification-email.
   function canEditNotificationEmail(target: AdminUserListItem): boolean {
-    return target.id === currentUser?.id || isSuperAdmin;
+    if (isSuperAdmin) return true;
+    if (target.id === currentUser?.id) return true;
+    return currentUser?.role === "admin" && (target.role === "admin" || target.role === "standard");
   }
 
   return (
@@ -296,18 +306,19 @@ export function UserManagementPage() {
                 <TableCell>Status</TableCell>
                 <TableCell>Notification email</TableCell>
                 <TableCell>Created</TableCell>
+                {isSuperAdmin && <TableCell align="right">Actions</TableCell>}
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={isSuperAdmin ? 8 : 7} align="center" sx={{ py: 5 }}>
                     <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={isSuperAdmin ? 8 : 7} align="center" sx={{ py: 5 }}>
                     <Typography color="text.secondary">No users yet.</Typography>
                   </TableCell>
                 </TableRow>
@@ -342,6 +353,15 @@ export function UserManagementPage() {
                       <NotificationEmailCell user={u} editable={canEditNotificationEmail(u)} onSaved={refresh} />
                     </TableCell>
                     <TableCell>{new Date(u.createdAt).toLocaleString()}</TableCell>
+                    {isSuperAdmin && (
+                      <TableCell align="right">
+                        <Tooltip title="Edit account details">
+                          <IconButton size="small" onClick={() => setEditingUser(u)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -349,7 +369,129 @@ export function UserManagementPage() {
           </Table>
         </TableContainer>
       </Paper>
+
+      {editingUser && (
+        <EditUserDialog
+          user={editingUser}
+          subsidiaries={subsidiaries}
+          onClose={() => setEditingUser(null)}
+          onSaved={async () => {
+            setEditingUser(null);
+            await refresh();
+          }}
+        />
+      )}
     </Box>
+  );
+}
+
+/**
+ * Superadmin-only full account-details editor (username/email/role/
+ * subsidiary) — distinct from the isActive toggle and the notification-email
+ * popover above, both of which stay available to a plain admin for the
+ * targets they're allowed to manage. Enforced authoritatively server-side —
+ * see admin.router.ts's PATCH /users/:id/profile.
+ */
+function EditUserDialog({
+  user,
+  subsidiaries,
+  onClose,
+  onSaved,
+}: {
+  user: AdminUserListItem;
+  subsidiaries: Subsidiary[];
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const [username, setUsername] = useState(user.username);
+  const [email, setEmail] = useState(user.email);
+  const [role, setRole] = useState<AdminUserRole>(user.role);
+  const [subsidiaryId, setSubsidiaryId] = useState(user.subsidiaryId ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const subsidiaryRequired = role === "standard";
+  const canSave = !!username.trim() && !!email.trim() && (!subsidiaryRequired || !!subsidiaryId) && !saving;
+
+  async function handleSave() {
+    if (!canSave) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateUserProfile(user.id, {
+        username: username.trim(),
+        email: email.trim(),
+        role,
+        subsidiaryId: subsidiaryRequired ? subsidiaryId : subsidiaryId.trim() || null,
+      });
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Edit user</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField
+            label="Username"
+            size="small"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+          <TextField
+            label="Email"
+            type="email"
+            size="small"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <TextField
+            select
+            label="Role"
+            size="small"
+            value={role}
+            onChange={(e) => setRole(e.target.value as AdminUserRole)}
+          >
+            <MenuItem value="standard">standard</MenuItem>
+            <MenuItem value="admin">admin</MenuItem>
+            <MenuItem value="superadmin">superadmin</MenuItem>
+          </TextField>
+          <TextField
+            select
+            label={subsidiaryRequired ? "Subsidiary" : "Subsidiary (optional)"}
+            size="small"
+            value={subsidiaryId}
+            onChange={(e) => setSubsidiaryId(e.target.value)}
+            required={subsidiaryRequired}
+            error={subsidiaryRequired && !subsidiaryId}
+            helperText={subsidiaryRequired && !subsidiaryId ? "Required for a standard user" : undefined}
+          >
+            {!subsidiaryRequired && <MenuItem value="">No subsidiary</MenuItem>}
+            {subsidiaries.map((s) => (
+              <MenuItem key={s.id} value={s.name}>
+                {s.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          {error && <Alert severity="error">{error}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>
+          Cancel
+        </Button>
+        <Button variant="contained" disabled={!canSave} onClick={handleSave}>
+          {saving ? "Saving..." : "Save"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

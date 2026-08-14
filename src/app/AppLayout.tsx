@@ -24,6 +24,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import PeopleIcon from "@mui/icons-material/People";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import TranslateIcon from "@mui/icons-material/Translate";
+import DomainIcon from "@mui/icons-material/Domain";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
@@ -68,6 +69,7 @@ export function AppLayout() {
       ? [
           { to: "/my-forms", label: "My Forms", icon: <TranslateIcon />, exact: false },
           { to: "/my-submissions", label: "My Submissions", icon: <HistoryIcon />, exact: true },
+          { to: "/my-subsidiary", label: "My Subsidiary", icon: <DomainIcon />, exact: true },
         ]
       : []),
     ...(isAdminRole(user?.role)

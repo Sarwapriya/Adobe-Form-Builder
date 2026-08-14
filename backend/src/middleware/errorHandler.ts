@@ -10,6 +10,7 @@ import {
   SubsidiaryProjectBlockedError,
   ProjectCodeMismatchError,
   SubsidiaryMismatchError,
+  ValidationError,
 } from "../utils/errors";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -28,7 +29,8 @@ export function errorHandler(
   if (
     err instanceof UnsupportedFileTypeError ||
     err instanceof ProjectCodeMismatchError ||
-    err instanceof SubsidiaryMismatchError
+    err instanceof SubsidiaryMismatchError ||
+    err instanceof ValidationError
   ) {
     res.status(400).json({ error: err.message });
     return;

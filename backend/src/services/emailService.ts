@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { AppDataSource } from "../config/data-source";
 import { EmailLog } from "../entities/EmailLog";
-import { getGlobalNotificationEmails } from "./adminSettingsService";
+import { listAdminNotificationEmails } from "./authService";
 
 let transporter: Transporter | null = null;
 let initialized = false;
@@ -31,19 +31,18 @@ function resolveFrom(to: string): string {
 }
 
 /** Every admin-facing notification (upload, submission) goes to the same
- * recipient set: FORMBUILDER_NOTIFY_EMAIL if set (a single hard override, same
- * as before this function supported more than one address), otherwise both of
- * the admin-configurable global addresses from AdminSettings (see
- * adminSettingsService.getGlobalNotificationEmails) that are actually set —
- * zero, one, or two of them. */
+ * recipient set: FORMBUILDER_NOTIFY_EMAIL if set (a single hard override), otherwise
+ * every notification-email address set on an active admin/superadmin account
+ * (see authService.listAdminNotificationEmails) — each admin manages their
+ * own address(es) via User Management rather than a separate, site-wide
+ * setting. */
 async function resolveRecipients(): Promise<string[]> {
   const envRecipient = process.env.FORMBUILDER_NOTIFY_EMAIL;
   if (envRecipient && envRecipient.trim().length > 0) {
     return [envRecipient.trim()];
   }
 
-  const { notificationEmail1, notificationEmail2 } = await getGlobalNotificationEmails();
-  return [notificationEmail1, notificationEmail2].filter((email): email is string => !!email);
+  return listAdminNotificationEmails();
 }
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -104,7 +103,7 @@ export async function sendUploadNotification(
     const recipients = await resolveRecipients();
     if (recipients.length === 0) {
       console.warn(
-        "No notification recipient configured (FORMBUILDER_NOTIFY_EMAIL / AdminSettings notification emails) — skipping email"
+        "No notification recipient configured (FORMBUILDER_NOTIFY_EMAIL / any admin's notification email in User Management) — skipping email"
       );
       return;
     }
@@ -224,7 +223,7 @@ export async function sendSubmissionNotification(details: SubmissionNotification
 
   if (recipients.length === 0) {
     console.warn(
-      "No notification recipient configured (FORMBUILDER_NOTIFY_EMAIL / AdminSettings notification emails) — skipping submission email"
+      "No notification recipient configured (FORMBUILDER_NOTIFY_EMAIL / any admin's notification email in User Management) — skipping submission email"
     );
     await emailLogRepo.save(
       emailLogRepo.create({

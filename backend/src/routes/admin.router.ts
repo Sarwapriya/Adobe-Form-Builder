@@ -14,7 +14,14 @@ import {
   type AdminListFilters,
 } from "../services/adminUploadService";
 import { computeDiff } from "../services/diffService";
-import { createUser, findUserById, listUsers, setUserActive, setUserNotificationEmails } from "../services/authService";
+import {
+  createUser,
+  findUserById,
+  listUsers,
+  setUserActive,
+  setUserNotificationEmails,
+  updateUser,
+} from "../services/authService";
 import { buildUploadPreview, type PreviewVariant } from "../services/previewService";
 import {
   createProjectCode,
@@ -36,7 +43,6 @@ import {
   listSubsidiaryProjectBlocks,
 } from "../services/subsidiaryProjectBlockService";
 import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
-import { getGlobalNotificationEmails, setGlobalNotificationEmails } from "../services/adminSettingsService";
 import type { UploadStatus } from "../entities/Upload";
 
 export const adminRouter = Router();
@@ -330,32 +336,6 @@ adminRouter.delete(
   })
 );
 
-// The two global notification addresses (distinct from each subsidiary's own
-// notificationEmail1/2 above) — recipients for the existing upload/submission
-// notification emails (see emailService.ts's resolveRecipients). Backed by
-// AdminSettings, not its own table — see adminSettingsService.ts.
-adminRouter.get(
-  "/settings/notification-emails",
-  asyncHandler(async (_req, res) => {
-    res.json(await getGlobalNotificationEmails());
-  })
-);
-
-const notificationEmailsSchema = z.object({
-  notificationEmail1: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
-  notificationEmail2: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
-});
-
-adminRouter.patch(
-  "/settings/notification-emails",
-  validateBody(notificationEmailsSchema),
-  asyncHandler(async (req, res) => {
-    const body = req.body as z.infer<typeof notificationEmailsSchema>;
-    await setGlobalNotificationEmails(body);
-    res.json(await getGlobalNotificationEmails());
-  })
-);
-
 // Every (subsidiary, project code) pair currently blocked from new uploads —
 // e.g. "F2H26" closed for "SGE" specifically, while every other subsidiary
 // can still upload it. Independent of, and layered on top of, a project
@@ -493,24 +473,85 @@ adminRouter.patch(
   })
 );
 
+const updateUserProfileSchema = z.object({
+  username: z.string().trim().min(1).optional(),
+  email: z.string().email().optional(),
+  role: z.enum(["admin", "standard", "superadmin"]).optional(),
+  // null clears it, undefined (omit the key) leaves it as-is — same
+  // "presence vs value" convention setUserNotificationEmails uses. Whether
+  // clearing it is actually allowed (i.e. the resulting role isn't
+  // "standard") is checked against the row's *existing* state in
+  // authService.updateUser, not here, since a zod schema only sees this
+  // request's own body.
+  subsidiaryId: z.string().trim().min(1).nullable().optional(),
+});
+
+// Full account-details edit (username/email/role/subsidiary) — superadmin
+// only, any target including themselves. Deliberately stricter than
+// setUserActive's own admin-may-manage-standard-users split above: changing
+// someone's role or login identity is a bigger lever than a reversible
+// enable/disable toggle, so it stays superadmin-only regardless of the
+// target's role.
+adminRouter.patch(
+  "/users/:id/profile",
+  validateBody(updateUserProfileSchema),
+  asyncHandler(async (req, res) => {
+    if (req.auth!.role !== "superadmin") {
+      res.status(403).json({ error: "only a superadmin may update another user's account details" });
+      return;
+    }
+
+    const input = req.body as z.infer<typeof updateUserProfileSchema>;
+    const updated = await updateUser(req.params.id, input);
+    if (!updated) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+    res.json({
+      id: updated.id,
+      username: updated.username,
+      email: updated.email,
+      role: updated.role,
+      subsidiaryId: updated.subsidiaryId,
+      isActive: updated.isActive,
+      notificationEmail: updated.notificationEmail,
+      notificationEmail2: updated.notificationEmail2,
+    });
+  })
+);
+
 const updateNotificationEmailSchema = z.object({
   notificationEmail: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
   notificationEmail2: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
 });
 
-// Any user may set their own notificationEmail(s); only a superadmin may set
-// someone else's — deliberately a *looser* rule than isActive's own
-// "superadmin only for admin/superadmin targets" split above, since this
-// isn't an account-security toggle, just contact addresses (see
-// User.notificationEmail/notificationEmail2's own doc comment).
+// A superadmin may set anyone's notificationEmail(s), including their own. A
+// plain admin may set their own, any other admin's (same role), and any
+// standard/subsidiary-scoped user's — but not a superadmin's. Deliberately
+// looser than isActive's own "superadmin only for admin/superadmin targets"
+// split above, since this isn't an account-security toggle, just contact
+// addresses (see User.notificationEmail/notificationEmail2's own doc
+// comment) — a plain admin managing another admin's or a subsidiary user's
+// contact address can't do anything more sensitive with that access.
 adminRouter.patch(
   "/users/:id/notification-email",
   validateBody(updateNotificationEmailSchema),
   asyncHandler(async (req, res) => {
     const emails = req.body as z.infer<typeof updateNotificationEmailSchema>;
 
-    if (req.params.id !== req.auth!.sub && req.auth!.role !== "superadmin") {
-      res.status(403).json({ error: "only a superadmin may update another user's notification email" });
+    const target = await findUserById(req.params.id);
+    if (!target) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+
+    const isSelf = target.id === req.auth!.sub;
+    const canManage =
+      req.auth!.role === "superadmin" ||
+      isSelf ||
+      (req.auth!.role === "admin" && (target.role === "admin" || target.role === "standard"));
+    if (!canManage) {
+      res.status(403).json({ error: "You are not allowed to update this user's notification email" });
       return;
     }
 

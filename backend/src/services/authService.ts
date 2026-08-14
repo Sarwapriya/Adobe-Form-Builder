@@ -1,12 +1,12 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
-import { IsNull } from "typeorm";
+import { IsNull, In } from "typeorm";
 import { AppDataSource } from "../config/data-source";
 import { User, type UserRole } from "../entities/User";
 import { RefreshToken } from "../entities/RefreshToken";
 import { requireEnv } from "../utils/env";
-import { ConflictError } from "../utils/errors";
+import { ConflictError, ValidationError } from "../utils/errors";
 
 const ACCESS_TOKEN_EXPIRES_IN = "15m";
 /** Exported so auth.router.ts can set the refresh cookie's `maxAge` to the same
@@ -184,6 +184,65 @@ export async function setUserActive(id: string, isActive: boolean): Promise<User
   return repo.save(existing);
 }
 
+export interface UpdateUserInput {
+  username?: string;
+  email?: string;
+  role?: UserRole;
+  /** `null` clears it (only valid when the resulting role isn't "standard" —
+   * see the check below); `undefined` (simply omit the key) leaves it as-is. */
+  subsidiaryId?: string | null;
+}
+
+/**
+ * Updates a user's own account fields (username/email/role/subsidiary) —
+ * distinct from setUserActive (isActive only) and setUserNotificationEmails
+ * (contact address only) above. Permission checking (superadmin-only) happens
+ * in the route, not here — same layering as those two. Returns null if the
+ * id doesn't exist — callers map that to a 404.
+ *
+ * Rejects a duplicate username or email (case-insensitive, excluding this
+ * row itself) with a ConflictError before saving, same convention as
+ * createUser's own duplicate check. Rejects leaving a "standard" user without
+ * a subsidiary with a ValidationError, computed against the *resulting*
+ * role/subsidiaryId (not just what's in this partial update) since either
+ * field may be omitted from the request.
+ */
+export async function updateUser(id: string, input: UpdateUserInput): Promise<User | null> {
+  const repo = AppDataSource.getRepository(User);
+  const existing = await repo.findOne({ where: { id } });
+  if (!existing) return null;
+
+  const nextUsername = input.username?.trim() || existing.username;
+  const nextEmail = input.email?.trim() || existing.email;
+
+  if (nextUsername.toLowerCase() !== existing.username.toLowerCase() || nextEmail.toLowerCase() !== existing.email.toLowerCase()) {
+    const conflict = await repo
+      .createQueryBuilder("user")
+      .where("user.id != :id", { id })
+      .andWhere("(LOWER(user.username) = LOWER(:username) OR LOWER(user.email) = LOWER(:email))", {
+        username: nextUsername,
+        email: nextEmail,
+      })
+      .getOne();
+    if (conflict) {
+      const field = conflict.username.toLowerCase() === nextUsername.toLowerCase() ? "username" : "email";
+      throw new ConflictError(`A user with this ${field} already exists`);
+    }
+  }
+
+  const nextRole = input.role ?? existing.role;
+  const nextSubsidiaryId = "subsidiaryId" in input ? (input.subsidiaryId?.trim() || null) : existing.subsidiaryId;
+  if (nextRole === "standard" && !nextSubsidiaryId) {
+    throw new ValidationError("Subsidiary is required for a standard user");
+  }
+
+  existing.username = nextUsername;
+  existing.email = nextEmail;
+  existing.role = nextRole;
+  existing.subsidiaryId = nextSubsidiaryId;
+  return repo.save(existing);
+}
+
 export interface UserNotificationEmails {
   /** Each explicit `null` clears that slot; an omitted key leaves it as-is —
    * same "presence vs value" convention subsidiaryService.setSubsidiaryNotificationEmails
@@ -209,6 +268,20 @@ export async function setUserNotificationEmails(id: string, emails: UserNotifica
     existing.notificationEmail2 = emails.notificationEmail2?.trim() || null;
   }
   return repo.save(existing);
+}
+
+/** Every notification-email address set on an active admin/superadmin
+ * account, deduplicated — this is what upload/submission notification emails
+ * (see emailService.ts's resolveRecipients) send to: each admin/superadmin
+ * manages their own address(es) via User Management instead of the
+ * previously separate, site-wide "global notification emails" setting (now
+ * retired). A superadmin/admin with neither field set simply contributes no
+ * recipient. */
+export async function listAdminNotificationEmails(): Promise<string[]> {
+  const repo = AppDataSource.getRepository(User);
+  const admins = await repo.find({ where: { role: In(["admin", "superadmin"]), isActive: true } });
+  const emails = admins.flatMap((u) => [u.notificationEmail, u.notificationEmail2]);
+  return Array.from(new Set(emails.filter((e): e is string => !!e)));
 }
 
 function hashToken(rawToken: string): string {
