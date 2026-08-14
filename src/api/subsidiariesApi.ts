@@ -4,6 +4,11 @@ export interface Subsidiary {
   id: string;
   name: string;
   isActive: boolean;
+  /** Up to two extra recipient addresses for notification purposes, additional
+   * to whichever subsidiary-scoped Users actually receive a given
+   * notification — see backend Subsidiary entity's own doc comment. */
+  notificationEmail1: string | null;
+  notificationEmail2: string | null;
   createdAt: string;
 }
 

@@ -1,8 +1,8 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { AppDataSource } from "../config/data-source";
-import { AdminSetting } from "../entities/AdminSetting";
 import { EmailLog } from "../entities/EmailLog";
+import { getGlobalNotificationEmails } from "./adminSettingsService";
 
 let transporter: Transporter | null = null;
 let initialized = false;
@@ -30,16 +30,20 @@ function resolveFrom(to: string): string {
   return process.env.SMTP_FROM ?? process.env.SMTP_USER ?? to;
 }
 
-async function resolveRecipient(): Promise<string | null> {
+/** Every admin-facing notification (upload, submission) goes to the same
+ * recipient set: FORMBUILDER_NOTIFY_EMAIL if set (a single hard override, same
+ * as before this function supported more than one address), otherwise both of
+ * the admin-configurable global addresses from AdminSettings (see
+ * adminSettingsService.getGlobalNotificationEmails) that are actually set —
+ * zero, one, or two of them. */
+async function resolveRecipients(): Promise<string[]> {
   const envRecipient = process.env.FORMBUILDER_NOTIFY_EMAIL;
   if (envRecipient && envRecipient.trim().length > 0) {
-    return envRecipient;
+    return [envRecipient.trim()];
   }
 
-  const setting = await AppDataSource.getRepository(AdminSetting).findOne({
-    where: { key: "notificationEmail" },
-  });
-  return setting?.value ?? null;
+  const { notificationEmail1, notificationEmail2 } = await getGlobalNotificationEmails();
+  return [notificationEmail1, notificationEmail2].filter((email): email is string => !!email);
 }
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -64,7 +68,7 @@ interface UploadNotificationDetails {
   uploadedBy: string;
 }
 
-function buildUploadMessage(to: string, details: UploadNotificationDetails) {
+function buildUploadMessage(to: string[], details: UploadNotificationDetails) {
   const adminLink = `${process.env.FRONTEND_URL ?? ""}/admin`;
   const subject = `New upload for subsidiary ${details.subsidiaryId}: ${details.fileName}`;
   const text =
@@ -76,8 +80,8 @@ function buildUploadMessage(to: string, details: UploadNotificationDetails) {
     `Admin view: ${adminLink}\n`;
 
   return {
-    to,
-    from: resolveFrom(to),
+    to: to.join(", "),
+    from: resolveFrom(to[0]),
     subject,
     text,
   };
@@ -97,14 +101,14 @@ export async function sendUploadNotification(
       console.warn("SMTP not configured (SMTP_HOST) — skipping upload notification email");
       return;
     }
-    const recipient = await resolveRecipient();
-    if (!recipient) {
+    const recipients = await resolveRecipients();
+    if (recipients.length === 0) {
       console.warn(
-        "No notification recipient configured (FORMBUILDER_NOTIFY_EMAIL / AdminSettings.notificationEmail) — skipping email"
+        "No notification recipient configured (FORMBUILDER_NOTIFY_EMAIL / AdminSettings notification emails) — skipping email"
       );
       return;
     }
-    await transporter.sendMail(buildUploadMessage(recipient, details));
+    await transporter.sendMail(buildUploadMessage(recipients, details));
   } catch (err) {
     console.error("Failed to send upload notification email", err);
   }
@@ -120,7 +124,7 @@ export interface SubmissionNotificationDetails {
   submittedAt: Date;
 }
 
-function buildSubmissionMessage(to: string, details: SubmissionNotificationDetails) {
+function buildSubmissionMessage(to: string[], details: SubmissionNotificationDetails) {
   const adminLink = `${process.env.FRONTEND_URL ?? ""}/admin`;
   const text =
     `A new web form has been submitted.\n\n` +
@@ -132,11 +136,62 @@ function buildSubmissionMessage(to: string, details: SubmissionNotificationDetai
     `Please review it in the Admin Dashboard: ${adminLink}\n`;
 
   return {
-    to,
-    from: resolveFrom(to),
+    to: to.join(", "),
+    from: resolveFrom(to[0]),
     subject: "New Web Form Submission",
     text,
   };
+}
+
+function formatDateOnly(date: Date): string {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+export interface CutoffReminderDetails {
+  subsidiaryId: string;
+  projectCode: string;
+  cutoffDate: Date;
+  /** Names of the forms under this project that this subsidiary still hasn't
+   * gotten approved — see cutoffReminderService.ts's own doc comment for
+   * exactly what "not yet approved" means. */
+  formNames: string[];
+}
+
+function buildCutoffReminderMessage(to: string[], details: CutoffReminderDetails) {
+  const link = `${process.env.FRONTEND_URL ?? ""}/my-forms`;
+  const cutoff = formatDateOnly(details.cutoffDate);
+  const subject = `Reminder: forms pending approval for "${details.projectCode}" (cutoff ${cutoff})`;
+  const text =
+    `The following form(s) for subsidiary "${details.subsidiaryId}" under project "${details.projectCode}" ` +
+    `are not yet approved, and this project's cutoff date is ${cutoff}:\n\n` +
+    details.formNames.map((name) => `- ${name}`).join("\n") +
+    `\n\nPlease review and submit any needed translations, questions, or consents for admin approval before the ` +
+    `cutoff: ${link}\n`;
+
+  return { to: to.join(", "), from: resolveFrom(to[0]), subject, text };
+}
+
+/**
+ * Sends one cutoff-reminder email to every given recipient at once (a
+ * subsidiary's own users plus its two extra notification addresses — see
+ * cutoffReminderService.ts, which calls this once per (project code,
+ * subsidiary) pair per day). Never throws and isn't logged to EmailLogs
+ * (that table is Upload-scoped — see EmailLog.uploadId) — same best-effort,
+ * console-only discipline as sendUploadNotification, appropriate for a
+ * recurring reminder rather than a one-off auditable event.
+ */
+export async function sendCutoffReminder(recipients: string[], details: CutoffReminderDetails): Promise<void> {
+  if (recipients.length === 0) return;
+  try {
+    ensureInitialized();
+    if (!transporter) {
+      console.warn("SMTP not configured (SMTP_HOST) — skipping cutoff reminder email");
+      return;
+    }
+    await transporter.sendMail(buildCutoffReminderMessage(recipients, details));
+  } catch (err) {
+    console.error("Failed to send cutoff reminder email", err);
+  }
 }
 
 /**
@@ -165,11 +220,11 @@ export async function sendSubmissionNotification(details: SubmissionNotification
     return;
   }
 
-  const recipient = await resolveRecipient();
+  const recipients = await resolveRecipients();
 
-  if (!recipient) {
+  if (recipients.length === 0) {
     console.warn(
-      "No notification recipient configured (FORMBUILDER_NOTIFY_EMAIL / AdminSettings.notificationEmail) — skipping submission email"
+      "No notification recipient configured (FORMBUILDER_NOTIFY_EMAIL / AdminSettings notification emails) — skipping submission email"
     );
     await emailLogRepo.save(
       emailLogRepo.create({
@@ -182,8 +237,9 @@ export async function sendSubmissionNotification(details: SubmissionNotification
     return;
   }
 
+  const recipient = recipients.join(", ");
   try {
-    await transporter.sendMail(buildSubmissionMessage(recipient, details));
+    await transporter.sendMail(buildSubmissionMessage(recipients, details));
     await emailLogRepo.save(
       emailLogRepo.create({ uploadId: details.uploadId, recipient, status: "sent", errorMessage: null }),
     );

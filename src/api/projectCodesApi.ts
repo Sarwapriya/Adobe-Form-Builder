@@ -8,6 +8,11 @@ export interface ProjectCode {
    * against uploads — see backend ProjectCode entity's own doc comment. */
   startDate: string | null;
   endDate: string | null;
+  /** Deadline for subsidiary users to get their contributions to this
+   * project's forms approved ("YYYY-MM-DD") — see backend ProjectCode
+   * entity's own doc comment. Unlike startDate/endDate, meaningful but not
+   * enforced here either; it's what a reminder-email feature reads. */
+  cutoffDate: string | null;
   createdAt: string;
 }
 

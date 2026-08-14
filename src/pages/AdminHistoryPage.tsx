@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { Alert, Box, Button, Chip, Menu, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, IconButton, Menu, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryIcon from "@mui/icons-material/History";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
+import ClearIcon from "@mui/icons-material/Clear";
 import type { SvgIconComponent } from "@mui/icons-material";
 import { DataGrid, type GridColDef, type GridPaginationModel, type GridSortModel } from "@mui/x-data-grid";
 import { ApiError } from "../api/apiClient";
@@ -25,6 +25,11 @@ import {
 } from "../api/adminApi";
 import { deleteUpload, type FormVariant, type UploadStatus } from "../api/uploadsApi";
 import { downloadBlob } from "../utils/download";
+import { PageHeader } from "../components/common/PageHeader";
+import { ConfirmDialog } from "../components/common/ConfirmDialog";
+import { adminDataGridSx, ADMIN_GRID_ACTIONS_WIDTH } from "../app/dataGridSx";
+import { uploadStatusColor } from "../app/statusColors";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 
 const VARIANT_LABEL: Record<FormVariant, string> = { ff: "Full Form", oc: "One-Click" };
 
@@ -40,13 +45,6 @@ const STATUS_OPTIONS: Array<{ value: UploadStatus | ""; label: string }> = [
   { value: "failed", label: "Failed" },
 ];
 
-const STATUS_COLOR: Record<UploadStatus, "default" | "success" | "error" | "warning"> = {
-  uploaded: "default",
-  generated: "success",
-  submitted: "success",
-  failed: "error",
-};
-
 interface SummaryTileConfig {
   key: keyof UploadHistorySummary;
   label: string;
@@ -55,7 +53,11 @@ interface SummaryTileConfig {
 }
 
 // Status colors are reserved and paired with an icon + label here, never
-// color alone — total uses the neutral primary color since it isn't a status.
+// color alone — total uses the neutral primary color since it isn't a
+// status. Deliberately a distinct 4-color qualitative palette from the
+// row-level status chip (see uploadStatusColor in statusColors.ts) — these
+// tiles need every value visually distinct from its siblings at a glance,
+// which a shared 2-color "good/bad" chip scheme wouldn't give them.
 const SUMMARY_TILES: SummaryTileConfig[] = [
   { key: "total", label: "Total uploaded", icon: UploadFileIcon, color: "primary" },
   { key: "generated", label: "Generated (pending submit)", icon: AutorenewIcon, color: "info" },
@@ -66,7 +68,7 @@ const SUMMARY_TILES: SummaryTileConfig[] = [
 function SummaryTile({ config, value }: { config: SummaryTileConfig; value: number }) {
   const Icon = config.icon;
   return (
-    <Paper sx={{ p: 2, flex: "1 1 200px", display: "flex", alignItems: "center", gap: 1.5, borderRadius: 3 }}>
+    <Paper sx={{ p: 2, flex: "1 1 200px", display: "flex", alignItems: "center", gap: 1.5 }}>
       <Box
         sx={{
           width: 40,
@@ -112,11 +114,18 @@ export function AdminHistoryPage() {
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [statusFilter, setStatusFilter] = useState<UploadStatus | "">("");
   const [searchFilter, setSearchFilter] = useState("");
+  const debouncedSubsidiaryFilter = useDebouncedValue(subsidiaryFilter);
+  const debouncedSearchFilter = useDebouncedValue(searchFilter);
+  const hasActiveFilter = !!(subsidiaryFilter || projectCodeFilter || statusFilter || searchFilter);
 
   const [summary, setSummary] = useState<UploadHistorySummary>({ total: 0, generated: 0, submitted: 0, failed: 0 });
   const [previewMenu, setPreviewMenu] = useState<{ anchorEl: HTMLElement; uploadId: string; variants: FormVariant[] } | null>(
     null,
   );
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; fileName: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 20 });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: "uploadDate", sort: "desc" }]);
@@ -127,11 +136,11 @@ export function AdminHistoryPage() {
   // summary for no reason.
   const summaryFilters = useMemo<AdminListParams>(
     () => ({
-      subsidiaryId: subsidiaryFilter.trim() || undefined,
+      subsidiaryId: debouncedSubsidiaryFilter.trim() || undefined,
       projectCode: projectCodeFilter || undefined,
-      search: searchFilter.trim() || undefined,
+      search: debouncedSearchFilter.trim() || undefined,
     }),
-    [subsidiaryFilter, projectCodeFilter, searchFilter],
+    [debouncedSubsidiaryFilter, projectCodeFilter, debouncedSearchFilter],
   );
 
   const params = useMemo<AdminListParams>(() => {
@@ -194,6 +203,7 @@ export function AdminHistoryPage() {
   }, []);
 
   async function handleDownload(uploadId: string, subsidiaryId: string, version: number | null) {
+    setDownloadingId(uploadId);
     try {
       const blob = await downloadUploadZip(uploadId);
       // Mirrors adminUploadService.buildUploadZip's own fallback — a
@@ -201,10 +211,13 @@ export function AdminHistoryPage() {
       downloadBlob(blob, `${subsidiaryId}-${version != null ? `v${version}` : "draft"}.zip`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Download failed");
+    } finally {
+      setDownloadingId(null);
     }
   }
 
   async function handlePreview(uploadId: string, variant: FormVariant) {
+    setPreviewingId(uploadId);
     try {
       const blob = await previewUpload(uploadId, variant);
       const url = URL.createObjectURL(blob);
@@ -212,6 +225,8 @@ export function AdminHistoryPage() {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Preview failed");
+    } finally {
+      setPreviewingId(null);
     }
   }
 
@@ -230,16 +245,26 @@ export function AdminHistoryPage() {
   // from every listing but never removes the row itself. Blocked server-side
   // once an upload is submitted regardless of role, so the button is never
   // even offered for those rows below.
-  async function handleDelete(uploadId: string, fileName: string) {
-    if (!window.confirm(`Delete the upload record for "${fileName}"? It will be hidden from all history views.`)) {
-      return;
-    }
+  async function handleConfirmDelete() {
+    if (!confirmDelete) return;
+    setDeleting(true);
     try {
-      await deleteUpload(uploadId);
+      await deleteUpload(confirmDelete.id);
       setRefreshSignal((n) => n + 1);
+      setConfirmDelete(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
+    } finally {
+      setDeleting(false);
     }
+  }
+
+  function handleClearFilters() {
+    setSubsidiaryFilter("");
+    setProjectCodeFilter("");
+    setStatusFilter("");
+    setSearchFilter("");
+    setPaginationModel((p) => ({ ...p, page: 0 }));
   }
 
   const columns: GridColDef<AdminUploadListItem>[] = [
@@ -272,7 +297,7 @@ export function AdminHistoryPage() {
       headerName: "Status",
       width: 130,
       renderCell: (cellParams) => (
-        <Chip label={cellParams.value} color={STATUS_COLOR[cellParams.value as UploadStatus]} size="small" />
+        <Chip label={cellParams.value} color={uploadStatusColor[cellParams.value as UploadStatus]} size="small" />
       ),
     },
     {
@@ -290,7 +315,7 @@ export function AdminHistoryPage() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 230,
+      width: ADMIN_GRID_ACTIONS_WIDTH,
       sortable: false,
       renderCell: (cellParams) => {
         const hasFiles = cellParams.row.status === "submitted" || cellParams.row.status === "generated";
@@ -300,32 +325,38 @@ export function AdminHistoryPage() {
         // submitted-record lock that still applies to a standard user
         // deleting their own upload elsewhere.
         return (
-          <Stack direction="row" spacing={0.5}>
-            <Button
-              size="small"
-              startIcon={<VisibilityIcon />}
-              endIcon={hasFiles && cellParams.row.variants.length > 1 ? <ArrowDropDownIcon /> : undefined}
-              disabled={!hasFiles}
-              onClick={(e) => handleViewClick(e, cellParams.row)}
-            >
-              View
-            </Button>
-            <Button
-              size="small"
-              startIcon={<DownloadIcon />}
-              disabled={!hasFiles}
-              onClick={() => handleDownload(cellParams.row.id, cellParams.row.subsidiaryId, cellParams.row.version)}
-            >
-              Zip
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={() => handleDelete(cellParams.row.id, cellParams.row.fileName)}
-            >
-              Delete
-            </Button>
+          <Stack direction="row" spacing={0.25}>
+            <Tooltip title={hasFiles && cellParams.row.variants.length > 1 ? "View (choose form type)" : "View"}>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!hasFiles || previewingId === cellParams.row.id}
+                  onClick={(e) => handleViewClick(e, cellParams.row)}
+                >
+                  <VisibilityIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Download zip">
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!hasFiles || downloadingId === cellParams.row.id}
+                  onClick={() => handleDownload(cellParams.row.id, cellParams.row.subsidiaryId, cellParams.row.version)}
+                >
+                  <DownloadIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Delete">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => setConfirmDelete({ id: cellParams.row.id, fileName: cellParams.row.fileName })}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           </Stack>
         );
       },
@@ -334,30 +365,11 @@ export function AdminHistoryPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-          }}
-        >
-          <HistoryIcon />
-        </Box>
-        <Stack spacing={0.2}>
-          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            All History
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Every generated, submitted, or failed upload across every user, regardless of subsidiary.
-          </Typography>
-        </Stack>
-      </Stack>
+      <PageHeader
+        icon={<HistoryIcon />}
+        title="All History"
+        subtitle="Every generated, submitted, or failed upload across every user, regardless of subsidiary."
+      />
 
       <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 3 }}>
         {SUMMARY_TILES.map((tile) => (
@@ -365,50 +377,60 @@ export function AdminHistoryPage() {
         ))}
       </Stack>
 
-      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", borderRadius: 3 }}>
-        <TextField
-          label="Subsidiary"
-          size="small"
-          value={subsidiaryFilter}
-          onChange={(e) => setSubsidiaryFilter(e.target.value)}
-        />
-        <TextField
-          select
-          label="Project Code"
-          size="small"
-          sx={{ minWidth: 160 }}
-          value={projectCodeFilter}
-          onChange={(e) => setProjectCodeFilter(e.target.value)}
-        >
-          <MenuItem value="">All project codes</MenuItem>
-          {projectCodes.map((pc) => (
-            <MenuItem key={pc.id} value={pc.code}>
-              {pc.code}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          label="Search"
-          size="small"
-          placeholder="Subsidiary, project code, file name, or username"
-          value={searchFilter}
-          onChange={(e) => setSearchFilter(e.target.value)}
-          sx={{ minWidth: 260 }}
-        />
-        <TextField
-          select
-          label="Status"
-          size="small"
-          sx={{ minWidth: 160 }}
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as UploadStatus | "")}
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </TextField>
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+          Filters
+        </Typography>
+        <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap alignItems="center">
+          <TextField
+            label="Subsidiary (exact)"
+            size="small"
+            value={subsidiaryFilter}
+            onChange={(e) => setSubsidiaryFilter(e.target.value)}
+          />
+          <TextField
+            select
+            label="Project Code"
+            size="small"
+            sx={{ minWidth: 160 }}
+            value={projectCodeFilter}
+            onChange={(e) => setProjectCodeFilter(e.target.value)}
+          >
+            <MenuItem value="">All project codes</MenuItem>
+            {projectCodes.map((pc) => (
+              <MenuItem key={pc.id} value={pc.code}>
+                {pc.code}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            label="Search"
+            size="small"
+            placeholder="Subsidiary, project code, file name, or username"
+            value={searchFilter}
+            onChange={(e) => setSearchFilter(e.target.value)}
+            sx={{ minWidth: 260 }}
+          />
+          <TextField
+            select
+            label="Status"
+            size="small"
+            sx={{ minWidth: 160 }}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as UploadStatus | "")}
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          {hasActiveFilter && (
+            <Button size="small" startIcon={<ClearIcon fontSize="small" />} onClick={handleClearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </Stack>
       </Paper>
 
       {error && (
@@ -417,7 +439,7 @@ export function AdminHistoryPage() {
         </Alert>
       )}
 
-      <Paper sx={{ height: 600, borderRadius: 3, overflow: "hidden" }}>
+      <Paper sx={{ height: 600, overflow: "hidden" }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -431,22 +453,7 @@ export function AdminHistoryPage() {
           onSortModelChange={setSortModel}
           pageSizeOptions={[10, 20, 50, 100]}
           disableRowSelectionOnClick
-          sx={{
-            border: "none",
-            "& .MuiDataGrid-columnHeaders": {
-              bgcolor: "#f8f9fc",
-              borderBottom: "1px solid rgba(20, 22, 33, 0.08)",
-            },
-            "& .MuiDataGrid-columnHeaderTitle": {
-              fontWeight: 700,
-              fontSize: 12,
-              textTransform: "uppercase",
-              letterSpacing: 0.4,
-              color: "text.secondary",
-            },
-            "& .MuiDataGrid-cell": { borderColor: "rgba(20, 22, 33, 0.06)" },
-            "& .MuiDataGrid-row:hover": { bgcolor: "rgba(20, 40, 160, 0.04)" },
-          }}
+          sx={adminDataGridSx}
         />
       </Paper>
 
@@ -463,6 +470,16 @@ export function AdminHistoryPage() {
           </MenuItem>
         ))}
       </Menu>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Delete upload record"
+        message={`Delete the upload record for "${confirmDelete?.fileName}"? It will be hidden from all history views.`}
+        confirmLabel="Delete"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </Box>
   );
 }

@@ -122,6 +122,10 @@ export interface AdminUserListItem {
   role: AdminUserRole;
   subsidiaryId: string | null;
   isActive: boolean;
+  /** Up to two separate addresses for notification purposes, distinct from
+   * `email` (the login identity) — see backend User entity's own doc comment. */
+  notificationEmail: string | null;
+  notificationEmail2: string | null;
   createdAt: string;
 }
 
@@ -143,6 +147,24 @@ export function setUserActive(id: string, isActive: boolean): Promise<CreatedUse
   return apiClient.patch<CreatedUser & { isActive: boolean }>(`/api/v1/admin/users/${id}`, { isActive });
 }
 
+/**
+ * Updates a user's own up-to-two separate notification-email addresses
+ * (`null` or `""` clears a slot; an omitted field leaves it as-is). Any user
+ * may update their own; only a superadmin may update someone else's —
+ * enforced server-side in admin.router.ts's PATCH
+ * /users/:id/notification-email.
+ */
+export function setUserNotificationEmail(
+  id: string,
+  notificationEmail: string | null | undefined,
+  notificationEmail2: string | null | undefined
+): Promise<AdminUserListItem> {
+  return apiClient.patch<AdminUserListItem>(`/api/v1/admin/users/${id}/notification-email`, {
+    notificationEmail,
+    notificationEmail2,
+  });
+}
+
 /** GET /api/v1/admin/project-codes — every project code, open and closed
  * alike (the admin management list). The upload form's own dropdown uses the
  * open-only projectCodesApi.listOpenProjectCodes instead. */
@@ -150,11 +172,12 @@ export function listAllProjectCodes(): Promise<ProjectCode[]> {
   return apiClient.get<ProjectCode[]>("/api/v1/admin/project-codes");
 }
 
-/** `startDate`/`endDate` are "YYYY-MM-DD" strings (an <input type="date">'s
- * own value format) or omitted — purely descriptive, never enforced against
- * uploads (see backend ProjectCode entity's own doc comment). */
-export function createProjectCode(code: string, startDate?: string, endDate?: string): Promise<ProjectCode> {
-  return apiClient.post<ProjectCode>("/api/v1/admin/project-codes", { code, startDate, endDate });
+/** `startDate`/`endDate`/`cutoffDate` are "YYYY-MM-DD" strings (an
+ * <input type="date">'s own value format) or omitted. `startDate`/`endDate`
+ * are purely descriptive; `cutoffDate` isn't enforced here either but is
+ * meaningful — see backend ProjectCode entity's own doc comment. */
+export function createProjectCode(code: string, startDate?: string, endDate?: string, cutoffDate?: string): Promise<ProjectCode> {
+  return apiClient.post<ProjectCode>("/api/v1/admin/project-codes", { code, startDate, endDate, cutoffDate });
 }
 
 /** Closing a project code blocks new uploads against it (enforced server-side
@@ -172,15 +195,17 @@ export function setProjectCodeValue(id: string, code: string): Promise<ProjectCo
   return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { code });
 }
 
-/** Updates just the campaign date range — `null` clears a bound, `undefined`
- * (simply omit the key) leaves it as-is. Independent of setProjectCodeOpen
- * above; the two are never sent in the same request from this UI. */
+/** Updates the campaign dates (and/or the cutoff date) — `null` clears a
+ * bound, `undefined` (simply omit the key) leaves it as-is. Independent of
+ * setProjectCodeOpen above; the two are never sent in the same request from
+ * this UI. */
 export function setProjectCodeDateRange(
   id: string,
   startDate: string | null | undefined,
   endDate: string | null | undefined,
+  cutoffDate?: string | null,
 ): Promise<ProjectCode> {
-  return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { startDate, endDate });
+  return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { startDate, endDate, cutoffDate });
 }
 
 /** GET /api/v1/admin/subsidiaries — every subsidiary, active and inactive
@@ -202,6 +227,41 @@ export function createSubsidiary(name: string): Promise<Subsidiary> {
  * already made under it. */
 export function setSubsidiaryActive(id: string, isActive: boolean): Promise<Subsidiary> {
   return apiClient.patch<Subsidiary>(`/api/v1/admin/subsidiaries/${id}`, { isActive });
+}
+
+/** Updates a subsidiary's up-to-two extra notification recipient addresses —
+ * `null` (or `""`, normalized server-side) clears a slot, `undefined` (simply
+ * omit the key) leaves it as-is. Independent of setSubsidiaryActive above. */
+export function setSubsidiaryNotificationEmails(
+  id: string,
+  notificationEmail1: string | null | undefined,
+  notificationEmail2: string | null | undefined,
+): Promise<Subsidiary> {
+  return apiClient.patch<Subsidiary>(`/api/v1/admin/subsidiaries/${id}`, { notificationEmail1, notificationEmail2 });
+}
+
+export interface GlobalNotificationEmails {
+  notificationEmail1: string | null;
+  notificationEmail2: string | null;
+}
+
+/** GET /api/v1/admin/settings/notification-emails — the two admin-configurable
+ * global addresses that receive the existing upload/submission notification
+ * emails (distinct from each subsidiary's own two extra addresses above). */
+export function getGlobalNotificationEmails(): Promise<GlobalNotificationEmails> {
+  return apiClient.get<GlobalNotificationEmails>("/api/v1/admin/settings/notification-emails");
+}
+
+/** `null` (or `""`, normalized server-side) clears a slot, `undefined` (simply
+ * omit the key) leaves it as-is. */
+export function setGlobalNotificationEmails(
+  notificationEmail1: string | null | undefined,
+  notificationEmail2: string | null | undefined,
+): Promise<GlobalNotificationEmails> {
+  return apiClient.patch<GlobalNotificationEmails>("/api/v1/admin/settings/notification-emails", {
+    notificationEmail1,
+    notificationEmail2,
+  });
 }
 
 /** Permanently removes a subsidiary (and any subsidiary-project blocks

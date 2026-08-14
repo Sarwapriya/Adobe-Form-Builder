@@ -6,6 +6,7 @@ import { ApiError } from "../api/apiClient";
 import { listMyForms } from "../api/subsidiaryFormsApi";
 import type { FormListItem } from "../api/formBuilderApi";
 import { ContributionStatusBar } from "../components/formContribution/ContributionStatusBar";
+import { PageHeader } from "../components/common/PageHeader";
 
 /**
  * Landing page for a subsidiary-scoped standard user's own view of the Form
@@ -42,30 +43,11 @@ export function MyFormsListPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-          }}
-        >
-          <TranslateIcon />
-        </Box>
-        <Stack spacing={0.2}>
-          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            My Forms
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Published forms for your subsidiary — add translations, questions, or consents for review.
-          </Typography>
-        </Stack>
-      </Stack>
+      <PageHeader
+        icon={<TranslateIcon />}
+        title="My Forms"
+        subtitle="Published forms for your subsidiary — add translations, questions, or consents for review."
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
@@ -76,7 +58,7 @@ export function MyFormsListPage() {
       {loading ? (
         <CircularProgress size={24} />
       ) : forms.length === 0 ? (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 3 }}>
           <Typography variant="body2" color="text.secondary">
             No published forms are available for your subsidiary yet.
           </Typography>
@@ -84,7 +66,7 @@ export function MyFormsListPage() {
       ) : (
         <Stack spacing={1}>
           {forms.map((form) => (
-            <Paper key={form.id} sx={{ p: 2, borderRadius: 3, cursor: "pointer" }} onClick={() => navigate(`/my-forms/${form.id}`)}>
+            <Paper key={form.id} sx={{ p: 2, cursor: "pointer" }} onClick={() => navigate(`/my-forms/${form.id}`)}>
               <Stack direction="row" alignItems="center" gap={2}>
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                   <Typography variant="subtitle1" fontWeight={700} noWrap>

@@ -75,20 +75,17 @@ export const theme = createTheme({
     MuiPaper: {
       defaultProps: { elevation: 0 },
       styleOverrides: {
-        root: {
+        // borderRadius here matches every Paper's own previous inline
+        // `sx={{ borderRadius: 3 }}` override exactly (MUI's sx shorthand
+        // multiplies a numeric borderRadius by theme.shape.borderRadius) —
+        // centralized so pages that need it don't have to repeat it.
+        root: ({ theme }) => ({
           backgroundImage: "none",
           border: "1px solid rgba(20, 22, 33, 0.07)",
-        },
+          borderRadius: theme.shape.borderRadius * 3,
+        }),
         elevation0: {
           boxShadow: "0 1px 2px rgba(20, 22, 33, 0.05)",
-        },
-      },
-    },
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          backgroundImage: "linear-gradient(90deg, #1428a0 0%, #24379f 100%)",
-          boxShadow: "0 2px 10px rgba(20, 40, 160, 0.18)",
         },
       },
     },

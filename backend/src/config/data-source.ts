@@ -30,6 +30,10 @@ import { AddFormBuilder1820000000000 } from "../migrations/1820000000000-AddForm
 import { AddFormVersionToGeneratedFiles1830000000000 } from "../migrations/1830000000000-AddFormVersionToGeneratedFiles";
 import { AddFormContributions1840000000000 } from "../migrations/1840000000000-AddFormContributions";
 import { AddContributionPublishedAt1850000000000 } from "../migrations/1850000000000-AddContributionPublishedAt";
+import { AddProjectCodeCutoffDate1860000000000 } from "../migrations/1860000000000-AddProjectCodeCutoffDate";
+import { AddSubsidiaryNotificationEmails1870000000000 } from "../migrations/1870000000000-AddSubsidiaryNotificationEmails";
+import { AddUserNotificationEmail1880000000000 } from "../migrations/1880000000000-AddUserNotificationEmail";
+import { AddUserNotificationEmail21890000000000 } from "../migrations/1890000000000-AddUserNotificationEmail2";
 
 const entities = [
   Upload,
@@ -64,6 +68,10 @@ const migrations = [
   AddFormVersionToGeneratedFiles1830000000000,
   AddFormContributions1840000000000,
   AddContributionPublishedAt1850000000000,
+  AddProjectCodeCutoffDate1860000000000,
+  AddSubsidiaryNotificationEmails1870000000000,
+  AddUserNotificationEmail1880000000000,
+  AddUserNotificationEmail21890000000000,
 ];
 
 /**

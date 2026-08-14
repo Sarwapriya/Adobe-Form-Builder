@@ -6,7 +6,6 @@ import {
   Button,
   Checkbox,
   Chip,
-  CircularProgress,
   ListItemText,
   MenuItem,
   Paper,
@@ -23,6 +22,8 @@ import {
 } from "../../api/adminApi";
 import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesApi";
+import { SectionHeader } from "../common/SectionHeader";
+import { LoadingState } from "../common/LoadingState";
 
 /**
  * Bulk version of SubsidiaryProjectBlockManager above: pick several
@@ -123,20 +124,15 @@ export function SubsidiaryProjectBulkBlockManager(
   }
 
   return (
-    <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-        <LayersIcon fontSize="small" color="primary" />
-        <Typography variant="subtitle1" fontWeight={700}>
-          Bulk subsidiary / project code restrictions
-        </Typography>
-      </Stack>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
-        Select several subsidiaries and several project codes to block every combination at once — e.g. 3
-        subsidiaries x 2 project codes blocks all 6 pairs in one click.
-      </Typography>
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <SectionHeader
+        icon={<LayersIcon fontSize="small" color="primary" />}
+        title="Bulk subsidiary / project code restrictions"
+        subtitle="Select several subsidiaries and several project codes to block every combination at once — e.g. 3 subsidiaries x 2 project codes blocks all 6 pairs in one click."
+      />
 
       {loading ? (
-        <CircularProgress size={20} />
+        <LoadingState />
       ) : (
         <Box component="form" onSubmit={handleBulkBlock}>
           <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, flexWrap: "wrap" }}>
@@ -217,12 +213,12 @@ export function SubsidiaryProjectBulkBlockManager(
         </Box>
       )}
 
-      {error && (
+      {error && !loading && (
         <Alert severity="error" sx={{ mb: 1.5 }}>
           {error}
         </Alert>
       )}
-      {lastResult && !error && (
+      {lastResult && !error && !loading && (
         <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setLastResult(null)}>
           {lastResult}
         </Alert>

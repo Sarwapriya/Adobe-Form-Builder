@@ -27,6 +27,17 @@ export class Subsidiary {
   @Column({ type: "bit", default: true })
   isActive!: boolean;
 
+  /** Up to two extra recipient addresses an admin can set per subsidiary for
+   * notification purposes (e.g. a shared inbox or a manager not otherwise
+   * represented by a User account) — additional to, not a replacement for,
+   * whichever subsidiary-scoped Users actually receive a given notification.
+   * Both nullable/independent: either, neither, or both may be set. */
+  @Column({ type: "nvarchar", length: 255, nullable: true })
+  notificationEmail1!: string | null;
+
+  @Column({ type: "nvarchar", length: 255, nullable: true })
+  notificationEmail2!: string | null;
+
   @Column({ type: "datetimeoffset", default: () => "SYSDATETIMEOFFSET()" })
   createdAt!: Date;
 }

@@ -1,16 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Alert, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import BadgeIcon from "@mui/icons-material/Badge";
@@ -23,6 +13,8 @@ import {
   setProjectCodeValue,
   type ProjectCode,
 } from "../../api/adminApi";
+import { SectionHeader } from "../common/SectionHeader";
+import { LoadingState } from "../common/LoadingState";
 
 /** Backend returns Date columns as full ISO datetime strings ("2026-06-01T00:00:00.000Z")
  * once serialized to JSON — an <input type="date"> needs exactly "YYYY-MM-DD". */
@@ -33,14 +25,15 @@ function toDateInputValue(value: string | null): string {
 /**
  * Inline admin panel for managing project codes (campaigns): create new
  * ones, rename a code's own text value, toggle a code open/closed, and
- * set/edit each one's descriptive campaign date range. Closing a code blocks
- * new uploads against it (enforced server-side — see
+ * set/edit each one's descriptive campaign date range plus its cutoff date.
+ * Closing a code blocks new uploads against it (enforced server-side — see
  * uploadService.createUpload) without touching uploads already made under
  * it; renaming likewise never touches anything already uploaded under the
  * old value (Upload.projectCode is a text snapshot, not a live reference —
- * see that column's own doc comment); the date range is purely informational
- * and never enforced (see backend ProjectCode entity's own doc comment).
- * Lives on ConfigurationPage, admin/superadmin only (gated by AdminRoute);
+ * see that column's own doc comment). Start/end date are purely informational
+ * and never enforced; cutoffDate isn't enforced here either but is meaningful
+ * — see backend ProjectCode entity's own doc comment. Lives on
+ * ConfigurationPage, admin/superadmin only (gated by AdminRoute);
  * the upload form's own dropdown (any user, open codes only) is a separate
  * endpoint — see projectCodesApi.ts.
  */
@@ -51,6 +44,7 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
   const [newCode, setNewCode] = useState("");
   const [newStartDate, setNewStartDate] = useState("");
   const [newEndDate, setNewEndDate] = useState("");
+  const [newCutoffDate, setNewCutoffDate] = useState("");
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -78,10 +72,11 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
     setCreating(true);
     setError(null);
     try {
-      await createProjectCode(newCode.trim(), newStartDate || undefined, newEndDate || undefined);
+      await createProjectCode(newCode.trim(), newStartDate || undefined, newEndDate || undefined, newCutoffDate || undefined);
       setNewCode("");
       setNewStartDate("");
       setNewEndDate("");
+      setNewCutoffDate("");
       await refresh();
       onChange?.();
     } catch (err) {
@@ -105,11 +100,11 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
     }
   }
 
-  async function handleSaveDateRange(id: string, startDate: string, endDate: string) {
+  async function handleSaveDateRange(id: string, startDate: string, endDate: string, cutoffDate: string) {
     setSavingId(id);
     setError(null);
     try {
-      await setProjectCodeDateRange(id, startDate || null, endDate || null);
+      await setProjectCodeDateRange(id, startDate || null, endDate || null, cutoffDate || null);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to update campaign dates");
@@ -133,13 +128,8 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
   }
 
   return (
-    <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-        <BadgeIcon fontSize="small" color="primary" />
-        <Typography variant="subtitle1" fontWeight={700}>
-          Campaign - Project Code
-        </Typography>
-      </Stack>
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <SectionHeader icon={<BadgeIcon fontSize="small" color="primary" />} title="Campaign - Project Code" />
 
       <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", gap: 1.5, mb: 1.5, flexWrap: "wrap", alignItems: "center" }}>
         <TextField
@@ -164,19 +154,27 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
           onChange={(e) => setNewEndDate(e.target.value)}
           InputLabelProps={{ shrink: true }}
         />
+        <TextField
+          label="Cutoff date"
+          type="date"
+          size="small"
+          value={newCutoffDate}
+          onChange={(e) => setNewCutoffDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
         <Button type="submit" variant="outlined" disabled={!newCode.trim() || creating}>
           {creating ? "Adding..." : "Add"}
         </Button>
       </Box>
 
-      {error && (
+      {error && !loading && (
         <Alert severity="error" sx={{ mb: 1.5 }}>
           {error}
         </Alert>
       )}
 
       {loading ? (
-        <CircularProgress size={20} />
+        <LoadingState />
       ) : codes.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No project codes yet — add one above so users can select it when uploading.
@@ -191,7 +189,7 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
               saving={savingId === code.id}
               renaming={renamingId === code.id}
               onToggle={() => handleToggle(code)}
-              onSaveDateRange={(startDate, endDate) => handleSaveDateRange(code.id, startDate, endDate)}
+              onSaveDateRange={(startDate, endDate, cutoffDate) => handleSaveDateRange(code.id, startDate, endDate, cutoffDate)}
               onRename={(newValue) => handleRename(code.id, newValue)}
             />
           ))}
@@ -215,11 +213,12 @@ function ProjectCodeRow({
   saving: boolean;
   renaming: boolean;
   onToggle: () => void;
-  onSaveDateRange: (startDate: string, endDate: string) => void;
+  onSaveDateRange: (startDate: string, endDate: string, cutoffDate: string) => void;
   onRename: (code: string) => void;
 }) {
   const [startDate, setStartDate] = useState(toDateInputValue(code.startDate));
   const [endDate, setEndDate] = useState(toDateInputValue(code.endDate));
+  const [cutoffDate, setCutoffDate] = useState(toDateInputValue(code.cutoffDate));
   const [codeValue, setCodeValue] = useState(code.code);
 
   // Re-sync local edits if the underlying row changes from elsewhere (e.g.
@@ -227,61 +226,72 @@ function ProjectCodeRow({
   useEffect(() => {
     setStartDate(toDateInputValue(code.startDate));
     setEndDate(toDateInputValue(code.endDate));
-  }, [code.startDate, code.endDate]);
+    setCutoffDate(toDateInputValue(code.cutoffDate));
+  }, [code.startDate, code.endDate, code.cutoffDate]);
 
   useEffect(() => {
     setCodeValue(code.code);
   }, [code.code]);
 
-  const isDirty = startDate !== toDateInputValue(code.startDate) || endDate !== toDateInputValue(code.endDate);
+  const isDirty =
+    startDate !== toDateInputValue(code.startDate) ||
+    endDate !== toDateInputValue(code.endDate) ||
+    cutoffDate !== toDateInputValue(code.cutoffDate);
   const isCodeDirty = codeValue.trim() !== code.code && codeValue.trim().length > 0;
 
   return (
-    <Stack
-      direction="row"
-      spacing={1.5}
-      alignItems="center"
-      flexWrap="wrap"
-      sx={{ px: 1.5, py: 1, borderRadius: 2, bgcolor: "rgba(20, 22, 33, 0.03)" }}
-    >
-      <TextField
-        label="Project code"
-        size="small"
-        value={codeValue}
-        onChange={(e) => setCodeValue(e.target.value)}
-        sx={{ minWidth: 160 }}
-      />
-      <Button size="small" variant="text" disabled={!isCodeDirty || renaming} onClick={() => onRename(codeValue.trim())}>
-        {renaming ? "Saving..." : "Save code"}
-      </Button>
-      <Chip
-        label={code.isOpen ? "Open" : "Closed"}
-        color={code.isOpen ? "success" : "default"}
-        icon={code.isOpen ? <LockOpenIcon /> : <LockIcon />}
-        onClick={onToggle}
-        disabled={toggling}
-        title={code.isOpen ? "Open — click to close" : "Closed — click to reopen"}
-        sx={{ minWidth: 100 }}
-      />
-      <TextField
-        label="Start date"
-        type="date"
-        size="small"
-        value={startDate}
-        onChange={(e) => setStartDate(e.target.value)}
-        InputLabelProps={{ shrink: true }}
-      />
-      <TextField
-        label="End date"
-        type="date"
-        size="small"
-        value={endDate}
-        onChange={(e) => setEndDate(e.target.value)}
-        InputLabelProps={{ shrink: true }}
-      />
-      <Button size="small" variant="text" disabled={!isDirty || saving} onClick={() => onSaveDateRange(startDate, endDate)}>
-        {saving ? "Saving..." : "Save dates"}
-      </Button>
-    </Stack>
+    <Box sx={{ px: 1.5, py: 1.25, borderRadius: 2, bgcolor: "rgba(20, 22, 33, 0.03)" }}>
+      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+        <TextField
+          label="Project code"
+          size="small"
+          value={codeValue}
+          onChange={(e) => setCodeValue(e.target.value)}
+          sx={{ minWidth: 160 }}
+        />
+        <Button size="small" variant="text" disabled={!isCodeDirty || renaming} onClick={() => onRename(codeValue.trim())}>
+          {renaming ? "Saving..." : "Save code"}
+        </Button>
+        <Chip
+          label={code.isOpen ? "Open" : "Closed"}
+          color={code.isOpen ? "success" : "default"}
+          icon={code.isOpen ? <LockOpenIcon /> : <LockIcon />}
+          onClick={onToggle}
+          disabled={toggling}
+          title={code.isOpen ? "Open — click to close" : "Closed — click to reopen"}
+          sx={{ minWidth: 100 }}
+        />
+      </Stack>
+      <Divider sx={{ my: 1 }} />
+      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+        <TextField
+          label="Start date"
+          type="date"
+          size="small"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+        <TextField
+          label="End date"
+          type="date"
+          size="small"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+        <TextField
+          label="Cutoff date"
+          type="date"
+          size="small"
+          value={cutoffDate}
+          onChange={(e) => setCutoffDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+        <Button size="small" variant="text" disabled={!isDirty || saving} onClick={() => onSaveDateRange(startDate, endDate, cutoffDate)}>
+          {saving ? "Saving..." : "Save dates"}
+        </Button>
+      </Stack>
+    </Box>
   );
 }

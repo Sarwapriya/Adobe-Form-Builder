@@ -60,6 +60,31 @@ export async function setSubsidiaryActive(id: string, isActive: boolean): Promis
   return repo.save(existing);
 }
 
+export interface SubsidiaryNotificationEmails {
+  /** Each explicit `null` clears that slot; an omitted key leaves it as-is —
+   * same "presence vs value" convention projectCodeService.setProjectCodeDateRange
+   * uses for its own optional fields. */
+  notificationEmail1?: string | null;
+  notificationEmail2?: string | null;
+}
+
+/** Updates a subsidiary's up-to-two extra notification recipient addresses
+ * (see Subsidiary.notificationEmail1/2's own doc comment). Returns null if the
+ * id doesn't exist. */
+export async function setSubsidiaryNotificationEmails(id: string, emails: SubsidiaryNotificationEmails): Promise<Subsidiary | null> {
+  const repo = AppDataSource.getRepository(Subsidiary);
+  const existing = await repo.findOne({ where: { id } });
+  if (!existing) return null;
+
+  if ("notificationEmail1" in emails) {
+    existing.notificationEmail1 = emails.notificationEmail1?.trim() || null;
+  }
+  if ("notificationEmail2" in emails) {
+    existing.notificationEmail2 = emails.notificationEmail2?.trim() || null;
+  }
+  return repo.save(existing);
+}
+
 /**
  * Permanently removes a subsidiary — the irreversible alternative to
  * disabling it. Upload.subsidiaryId/User.subsidiaryId are plain text

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -11,14 +11,19 @@ import {
   deleteSubsidiary,
   listAllSubsidiaries,
   setSubsidiaryActive,
+  setSubsidiaryNotificationEmails,
   type Subsidiary,
 } from "../../api/adminApi";
+import { SectionHeader } from "../common/SectionHeader";
+import { LoadingState } from "../common/LoadingState";
+import { NotificationEmailFields } from "../common/NotificationEmailFields";
 
 /**
  * Inline admin panel for managing subsidiaries: create new ones, disable one
  * (blocks every project code for it in one step — reversible, click to
- * re-enable) or delete one outright (permanent — the chip's own "x"). Lives
- * on ConfigurationPage; per-project restrictions that don't need the whole
+ * re-enable), delete one outright (permanent — the chip's own "x"), or set up
+ * to two extra notification recipient addresses per subsidiary. Lives on
+ * ConfigurationPage; per-project restrictions that don't need the whole
  * subsidiary blocked are SubsidiaryProjectBlockManager below.
  */
 export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) {
@@ -32,6 +37,7 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [savingEmailsId, setSavingEmailsId] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -111,6 +117,19 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
     });
   }
 
+  async function handleSaveEmails(id: string, notificationEmail1: string, notificationEmail2: string) {
+    setSavingEmailsId(id);
+    setError(null);
+    try {
+      await setSubsidiaryNotificationEmails(id, notificationEmail1 || null, notificationEmail2 || null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update notification emails");
+    } finally {
+      setSavingEmailsId(null);
+    }
+  }
+
   async function handleBulkSetActive(isActive: boolean) {
     if (selectedIds.size === 0) return;
     setBulkUpdating(true);
@@ -129,18 +148,18 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
   }
 
   return (
-    <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-        <DomainIcon fontSize="small" color="primary" />
-        <Typography variant="subtitle1" fontWeight={700} sx={{ flexGrow: 1 }}>
-          Subsidiaries
-        </Typography>
-        {subsidiaries.length > 0 && (
-          <Button size="small" onClick={toggleSelectMode} disabled={bulkUpdating}>
-            {selectMode ? "Cancel" : "Select multiple"}
-          </Button>
-        )}
-      </Stack>
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <SectionHeader
+        icon={<DomainIcon fontSize="small" color="primary" />}
+        title="Subsidiaries"
+        action={
+          subsidiaries.length > 0 && (
+            <Button size="small" onClick={toggleSelectMode} disabled={bulkUpdating}>
+              {selectMode ? "Cancel" : "Select multiple"}
+            </Button>
+          )
+        }
+      />
 
       {selectMode && (
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
@@ -180,14 +199,14 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
         </Button>
       </Box>
 
-      {error && (
+      {error && !loading && (
         <Alert severity="error" sx={{ mb: 1.5 }}>
           {error}
         </Alert>
       )}
 
       {loading ? (
-        <CircularProgress size={20} />
+        <LoadingState />
       ) : subsidiaries.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No subsidiaries yet — add one above so users can select it when uploading.
@@ -234,8 +253,72 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
               ),
             )}
           </Stack>
+
+          {!selectMode && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                Notification emails
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                Extra notification emails per subsidiary (additional to whichever of that subsidiary's own users
+                receive a notification) — leave blank to send only to the subsidiary's own users.
+              </Typography>
+              <Stack spacing={1}>
+                {subsidiaries.map((s) => (
+                  <SubsidiaryNotificationRow
+                    key={s.id}
+                    subsidiary={s}
+                    saving={savingEmailsId === s.id}
+                    onSave={(email1, email2) => handleSaveEmails(s.id, email1, email2)}
+                  />
+                ))}
+              </Stack>
+            </>
+          )}
         </>
       )}
     </Paper>
+  );
+}
+
+function SubsidiaryNotificationRow({
+  subsidiary,
+  saving,
+  onSave,
+}: {
+  subsidiary: Subsidiary;
+  saving: boolean;
+  onSave: (notificationEmail1: string, notificationEmail2: string) => void;
+}) {
+  const [email1, setEmail1] = useState(subsidiary.notificationEmail1 ?? "");
+  const [email2, setEmail2] = useState(subsidiary.notificationEmail2 ?? "");
+
+  useEffect(() => {
+    setEmail1(subsidiary.notificationEmail1 ?? "");
+    setEmail2(subsidiary.notificationEmail2 ?? "");
+  }, [subsidiary.notificationEmail1, subsidiary.notificationEmail2]);
+
+  const isDirty = email1 !== (subsidiary.notificationEmail1 ?? "") || email2 !== (subsidiary.notificationEmail2 ?? "");
+
+  return (
+    <NotificationEmailFields
+      value1={email1}
+      value2={email2}
+      onValue1Change={setEmail1}
+      onValue2Change={setEmail2}
+      onSave={() => onSave(email1.trim(), email2.trim())}
+      saving={saving}
+      dirty={isDirty}
+      label1="Notification email 1"
+      label2="Notification email 2"
+      saveLabel="Save emails"
+      leading={
+        <Typography variant="body2" fontWeight={600} sx={{ minWidth: 140 }}>
+          {subsidiary.name}
+        </Typography>
+      }
+      containerSx={{ px: 1.5, py: 1, borderRadius: 2, bgcolor: "rgba(20, 22, 33, 0.03)" }}
+    />
   );
 }

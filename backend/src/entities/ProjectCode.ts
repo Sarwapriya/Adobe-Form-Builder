@@ -37,6 +37,15 @@ export class ProjectCode {
   @Column({ type: "date", nullable: true })
   endDate!: Date | null;
 
+  /** The deadline by which subsidiary users should finish getting their
+   * contributions to this project's forms approved. Stored/managed the same way
+   * as startDate/endDate (admin-set, nullable, shown in the Configuration UI),
+   * but — unlike those two, which are purely descriptive — this one is meant to
+   * drive a not-yet-built reminder-email feature for forms still pending
+   * approval as the deadline nears. */
+  @Column({ type: "date", nullable: true })
+  cutoffDate!: Date | null;
+
   @Column({ type: "datetimeoffset", default: () => "SYSDATETIMEOFFSET()" })
   createdAt!: Date;
 }

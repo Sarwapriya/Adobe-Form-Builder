@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { Alert, Box, Button, Chip, Menu, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Alert, Chip, IconButton, Menu, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ScienceIcon from "@mui/icons-material/Science";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import ClearIcon from "@mui/icons-material/Clear";
 import { DataGrid, type GridColDef, type GridPaginationModel, type GridSortModel } from "@mui/x-data-grid";
 import { ApiError } from "../api/apiClient";
 import {
@@ -19,6 +20,9 @@ import {
 import type { FormVariant } from "../api/uploadsApi";
 import { downloadBlob } from "../utils/download";
 import { QaRunDialog } from "../components/admin/QaRunDialog";
+import { PageHeader } from "../components/common/PageHeader";
+import { adminDataGridSx, ADMIN_GRID_ACTIONS_WIDTH } from "../app/dataGridSx";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 
 const VARIANT_LABEL: Record<FormVariant, string> = { ff: "Full Form", oc: "One-Click" };
 
@@ -41,11 +45,16 @@ export function AdminDashboardPage() {
   const [previewMenu, setPreviewMenu] = useState<{ anchorEl: HTMLElement; uploadId: string; variants: FormVariant[] } | null>(
     null,
   );
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   const [subsidiaryFilter, setSubsidiaryFilter] = useState("");
   const [projectCodeFilter, setProjectCodeFilter] = useState("");
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [searchFilter, setSearchFilter] = useState("");
+  const debouncedSubsidiaryFilter = useDebouncedValue(subsidiaryFilter);
+  const debouncedSearchFilter = useDebouncedValue(searchFilter);
+  const hasActiveFilter = !!(subsidiaryFilter || projectCodeFilter || searchFilter);
 
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 20 });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: "uploadDate", sort: "desc" }]);
@@ -53,15 +62,15 @@ export function AdminDashboardPage() {
   const params = useMemo<AdminListParams>(() => {
     const sort = sortModel[0];
     return {
-      subsidiaryId: subsidiaryFilter.trim() || undefined,
+      subsidiaryId: debouncedSubsidiaryFilter.trim() || undefined,
       projectCode: projectCodeFilter || undefined,
-      search: searchFilter.trim() || undefined,
+      search: debouncedSearchFilter.trim() || undefined,
       page: paginationModel.page + 1,
       pageSize: paginationModel.pageSize,
       sortBy: (sort?.field as AdminListParams["sortBy"]) ?? "uploadDate",
       sortDir: sort?.sort === "asc" ? "ASC" : "DESC",
     };
-  }, [subsidiaryFilter, projectCodeFilter, searchFilter, paginationModel, sortModel]);
+  }, [debouncedSubsidiaryFilter, projectCodeFilter, debouncedSearchFilter, paginationModel, sortModel]);
 
   // All codes (not just open ones) — a submitted upload may have used a code
   // that's since been closed, and it should still be filterable here.
@@ -96,6 +105,7 @@ export function AdminDashboardPage() {
   }, [params]);
 
   async function handleDownload(uploadId: string, subsidiaryId: string, version: number | null) {
+    setDownloadingId(uploadId);
     try {
       const blob = await downloadUploadZip(uploadId);
       // Mirrors adminUploadService.buildUploadZip's own fallback — a version
@@ -103,6 +113,8 @@ export function AdminDashboardPage() {
       downloadBlob(blob, `${subsidiaryId}-${version != null ? `v${version}` : "draft"}.zip`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Download failed");
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -111,6 +123,7 @@ export function AdminDashboardPage() {
   // navigating there directly, since a plain link can't carry the
   // Authorization header the admin API requires.
   async function handlePreview(uploadId: string, variant: FormVariant) {
+    setPreviewingId(uploadId);
     try {
       const blob = await previewUpload(uploadId, variant);
       const url = URL.createObjectURL(blob);
@@ -121,6 +134,8 @@ export function AdminDashboardPage() {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Preview failed");
+    } finally {
+      setPreviewingId(null);
     }
   }
 
@@ -133,6 +148,13 @@ export function AdminDashboardPage() {
       return;
     }
     void handlePreview(row.id, row.variants[0] ?? "ff");
+  }
+
+  function handleClearFilters() {
+    setSubsidiaryFilter("");
+    setProjectCodeFilter("");
+    setSearchFilter("");
+    setPaginationModel((p) => ({ ...p, page: 0 }));
   }
 
   const columns: GridColDef<AdminUploadListItem>[] = [
@@ -175,28 +197,37 @@ export function AdminDashboardPage() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 240,
+      width: ADMIN_GRID_ACTIONS_WIDTH,
       sortable: false,
       renderCell: (cellParams) => (
-        <Stack direction="row" spacing={0.5}>
-          <Button
-            size="small"
-            startIcon={<VisibilityIcon />}
-            endIcon={cellParams.row.variants.length > 1 ? <ArrowDropDownIcon /> : undefined}
-            onClick={(e) => handleViewClick(e, cellParams.row)}
-          >
-            View
-          </Button>
-          <Button
-            size="small"
-            startIcon={<DownloadIcon />}
-            onClick={() => handleDownload(cellParams.row.id, cellParams.row.subsidiaryId, cellParams.row.version)}
-          >
-            Zip
-          </Button>
-          <Button size="small" startIcon={<ScienceIcon />} onClick={() => setQaDialogRow(cellParams.row)}>
-            QA
-          </Button>
+        <Stack direction="row" spacing={0.25}>
+          <Tooltip title={cellParams.row.variants.length > 1 ? "View (choose form type)" : "View"}>
+            <span>
+              <IconButton
+                size="small"
+                disabled={previewingId === cellParams.row.id}
+                onClick={(e) => handleViewClick(e, cellParams.row)}
+              >
+                <VisibilityIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Download zip">
+            <span>
+              <IconButton
+                size="small"
+                disabled={downloadingId === cellParams.row.id}
+                onClick={() => handleDownload(cellParams.row.id, cellParams.row.subsidiaryId, cellParams.row.version)}
+              >
+                <DownloadIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Run QA">
+            <IconButton size="small" onClick={() => setQaDialogRow(cellParams.row)}>
+              <ScienceIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Stack>
       ),
     },
@@ -204,61 +235,52 @@ export function AdminDashboardPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-          }}
-        >
-          <AdminPanelSettingsIcon />
-        </Box>
-        <Stack spacing={0.2}>
-          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            Admin Dashboard
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Search, preview, and download every submitted campaign form.
-          </Typography>
-        </Stack>
-      </Stack>
+      <PageHeader
+        icon={<AdminPanelSettingsIcon />}
+        title="Admin Dashboard"
+        subtitle="Search, preview, and download every submitted campaign form."
+      />
 
-      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", borderRadius: 3 }}>
-        <TextField
-          label="Subsidiary"
-          size="small"
-          value={subsidiaryFilter}
-          onChange={(e) => setSubsidiaryFilter(e.target.value)}
-        />
-        <TextField
-          select
-          label="Project Code"
-          size="small"
-          sx={{ minWidth: 160 }}
-          value={projectCodeFilter}
-          onChange={(e) => setProjectCodeFilter(e.target.value)}
-        >
-          <MenuItem value="">All project codes</MenuItem>
-          {projectCodes.map((pc) => (
-            <MenuItem key={pc.id} value={pc.code}>
-              {pc.code}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          label="Search"
-          size="small"
-          placeholder="Subsidiary, project code, file name, or username"
-          value={searchFilter}
-          onChange={(e) => setSearchFilter(e.target.value)}
-          sx={{ minWidth: 260 }}
-        />
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+          Filters
+        </Typography>
+        <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap alignItems="center">
+          <TextField
+            label="Subsidiary (exact)"
+            size="small"
+            value={subsidiaryFilter}
+            onChange={(e) => setSubsidiaryFilter(e.target.value)}
+          />
+          <TextField
+            select
+            label="Project Code"
+            size="small"
+            sx={{ minWidth: 160 }}
+            value={projectCodeFilter}
+            onChange={(e) => setProjectCodeFilter(e.target.value)}
+          >
+            <MenuItem value="">All project codes</MenuItem>
+            {projectCodes.map((pc) => (
+              <MenuItem key={pc.id} value={pc.code}>
+                {pc.code}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            label="Search"
+            size="small"
+            placeholder="Subsidiary, project code, file name, or username"
+            value={searchFilter}
+            onChange={(e) => setSearchFilter(e.target.value)}
+            sx={{ minWidth: 260 }}
+          />
+          {hasActiveFilter && (
+            <Button size="small" startIcon={<ClearIcon fontSize="small" />} onClick={handleClearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </Stack>
       </Paper>
 
       {error && (
@@ -267,7 +289,7 @@ export function AdminDashboardPage() {
         </Alert>
       )}
 
-      <Paper sx={{ height: 600, borderRadius: 3, overflow: "hidden" }}>
+      <Paper sx={{ height: 600, overflow: "hidden" }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -281,22 +303,7 @@ export function AdminDashboardPage() {
           onSortModelChange={setSortModel}
           pageSizeOptions={[10, 20, 50, 100]}
           disableRowSelectionOnClick
-          sx={{
-            border: "none",
-            "& .MuiDataGrid-columnHeaders": {
-              bgcolor: "#f8f9fc",
-              borderBottom: "1px solid rgba(20, 22, 33, 0.08)",
-            },
-            "& .MuiDataGrid-columnHeaderTitle": {
-              fontWeight: 700,
-              fontSize: 12,
-              textTransform: "uppercase",
-              letterSpacing: 0.4,
-              color: "text.secondary",
-            },
-            "& .MuiDataGrid-cell": { borderColor: "rgba(20, 22, 33, 0.06)" },
-            "& .MuiDataGrid-row:hover": { bgcolor: "rgba(20, 40, 160, 0.04)" },
-          }}
+          sx={adminDataGridSx}
         />
       </Paper>
 

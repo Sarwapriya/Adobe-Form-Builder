@@ -39,13 +39,8 @@ import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
 import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { UploadConfigurePanel } from "../components/upload/UploadConfigurePanel";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
-
-const STATUS_COLOR: Record<UploadListItem["status"], "default" | "success" | "error" | "warning"> = {
-  uploaded: "default",
-  generated: "success",
-  submitted: "success",
-  failed: "error",
-};
+import { PageHeader } from "../components/common/PageHeader";
+import { uploadStatusColor } from "../app/statusColors";
 
 /** The authenticated user's own upload workflow: submit a new workbook (the
  * server auto-generates on upload — see uploadsApi.uploadWorkbook), then see
@@ -191,32 +186,13 @@ export function UploadHistoryPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-          }}
-        >
-          <UploadFileIcon />
-        </Box>
-        <Stack spacing={0.2}>
-          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            Upload a workbook
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Submit an Excel workbook to generate a new campaign form, then track it below.
-          </Typography>
-        </Stack>
-      </Stack>
+      <PageHeader
+        icon={<UploadFileIcon />}
+        title="Upload a workbook"
+        subtitle="Submit an Excel workbook to generate a new campaign form, then track it below."
+      />
 
-      <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
+      <Paper sx={{ p: 3, mb: 4 }}>
         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
           <Box
             sx={{
@@ -387,7 +363,7 @@ export function UploadHistoryPage() {
         </Alert>
       )}
 
-      <Paper sx={{ borderRadius: 3, overflow: "hidden" }}>
+      <Paper sx={{ overflow: "hidden" }}>
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -431,7 +407,7 @@ export function UploadHistoryPage() {
                       </Stack>
                     </TableCell>
                     <TableCell>
-                      <Chip label={row.status} color={STATUS_COLOR[row.status]} size="small" />
+                      <Chip label={row.status} color={uploadStatusColor[row.status]} size="small" />
                     </TableCell>
                     <TableCell>{new Date(row.uploadDate).toLocaleString()}</TableCell>
                     <TableCell>{row.submittedAt ? new Date(row.submittedAt).toLocaleString() : "—"}</TableCell>

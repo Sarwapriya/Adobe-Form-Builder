@@ -13,14 +13,16 @@
 -- overrides whatever the client sends with this value regardless (see
 -- upload.router.ts). NULL for admins and for standard users not tied to one.
 CREATE TABLE Users (
-    id           UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    username     NVARCHAR(100) NOT NULL UNIQUE,
-    email        NVARCHAR(255) NOT NULL UNIQUE,
-    passwordHash NVARCHAR(255) NOT NULL,
-    role         NVARCHAR(20) NOT NULL DEFAULT 'standard',
-    subsidiaryId NVARCHAR(50) NULL,
-    isActive     BIT NOT NULL DEFAULT 1,
-    createdAt    DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+    id                 UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    username           NVARCHAR(100) NOT NULL UNIQUE,
+    email              NVARCHAR(255) NOT NULL UNIQUE,
+    passwordHash       NVARCHAR(255) NOT NULL,
+    role               NVARCHAR(20) NOT NULL DEFAULT 'standard',
+    subsidiaryId       NVARCHAR(50) NULL,
+    isActive           BIT NOT NULL DEFAULT 1,
+    notificationEmail  NVARCHAR(255) NULL,
+    notificationEmail2 NVARCHAR(255) NULL,
+    createdAt          DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
 
 -- version is NULL until the upload is submitted (see submissionService.ts) —
@@ -165,12 +167,13 @@ CREATE TABLE AdminSettings (
 -- never deleted, so historical uploads that used a since-closed code keep an
 -- intact (denormalized) record via Uploads.projectCode above.
 CREATE TABLE ProjectCodes (
-    id        UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    code      NVARCHAR(100) NOT NULL UNIQUE,
-    isOpen    BIT NOT NULL DEFAULT 1,
-    startDate DATE NULL,
-    endDate   DATE NULL,
-    createdAt DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+    id         UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    code       NVARCHAR(100) NOT NULL UNIQUE,
+    isOpen     BIT NOT NULL DEFAULT 1,
+    startDate  DATE NULL,
+    endDate    DATE NULL,
+    cutoffDate DATE NULL,
+    createdAt  DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
 
 -- The admin-managed picklist behind the upload form's "Subsidiary" dropdown
@@ -179,10 +182,12 @@ CREATE TABLE ProjectCodes (
 -- SubsidiaryProjectBlocks below, which scopes a restriction to one project
 -- code); deleting the row is the permanent alternative to disabling it.
 CREATE TABLE Subsidiaries (
-    id        UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    name      NVARCHAR(100) NOT NULL UNIQUE,
-    isActive  BIT NOT NULL DEFAULT 1,
-    createdAt DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+    id                 UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    name               NVARCHAR(100) NOT NULL UNIQUE,
+    isActive           BIT NOT NULL DEFAULT 1,
+    notificationEmail1 NVARCHAR(255) NULL,
+    notificationEmail2 NVARCHAR(255) NULL,
+    createdAt          DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
 
 -- A specific (subsidiary, project code) pair blocked from new uploads — e.g.

@@ -24,6 +24,8 @@ import { ApiError } from "../api/apiClient";
 import { createForm, deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
 import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
+import { PageHeader } from "../components/common/PageHeader";
+import { ConfirmDialog } from "../components/common/ConfirmDialog";
 
 const STATUS_COLOR: Record<FormStatus, "default" | "success" | "warning"> = {
   draft: "default",
@@ -59,6 +61,7 @@ export function FormBuilderListPage() {
   const [newSubsidiaryId, setNewSubsidiaryId] = useState("");
   const [newProjectCode, setNewProjectCode] = useState("");
   const [creating, setCreating] = useState(false);
+  const [confirmDeleteForm, setConfirmDeleteForm] = useState<FormListItem | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -108,14 +111,13 @@ export function FormBuilderListPage() {
     }
   }
 
-  async function handleDelete(form: FormListItem) {
-    if (!window.confirm(`Delete "${form.name}"?${form.status !== "draft" ? " Its published output will also be hidden." : ""}`)) {
-      return;
-    }
-    setDeletingId(form.id);
+  async function handleConfirmDelete() {
+    if (!confirmDeleteForm) return;
+    setDeletingId(confirmDeleteForm.id);
     setError(null);
     try {
-      await deleteForm(form.id);
+      await deleteForm(confirmDeleteForm.id);
+      setConfirmDeleteForm(null);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to delete form");
@@ -126,35 +128,18 @@ export function FormBuilderListPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-          }}
-        >
-          <DesignServicesIcon />
-        </Box>
-        <Stack spacing={0.2} sx={{ flexGrow: 1 }}>
-          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            Form Initiator
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Visually build, preview, and publish web forms — no Excel workbook required.
-          </Typography>
-        </Stack>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-          New Form
-        </Button>
-      </Stack>
+      <PageHeader
+        icon={<DesignServicesIcon />}
+        title="Form Initiator"
+        subtitle="Visually build, preview, and publish web forms — no Excel workbook required."
+        action={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            New Form
+          </Button>
+        }
+      />
 
-      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", borderRadius: 3 }}>
+      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
         <TextField
           select
           label="Status"
@@ -180,7 +165,7 @@ export function FormBuilderListPage() {
       {loading ? (
         <CircularProgress size={24} />
       ) : forms.length === 0 ? (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 3 }}>
           <Typography variant="body2" color="text.secondary">
             No forms yet — click "New Form" to create one.
           </Typography>
@@ -190,7 +175,7 @@ export function FormBuilderListPage() {
           {forms.map((form) => (
             <Paper
               key={form.id}
-              sx={{ p: 2, borderRadius: 3, display: "flex", alignItems: "center", gap: 2, cursor: "pointer" }}
+              sx={{ p: 2, display: "flex", alignItems: "center", gap: 2, cursor: "pointer" }}
               onClick={() => navigate(`/admin/form-builder/${form.id}`)}
             >
               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -213,7 +198,7 @@ export function FormBuilderListPage() {
                 disabled={deletingId === form.id}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void handleDelete(form);
+                  setConfirmDeleteForm(form);
                 }}
               >
                 Delete
@@ -222,6 +207,16 @@ export function FormBuilderListPage() {
           ))}
         </Stack>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteForm}
+        title="Delete form"
+        message={`Delete "${confirmDeleteForm?.name}"?${confirmDeleteForm && confirmDeleteForm.status !== "draft" ? " Its published output will also be hidden." : ""}`}
+        confirmLabel="Delete"
+        loading={deletingId === confirmDeleteForm?.id}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDeleteForm(null)}
+      />
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="xs" fullWidth>
         <Box component="form" onSubmit={handleCreate}>

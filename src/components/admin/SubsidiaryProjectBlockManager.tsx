@@ -4,7 +4,6 @@ import {
   Alert,
   Box,
   Button,
-  CircularProgress,
   IconButton,
   MenuItem,
   Paper,
@@ -24,6 +23,8 @@ import {
 } from "../../api/adminApi";
 import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesApi";
+import { SectionHeader } from "../common/SectionHeader";
+import { LoadingState } from "../common/LoadingState";
 
 /**
  * Blocks a specific (subsidiary, project code) pair from new uploads — e.g.
@@ -115,16 +116,12 @@ export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal
   }
 
   return (
-    <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-        <BlockIcon fontSize="small" color="primary" />
-        <Typography variant="subtitle1" fontWeight={700}>
-          Subsidiary upload restrictions
-        </Typography>
-      </Stack>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
-        Block a specific project code from a specific subsidiary — every other subsidiary can still upload it.
-      </Typography>
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <SectionHeader
+        icon={<BlockIcon fontSize="small" color="primary" />}
+        title="Subsidiary upload restrictions"
+        subtitle="Block a specific project code from a specific subsidiary — every other subsidiary can still upload it."
+      />
 
       <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", gap: 1.5, mb: 1.5, flexWrap: "wrap" }}>
         <TextField
@@ -162,14 +159,14 @@ export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal
         </Button>
       </Box>
 
-      {error && (
+      {error && !loading && (
         <Alert severity="error" sx={{ mb: 1.5 }}>
           {error}
         </Alert>
       )}
 
       {loading ? (
-        <CircularProgress size={20} />
+        <LoadingState />
       ) : blocks.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No restrictions — every subsidiary can upload against every open project code.

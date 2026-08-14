@@ -14,7 +14,7 @@ import {
   type AdminListFilters,
 } from "../services/adminUploadService";
 import { computeDiff } from "../services/diffService";
-import { createUser, findUserById, listUsers, setUserActive } from "../services/authService";
+import { createUser, findUserById, listUsers, setUserActive, setUserNotificationEmails } from "../services/authService";
 import { buildUploadPreview, type PreviewVariant } from "../services/previewService";
 import {
   createProjectCode,
@@ -23,13 +23,20 @@ import {
   setProjectCodeOpen,
   setProjectCodeValue,
 } from "../services/projectCodeService";
-import { createSubsidiary, deleteSubsidiary, listSubsidiaries, setSubsidiaryActive } from "../services/subsidiaryService";
+import {
+  createSubsidiary,
+  deleteSubsidiary,
+  listSubsidiaries,
+  setSubsidiaryActive,
+  setSubsidiaryNotificationEmails,
+} from "../services/subsidiaryService";
 import {
   createSubsidiaryProjectBlock,
   deleteSubsidiaryProjectBlock,
   listSubsidiaryProjectBlocks,
 } from "../services/subsidiaryProjectBlockService";
 import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
+import { getGlobalNotificationEmails, setGlobalNotificationEmails } from "../services/adminSettingsService";
 import type { UploadStatus } from "../entities/Upload";
 
 export const adminRouter = Router();
@@ -185,17 +192,19 @@ const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected an IS
 const createProjectCodeSchema = z.object({
   code: z.string().trim().min(1),
   // Purely descriptive campaign dates — see ProjectCode entity's own doc
-  // comment; never enforced against uploads.
+  // comment; never enforced against uploads. cutoffDate is likewise not
+  // enforced here, but is meaningful (drives the pending-approval reminder).
   startDate: dateStringSchema.nullable().optional(),
   endDate: dateStringSchema.nullable().optional(),
+  cutoffDate: dateStringSchema.nullable().optional(),
 });
 
 adminRouter.post(
   "/project-codes",
   validateBody(createProjectCodeSchema),
   asyncHandler(async (req, res) => {
-    const { code, startDate, endDate } = req.body as z.infer<typeof createProjectCodeSchema>;
-    const created = await createProjectCode(code, { startDate, endDate });
+    const { code, startDate, endDate, cutoffDate } = req.body as z.infer<typeof createProjectCodeSchema>;
+    const created = await createProjectCode(code, { startDate, endDate, cutoffDate });
     res.status(201).json(created);
   })
 );
@@ -205,6 +214,7 @@ const updateProjectCodeSchema = z.object({
   isOpen: z.boolean().optional(),
   startDate: dateStringSchema.nullable().optional(),
   endDate: dateStringSchema.nullable().optional(),
+  cutoffDate: dateStringSchema.nullable().optional(),
 });
 
 // Closing a project code here is the only thing that blocks new uploads
@@ -230,7 +240,7 @@ adminRouter.patch(
     if (isOpen !== undefined) {
       updated = await setProjectCodeOpen(req.params.id, isOpen);
     }
-    if ("startDate" in dateRange || "endDate" in dateRange) {
+    if ("startDate" in dateRange || "endDate" in dateRange || "cutoffDate" in dateRange) {
       updated = await setProjectCodeDateRange(req.params.id, dateRange);
     }
     if (!updated) {
@@ -267,20 +277,35 @@ adminRouter.post(
 );
 
 const updateSubsidiarySchema = z.object({
-  isActive: z.boolean(),
+  isActive: z.boolean().optional(),
+  // Extra notification recipients (see Subsidiary entity's own doc comment) —
+  // sent as "" from the UI to clear a slot, normalized to null here so an
+  // empty string never fails the .email() check below.
+  notificationEmail1: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
+  notificationEmail2: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
 });
 
 // Disabling a subsidiary here is the reversible way to block *every* project
 // for it in one step — see uploadService.createUpload's call to
 // assertSubsidiaryActiveForUpload. Independent of, and layered above,
 // /subsidiary-project-blocks below (a single project-scoped restriction). It
-// does not affect uploads already made under that subsidiary.
+// does not affect uploads already made under that subsidiary. isActive and
+// the notification emails are applied independently — either can be sent
+// alone (the "click a chip to toggle" UI only ever sends isActive; the
+// notification-email editor only ever sends those two fields) or together.
 adminRouter.patch(
   "/subsidiaries/:id",
   validateBody(updateSubsidiarySchema),
   asyncHandler(async (req, res) => {
-    const { isActive } = req.body as z.infer<typeof updateSubsidiarySchema>;
-    const updated = await setSubsidiaryActive(req.params.id, isActive);
+    const { isActive, ...emails } = req.body as z.infer<typeof updateSubsidiarySchema>;
+
+    let updated = null;
+    if (isActive !== undefined) {
+      updated = await setSubsidiaryActive(req.params.id, isActive);
+    }
+    if ("notificationEmail1" in emails || "notificationEmail2" in emails) {
+      updated = await setSubsidiaryNotificationEmails(req.params.id, emails);
+    }
     if (!updated) {
       res.status(404).json({ error: "subsidiary not found" });
       return;
@@ -302,6 +327,32 @@ adminRouter.delete(
       return;
     }
     res.status(204).send();
+  })
+);
+
+// The two global notification addresses (distinct from each subsidiary's own
+// notificationEmail1/2 above) — recipients for the existing upload/submission
+// notification emails (see emailService.ts's resolveRecipients). Backed by
+// AdminSettings, not its own table — see adminSettingsService.ts.
+adminRouter.get(
+  "/settings/notification-emails",
+  asyncHandler(async (_req, res) => {
+    res.json(await getGlobalNotificationEmails());
+  })
+);
+
+const notificationEmailsSchema = z.object({
+  notificationEmail1: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
+  notificationEmail2: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
+});
+
+adminRouter.patch(
+  "/settings/notification-emails",
+  validateBody(notificationEmailsSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as z.infer<typeof notificationEmailsSchema>;
+    await setGlobalNotificationEmails(body);
+    res.json(await getGlobalNotificationEmails());
   })
 );
 
@@ -438,6 +489,45 @@ adminRouter.patch(
       role: updated!.role,
       subsidiaryId: updated!.subsidiaryId,
       isActive: updated!.isActive,
+    });
+  })
+);
+
+const updateNotificationEmailSchema = z.object({
+  notificationEmail: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
+  notificationEmail2: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable().optional()),
+});
+
+// Any user may set their own notificationEmail(s); only a superadmin may set
+// someone else's — deliberately a *looser* rule than isActive's own
+// "superadmin only for admin/superadmin targets" split above, since this
+// isn't an account-security toggle, just contact addresses (see
+// User.notificationEmail/notificationEmail2's own doc comment).
+adminRouter.patch(
+  "/users/:id/notification-email",
+  validateBody(updateNotificationEmailSchema),
+  asyncHandler(async (req, res) => {
+    const emails = req.body as z.infer<typeof updateNotificationEmailSchema>;
+
+    if (req.params.id !== req.auth!.sub && req.auth!.role !== "superadmin") {
+      res.status(403).json({ error: "only a superadmin may update another user's notification email" });
+      return;
+    }
+
+    const updated = await setUserNotificationEmails(req.params.id, emails);
+    if (!updated) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+    res.json({
+      id: updated.id,
+      username: updated.username,
+      email: updated.email,
+      role: updated.role,
+      subsidiaryId: updated.subsidiaryId,
+      isActive: updated.isActive,
+      notificationEmail: updated.notificationEmail,
+      notificationEmail2: updated.notificationEmail2,
     });
   })
 );

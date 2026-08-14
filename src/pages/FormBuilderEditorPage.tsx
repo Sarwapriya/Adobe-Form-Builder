@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Box, CircularProgress, IconButton, Paper, Stack, Typography } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { useFormBuilderStore } from "../store/formBuilderStore";
+import { PageHeader } from "../components/common/PageHeader";
 import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
 import { LocaleManagerPanel } from "../components/formBuilder/LocaleManagerPanel";
 import { VariantConfigPanel } from "../components/formBuilder/VariantConfigPanel";
@@ -60,34 +60,19 @@ export function FormBuilderEditorPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-        <IconButton onClick={() => navigate("/admin/form-builder")} aria-label="Back to Form Initiator list">
-          <ArrowBackIcon />
-        </IconButton>
-        <Box
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-          }}
-        >
-          <DesignServicesIcon />
-        </Box>
-        <Stack spacing={0.2} sx={{ minWidth: 0 }}>
-          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }} noWrap>
-            {name || "Edit Form"}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+      <PageHeader
+        icon={<DesignServicesIcon />}
+        title={name || "Edit Form"}
+        subtitle={
+          <>
             {subsidiaryId}
             {projectCode ? ` · ${projectCode}` : ""}
-          </Typography>
-        </Stack>
-      </Stack>
+          </>
+        }
+        titleNoWrap
+        onBack={() => navigate("/admin/form-builder")}
+        backLabel="Back to Form Initiator list"
+      />
 
       <BuilderValidationPanel />
 
@@ -105,7 +90,7 @@ export function FormBuilderEditorPage() {
           />
         </Box>
 
-        <Paper sx={{ p: 2, borderRadius: 3, width: { xs: "100%", md: 280 }, flexShrink: 0, position: "sticky", top: 16 }}>
+        <Paper sx={{ p: 2, width: { xs: "100%", md: 280 }, flexShrink: 0, position: "sticky", top: 16 }}>
           {selected && PROFILE_FIELD_KEYS.has(selected) ? (
             <ProfileFieldEditorPanel fieldKey={selected as ProfileFieldKey} />
           ) : selected && isConsentId(selected) ? (

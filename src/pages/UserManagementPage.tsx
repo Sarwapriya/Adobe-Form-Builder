@@ -6,8 +6,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  IconButton,
   MenuItem,
   Paper,
+  Popover,
   Stack,
   Table,
   TableBody,
@@ -16,13 +18,24 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
+import EditIcon from "@mui/icons-material/Edit";
 import { ApiError } from "../api/apiClient";
-import { createUser, listUsers, setUserActive, type AdminUserListItem, type AdminUserRole } from "../api/adminApi";
+import {
+  createUser,
+  listUsers,
+  setUserActive,
+  setUserNotificationEmail,
+  type AdminUserListItem,
+  type AdminUserRole,
+} from "../api/adminApi";
 import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { useAuthStore } from "../auth/authStore";
+import { PageHeader } from "../components/common/PageHeader";
+import { NotificationEmailFields } from "../components/common/NotificationEmailFields";
 
 const ROLE_COLOR: Record<AdminUserRole, "default" | "primary" | "secondary"> = {
   standard: "default",
@@ -141,34 +154,22 @@ export function UserManagementPage() {
     }
   }
 
+  // Anyone may set their own notification email; only a superadmin may set
+  // someone else's (enforced authoritatively server-side too — see
+  // admin.router.ts's PATCH /users/:id/notification-email).
+  function canEditNotificationEmail(target: AdminUserListItem): boolean {
+    return target.id === currentUser?.id || isSuperAdmin;
+  }
+
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-          }}
-        >
-          <PeopleIcon />
-        </Box>
-        <Stack spacing={0.2}>
-          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            User Management
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Provision new accounts and optionally scope a standard user to one subsidiary.
-          </Typography>
-        </Stack>
-      </Stack>
+      <PageHeader
+        icon={<PeopleIcon />}
+        title="User Management"
+        subtitle="Provision new accounts and optionally scope a standard user to one subsidiary."
+      />
 
-      <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
+      <Paper sx={{ p: 3, mb: 4 }}>
         <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>
           Create user
         </Typography>
@@ -178,7 +179,10 @@ export function UserManagementPage() {
             label="Username"
             size="small"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setCreateSuccess(null);
+            }}
             required
           />
           <TextField
@@ -186,7 +190,10 @@ export function UserManagementPage() {
             type="email"
             size="small"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setCreateSuccess(null);
+            }}
             required
           />
           <TextField
@@ -194,7 +201,10 @@ export function UserManagementPage() {
             type="password"
             size="small"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setCreateSuccess(null);
+            }}
             required
             helperText="At least 8 characters"
           />
@@ -204,7 +214,10 @@ export function UserManagementPage() {
             size="small"
             sx={{ minWidth: 160 }}
             value={role}
-            onChange={(e) => setRole(e.target.value as AdminUserRole)}
+            onChange={(e) => {
+              setRole(e.target.value as AdminUserRole);
+              setCreateSuccess(null);
+            }}
           >
             {assignableRoles.map((r) => (
               <MenuItem key={r} value={r}>
@@ -218,7 +231,10 @@ export function UserManagementPage() {
             size="small"
             sx={{ minWidth: 180 }}
             value={subsidiaryId}
-            onChange={(e) => setSubsidiaryId(e.target.value)}
+            onChange={(e) => {
+              setSubsidiaryId(e.target.value);
+              setCreateSuccess(null);
+            }}
             required={subsidiaryRequired}
             error={subsidiaryRequired && !subsidiaryId}
             helperText={
@@ -251,7 +267,7 @@ export function UserManagementPage() {
           </Alert>
         )}
         {createSuccess && (
-          <Alert severity="success" sx={{ mt: 2 }}>
+          <Alert severity="success" sx={{ mt: 2 }} onClose={() => setCreateSuccess(null)}>
             {createSuccess}
           </Alert>
         )}
@@ -268,7 +284,7 @@ export function UserManagementPage() {
         </Alert>
       )}
 
-      <Paper sx={{ borderRadius: 3, overflow: "hidden" }}>
+      <Paper sx={{ overflow: "hidden" }}>
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -278,19 +294,20 @@ export function UserManagementPage() {
                 <TableCell>Role</TableCell>
                 <TableCell>Subsidiary</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Notification email</TableCell>
                 <TableCell>Created</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
                     <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
                     <Typography color="text.secondary">No users yet.</Typography>
                   </TableCell>
                 </TableRow>
@@ -321,6 +338,9 @@ export function UserManagementPage() {
                         }
                       />
                     </TableCell>
+                    <TableCell>
+                      <NotificationEmailCell user={u} editable={canEditNotificationEmail(u)} onSaved={refresh} />
+                    </TableCell>
                     <TableCell>{new Date(u.createdAt).toLocaleString()}</TableCell>
                   </TableRow>
                 ))
@@ -330,5 +350,103 @@ export function UserManagementPage() {
         </TableContainer>
       </Paper>
     </Box>
+  );
+}
+
+/** One row's notification-email display: always a compact 2-line read-only
+ * value (so every row has the same height regardless of edit permission),
+ * plus an Edit icon-button that opens a Popover with the actual editable
+ * fields when the viewer is allowed to change it (see
+ * canEditNotificationEmail above) — a popover isn't constrained by the
+ * table's column width, unlike the fields rendered directly in the cell. */
+function NotificationEmailCell({
+  user,
+  editable,
+  onSaved,
+}: {
+  user: AdminUserListItem;
+  editable: boolean;
+  onSaved: () => void | Promise<void>;
+}) {
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [value1, setValue1] = useState(user.notificationEmail ?? "");
+  const [value2, setValue2] = useState(user.notificationEmail2 ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setValue1(user.notificationEmail ?? "");
+    setValue2(user.notificationEmail2 ?? "");
+  }, [user.notificationEmail, user.notificationEmail2]);
+
+  const isDirty = value1.trim() !== (user.notificationEmail ?? "") || value2.trim() !== (user.notificationEmail2 ?? "");
+
+  function handleClose() {
+    setAnchorEl(null);
+    setValue1(user.notificationEmail ?? "");
+    setValue2(user.notificationEmail2 ?? "");
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      await setUserNotificationEmail(user.id, value1.trim() || null, value2.trim() || null);
+      await onSaved();
+      setAnchorEl(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center">
+      <Stack spacing={0.25}>
+        <Typography variant="body2">{user.notificationEmail ?? "—"}</Typography>
+        {user.notificationEmail2 && <Typography variant="body2">{user.notificationEmail2}</Typography>}
+      </Stack>
+      {editable && (
+        <>
+          <Tooltip title="Edit notification email">
+            <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Popover
+            open={!!anchorEl}
+            anchorEl={anchorEl}
+            onClose={handleClose}
+            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          >
+            <Box sx={{ p: 2, width: 320 }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
+                Notification email — {user.username}
+              </Typography>
+              <NotificationEmailFields
+                value1={value1}
+                value2={value2}
+                onValue1Change={setValue1}
+                onValue2Change={setValue2}
+                onSave={handleSave}
+                saving={saving}
+                dirty={isDirty}
+                error={error}
+                label1="Email 1"
+                label2="Email 2"
+                containerSx={{
+                  flexDirection: "column",
+                  alignItems: "stretch",
+                  "& .MuiTextField-root": { width: "100%" },
+                  "& .MuiButton-root": { alignSelf: "flex-start" },
+                }}
+              />
+            </Box>
+          </Popover>
+        </>
+      )}
+    </Stack>
   );
 }

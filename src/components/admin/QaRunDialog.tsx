@@ -24,6 +24,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import { alpha } from "@mui/material/styles";
 import { ApiError } from "../../api/apiClient";
 import {
   createQaRun,
@@ -35,16 +36,9 @@ import {
   type QaTestCaseResult,
 } from "../../api/qaApi";
 import { downloadBlob } from "../../utils/download";
+import { qaRunStatusColor } from "../../app/statusColors";
 
 const VARIANT_LABELS: Record<QaRunVariant, string> = { ff: "Full Form", oc: "One-Click" };
-
-const STATUS_COLOR: Record<QaRun["status"], "default" | "success" | "error" | "warning" | "info"> = {
-  pending: "default",
-  running: "info",
-  passed: "success",
-  failed: "error",
-  error: "warning",
-};
 
 const CATEGORY_LABELS: Record<string, string> = {
   structure: "Page structure",
@@ -242,7 +236,7 @@ export function QaRunDialog({
                   label={`${run.variant.toUpperCase()} · ${run.status}${
                     run.status === "passed" || run.status === "failed" ? ` (${run.passedTests}/${run.totalTests})` : ""
                   }`}
-                  color={STATUS_COLOR[run.status]}
+                  color={qaRunStatusColor[run.status]}
                   variant={run.id === selectedRunId ? "filled" : "outlined"}
                   onClick={() => setSelectedRunId(run.id)}
                   icon={run.status === "pending" || run.status === "running" ? <CircularProgress size={14} /> : undefined}
@@ -284,19 +278,19 @@ export function QaRunDialog({
 
                 {(selectedRun.status === "passed" || selectedRun.status === "failed") && (
                   <Stack direction="row" spacing={1.5} sx={{ mb: 2 }}>
-                    <Box sx={{ px: 2, py: 1, borderRadius: 2, bgcolor: "#e3f8ec" }}>
-                      <Typography variant="caption" sx={{ color: "#147a3b", display: "block" }} fontWeight={700}>
+                    <Box sx={{ px: 2, py: 1, borderRadius: 2, bgcolor: (t) => alpha(t.palette.success.main, 0.12) }}>
+                      <Typography variant="caption" sx={{ color: "success.dark", display: "block" }} fontWeight={700}>
                         PASSED
                       </Typography>
-                      <Typography variant="h6" fontWeight={700} sx={{ color: "#147a3b" }} lineHeight={1.2}>
+                      <Typography variant="h6" fontWeight={700} sx={{ color: "success.dark" }} lineHeight={1.2}>
                         {selectedRun.passedTests} / {selectedRun.totalTests}
                       </Typography>
                     </Box>
-                    <Box sx={{ px: 2, py: 1, borderRadius: 2, bgcolor: "#fdecec" }}>
-                      <Typography variant="caption" sx={{ color: "#b3261e", display: "block" }} fontWeight={700}>
+                    <Box sx={{ px: 2, py: 1, borderRadius: 2, bgcolor: (t) => alpha(t.palette.error.main, 0.12) }}>
+                      <Typography variant="caption" sx={{ color: "error.dark", display: "block" }} fontWeight={700}>
                         FAILED
                       </Typography>
-                      <Typography variant="h6" fontWeight={700} sx={{ color: "#b3261e" }} lineHeight={1.2}>
+                      <Typography variant="h6" fontWeight={700} sx={{ color: "error.dark" }} lineHeight={1.2}>
                         {selectedRun.failedTests} / {selectedRun.totalTests}
                       </Typography>
                     </Box>

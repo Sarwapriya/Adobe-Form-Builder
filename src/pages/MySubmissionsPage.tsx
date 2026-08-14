@@ -9,6 +9,7 @@ import {
   type ContributionStatus,
   type ContributionSummaryWithForm,
 } from "../api/subsidiaryFormsApi";
+import { PageHeader } from "../components/common/PageHeader";
 
 const STATUS_COLOR: Record<ContributionStatus, "default" | "success" | "error"> = {
   pending: "default",
@@ -70,30 +71,11 @@ export function MySubmissionsPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-          }}
-        >
-          <HistoryIcon />
-        </Box>
-        <Stack spacing={0.2}>
-          <Typography variant="h4" component="h1" sx={{ lineHeight: 1.1 }}>
-            My Submissions
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Every translation/question/consent you've submitted for review, across all forms.
-          </Typography>
-        </Stack>
-      </Stack>
+      <PageHeader
+        icon={<HistoryIcon />}
+        title="My Submissions"
+        subtitle="Every translation/question/consent you've submitted for review, across all forms."
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
@@ -104,14 +86,14 @@ export function MySubmissionsPage() {
       {loading ? (
         <CircularProgress size={24} />
       ) : contributions.length === 0 ? (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 3 }}>
           <Typography variant="body2" color="text.secondary">
             You haven't submitted anything yet — open a form from "My Forms" to propose translations, questions, or
             consents.
           </Typography>
         </Paper>
       ) : (
-        <Paper sx={{ p: 2, borderRadius: 3 }}>
+        <Paper sx={{ p: 2 }}>
           <Stack spacing={1.5} divider={<Divider />}>
             {contributions.map((c) => {
               // The list is globally sorted newest-first, so the first row seen for a

@@ -39,13 +39,17 @@ export interface ProjectCodeDateRange {
    * untouched (see updateProjectCode below) — distinct from null. */
   startDate?: string | null;
   endDate?: string | null;
+  /** Deadline for subsidiary users to get their contributions to this
+   * project's forms approved — see ProjectCode.cutoffDate's own doc comment. */
+  cutoffDate?: string | null;
 }
 
 /** Creates a new project code, open by default. Rejects an exact-duplicate
  * code (case-insensitive) with a 409 rather than a raw DB unique-constraint
  * error, so the admin UI can show a meaningful message. `startDate`/`endDate`
  * are purely descriptive (see ProjectCode entity's own doc comment) — never
- * enforced against uploads. */
+ * enforced against uploads; `cutoffDate` is meaningful but likewise not
+ * enforced here. */
 export async function createProjectCode(code: string, dateRange: ProjectCodeDateRange = {}): Promise<ProjectCode> {
   const trimmed = code.trim();
   const repo = AppDataSource.getRepository(ProjectCode);
@@ -64,6 +68,7 @@ export async function createProjectCode(code: string, dateRange: ProjectCodeDate
       isOpen: true,
       startDate: dateRange.startDate ? new Date(dateRange.startDate) : null,
       endDate: dateRange.endDate ? new Date(dateRange.endDate) : null,
+      cutoffDate: dateRange.cutoffDate ? new Date(dateRange.cutoffDate) : null,
     }),
   );
 }
@@ -125,6 +130,9 @@ export async function setProjectCodeDateRange(id: string, dateRange: ProjectCode
   }
   if ("endDate" in dateRange) {
     existing.endDate = dateRange.endDate ? new Date(dateRange.endDate) : null;
+  }
+  if ("cutoffDate" in dateRange) {
+    existing.cutoffDate = dateRange.cutoffDate ? new Date(dateRange.cutoffDate) : null;
   }
   return repo.save(existing);
 }

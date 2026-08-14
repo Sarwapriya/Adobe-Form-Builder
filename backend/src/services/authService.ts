@@ -184,6 +184,33 @@ export async function setUserActive(id: string, isActive: boolean): Promise<User
   return repo.save(existing);
 }
 
+export interface UserNotificationEmails {
+  /** Each explicit `null` clears that slot; an omitted key leaves it as-is —
+   * same "presence vs value" convention subsidiaryService.setSubsidiaryNotificationEmails
+   * uses for its own two-slot fields. */
+  notificationEmail?: string | null;
+  notificationEmail2?: string | null;
+}
+
+/** Updates a user's own up-to-two separate notification-email addresses —
+ * see User.notificationEmail/notificationEmail2's own doc comment. Returns
+ * null if the id doesn't exist — callers map that to a 404. Permission
+ * checking (self, or superadmin acting on someone else) happens in the
+ * route, not here — same layering as setUserActive above. */
+export async function setUserNotificationEmails(id: string, emails: UserNotificationEmails): Promise<User | null> {
+  const repo = AppDataSource.getRepository(User);
+  const existing = await repo.findOne({ where: { id } });
+  if (!existing) return null;
+
+  if ("notificationEmail" in emails) {
+    existing.notificationEmail = emails.notificationEmail?.trim() || null;
+  }
+  if ("notificationEmail2" in emails) {
+    existing.notificationEmail2 = emails.notificationEmail2?.trim() || null;
+  }
+  return repo.save(existing);
+}
+
 function hashToken(rawToken: string): string {
   return crypto.createHash("sha256").update(rawToken).digest("hex");
 }
