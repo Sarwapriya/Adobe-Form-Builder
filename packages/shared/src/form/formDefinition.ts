@@ -95,6 +95,15 @@ export interface PrivacyPolicyMeta {
   visibleInVariants?: Array<"ff" | "oc">;
 }
 
+/** An informational Terms & Conditions link — unlike PrivacyPolicyMeta/ConsentToggleMeta,
+ * this isn't a consent checkbox (no `required`, nothing to gate Submit on), so it has no
+ * `required`/`visibleInVariants` knobs; it simply renders (in both FF and OC, same as the
+ * hardcoded link it replaces) whenever `ProfileFieldSet.termsAndConditions` is set. Fully
+ * optional and presence-driven per-locale, same convention as every other field here — a
+ * locale with no text/url just renders nothing for that locale, never blocking publish (see
+ * formDefinitionValidator.ts, which only warns). Admin-configurable via the Form Builder and
+ * separately per-locale-translatable by a subsidiary user via the contribution flow (see
+ * contribution.ts's `termsAndConditionsText`/`termsAndConditionsUrl` targets). */
 export interface TermsAndConditionsMeta {
   textByLocale: Record<LocaleCode, string>;
   urlByLocale: Record<LocaleCode, string>;

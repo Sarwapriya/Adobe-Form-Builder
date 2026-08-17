@@ -137,6 +137,13 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
         imageAlt: "",
         url: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkUrlByLocale, locale, defaultLocale) : "",
       },
+      termsAndConditions: f.termsAndConditions ? resolveLocalizedText(f.termsAndConditions.textByLocale, locale, defaultLocale) : "",
+      termsAndConditionsLink: {
+        label: "",
+        image: "",
+        imageAlt: "",
+        url: f.termsAndConditions ? resolveLocalizedText(f.termsAndConditions.urlByLocale, locale, defaultLocale) : "",
+      },
       subscribe: f.marketingOptin ? resolveLocalizedText(f.marketingOptin.labelByLocale, locale, defaultLocale) : "",
       submitButton: resolveLocalizedText(f.submitButton.labelByLocale, locale, defaultLocale),
       hrTy: resolvePageCopy(form.thankYou, locale, defaultLocale),

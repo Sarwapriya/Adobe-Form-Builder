@@ -128,6 +128,20 @@ $(document).ready(function ()
             }
         });
 
+        // Terms & Conditions link (optional, admin/subsidiary-configured) — a
+        // standalone anchor sibling of #btnSubmit, not a form_bottom_check div, so
+        // it needs its own small population block rather than the generic loop
+        // above. Only present in the DOM at all when configured (see
+        // pageTemplate.ts), so this is a no-op otherwise.
+        var termsAndConditionsLink = $("#termsAndConditionsLink");
+
+        if(termsAndConditionsLink.length === 1)
+        {
+            termsAndConditionsLink.find("span").html(fields[language]["termsAndConditions"]);
+
+            termsAndConditionsLink.attr("href", fields[language]["termsAndConditionsLink"]["url"]);
+        }
+
         // Submit Button
         $("#btnSubmit").html(fields[language]["submitButton"]);
         

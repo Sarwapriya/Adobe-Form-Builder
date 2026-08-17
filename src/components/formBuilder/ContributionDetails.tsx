@@ -10,6 +10,10 @@ function describeTarget(target: TranslationTarget): string {
       return "Privacy Policy text";
     case "privacyPolicyLink":
       return "Privacy Policy link URL";
+    case "termsAndConditionsText":
+      return "Terms and Conditions text";
+    case "termsAndConditionsUrl":
+      return "Terms and Conditions link URL";
     case "consentText":
       return `Consent "${target.consentId}" text`;
     case "consentLink":

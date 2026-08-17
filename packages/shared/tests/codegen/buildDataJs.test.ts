@@ -81,6 +81,26 @@ describe("buildDataJs", () => {
     expect(data.subsidiary_detail.SGE.some((c: { countryCode: string }) => c.countryCode === "AE")).toBe(true);
   });
 
+  it("projects termsAndConditions text/url per locale, and leaves both blank when unset", () => {
+    const emptyFile = buildFile();
+    const emptyData = evalData(emptyFile.contents);
+    expect(emptyData.fields.en_GB.termsAndConditions).toBe("");
+    expect(emptyData.fields.en_GB.termsAndConditionsLink.url).toBe("");
+
+    const form = sampleFormDefinition();
+    form.fields.termsAndConditions = {
+      textByLocale: { en_GB: "* Terms and conditions apply." },
+      urlByLocale: { en_GB: "https://example.com/terms.pdf" },
+    };
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+    expect(data.fields.en_GB.termsAndConditions).toBe("* Terms and conditions apply.");
+    expect(data.fields.en_GB.termsAndConditionsLink.url).toBe("https://example.com/terms.pdf");
+    // Falls back to the default locale, same as every other localized field.
+    expect(data.fields.ar_AE.termsAndConditions).toBe("* Terms and conditions apply.");
+  });
+
   it("threads project/channel/channelDetail/source/voucherRequired from BuilderConfig into param", () => {
     const config: BuilderConfig = {
       ...defaultBuilderConfig(),

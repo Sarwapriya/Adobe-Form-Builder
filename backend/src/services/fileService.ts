@@ -161,3 +161,26 @@ export async function saveFormVersionGeneratedFiles(
   }
   return saved;
 }
+
+/** Directory (relative to UPLOAD_DIR) holding one Question Master version's generated
+ * .xlsx — keyed by the QuestionMasterVersion row's own id, not its version number, same
+ * "never has to be reorganized" reasoning as uploadStorageDir above: the version number
+ * is only known once the locked transaction that assigns it commits, but the id can be
+ * minted upfront (see questionMasterService.generateQuestionMaster). Nested under the
+ * (sanitized) project code purely for human-browsable organization on disk. Reuses
+ * sanitizeSubsidiaryId as a generic path-segment sanitizer — a project code is just as
+ * free-text/attacker-influenceable as a subsidiaryId route param, and the same safe
+ * character set applies. */
+export function questionMasterDir(projectCode: string, id: string): string {
+  return path.join("question-master", sanitizeSubsidiaryId(projectCode), id);
+}
+
+/** Writes one Question Master version's .xlsx bytes to disk. Returns the path relative
+ * to UPLOAD_DIR, as stored in QuestionMasterVersions.filePath. */
+export async function saveQuestionMasterFile(projectCode: string, id: string, bytes: Uint8Array): Promise<string> {
+  const relativePath = path.join(questionMasterDir(projectCode, id), "question-master.xlsx");
+  const absolutePath = absoluteFilePath(relativePath);
+  await fsp.mkdir(path.dirname(absolutePath), { recursive: true });
+  await fsp.writeFile(absolutePath, bytes);
+  return relativePath;
+}

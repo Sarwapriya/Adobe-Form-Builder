@@ -18,6 +18,10 @@ export declare const translationTargetSchema: z.ZodDiscriminatedUnion<[z.ZodObje
 }, z.core.$strip>, z.ZodObject<{
     kind: z.ZodLiteral<"privacyPolicyLink">;
 }, z.core.$strip>, z.ZodObject<{
+    kind: z.ZodLiteral<"termsAndConditionsText">;
+}, z.core.$strip>, z.ZodObject<{
+    kind: z.ZodLiteral<"termsAndConditionsUrl">;
+}, z.core.$strip>, z.ZodObject<{
     kind: z.ZodLiteral<"consentText">;
     consentId: z.ZodString;
 }, z.core.$strip>, z.ZodObject<{
@@ -48,6 +52,10 @@ export declare const translationEntrySchema: z.ZodObject<{
         kind: z.ZodLiteral<"privacyPolicyText">;
     }, z.core.$strip>, z.ZodObject<{
         kind: z.ZodLiteral<"privacyPolicyLink">;
+    }, z.core.$strip>, z.ZodObject<{
+        kind: z.ZodLiteral<"termsAndConditionsText">;
+    }, z.core.$strip>, z.ZodObject<{
+        kind: z.ZodLiteral<"termsAndConditionsUrl">;
     }, z.core.$strip>, z.ZodObject<{
         kind: z.ZodLiteral<"consentText">;
         consentId: z.ZodString;
@@ -83,6 +91,10 @@ export declare const contributionContentSchema: z.ZodObject<{
             kind: z.ZodLiteral<"privacyPolicyText">;
         }, z.core.$strip>, z.ZodObject<{
             kind: z.ZodLiteral<"privacyPolicyLink">;
+        }, z.core.$strip>, z.ZodObject<{
+            kind: z.ZodLiteral<"termsAndConditionsText">;
+        }, z.core.$strip>, z.ZodObject<{
+            kind: z.ZodLiteral<"termsAndConditionsUrl">;
         }, z.core.$strip>, z.ZodObject<{
             kind: z.ZodLiteral<"consentText">;
             consentId: z.ZodString;

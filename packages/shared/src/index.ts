@@ -12,6 +12,12 @@ export { validateWorkbook } from "./excel/validator";
 export { resolveLocales, ENGLISH_LOCALE, type LocaleResolution, type UnresolvedLocale } from "./excel/localeDetection";
 export type { Issue, ParsedWorkbook, RawRow, ValidationResult, WorkbookMeta } from "./excel/types";
 
+// Question Master admin export — flat per-(subsidiary, locale, question/field) report,
+// project-wise, compiled from published FormDefinitions (see questionMasterService.ts
+// in the backend for the per-project orchestration).
+export { buildQuestionMasterRows, type QuestionMasterRow } from "./excel/questionMasterRows";
+export { buildQuestionMasterWorkbook } from "./excel/questionMasterWorkbook";
+
 // FormDefinition data model + runtime Zod validation
 export type {
   AnswerDefinition,

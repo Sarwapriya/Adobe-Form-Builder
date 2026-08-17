@@ -224,6 +224,21 @@ export function MyFormTranslatePage() {
                   existingValue={resolveLocalizedText(baseDefinition.fields.marketingOptin.labelByLocale, locale, defaultLocale)}
                 />
               )}
+              {baseDefinition.fields.termsAndConditions && (
+                <Stack spacing={1}>
+                  <TranslatableField
+                    label="Terms and Conditions wording"
+                    target={{ kind: "termsAndConditionsText" }}
+                    existingValue={resolveLocalizedText(baseDefinition.fields.termsAndConditions.textByLocale, locale, defaultLocale)}
+                    multiline
+                  />
+                  <TranslatableField
+                    label="Terms and Conditions link URL"
+                    target={{ kind: "termsAndConditionsUrl" }}
+                    existingValue={resolveLocalizedText(baseDefinition.fields.termsAndConditions.urlByLocale, locale, defaultLocale)}
+                  />
+                </Stack>
+              )}
               {(baseDefinition.fields.additionalConsents ?? []).map((consent) => (
                 <Stack key={consent.id} spacing={1}>
                   <TranslatableField
@@ -241,7 +256,10 @@ export function MyFormTranslatePage() {
                   )}
                 </Stack>
               ))}
-              {!baseDefinition.fields.privacyPolicy && !baseDefinition.fields.marketingOptin && !baseDefinition.fields.additionalConsents?.length && (
+              {!baseDefinition.fields.privacyPolicy &&
+                !baseDefinition.fields.marketingOptin &&
+                !baseDefinition.fields.termsAndConditions &&
+                !baseDefinition.fields.additionalConsents?.length && (
                 <Typography variant="body2" color="text.secondary">
                   This form has no consent checkboxes.
                 </Typography>

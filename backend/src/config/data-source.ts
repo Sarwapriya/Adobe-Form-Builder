@@ -14,6 +14,7 @@ import { QaTestCaseResult } from "../entities/QaTestCaseResult";
 import { Form } from "../entities/Form";
 import { FormVersion } from "../entities/FormVersion";
 import { FormContribution } from "../entities/FormContribution";
+import { QuestionMasterVersion } from "../entities/QuestionMasterVersion";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 import { SubmittedOnlyVersioning1720000000000 } from "../migrations/1720000000000-SubmittedOnlyVersioning";
@@ -34,6 +35,8 @@ import { AddProjectCodeCutoffDate1860000000000 } from "../migrations/18600000000
 import { AddSubsidiaryNotificationEmails1870000000000 } from "../migrations/1870000000000-AddSubsidiaryNotificationEmails";
 import { AddUserNotificationEmail1880000000000 } from "../migrations/1880000000000-AddUserNotificationEmail";
 import { AddUserNotificationEmail21890000000000 } from "../migrations/1890000000000-AddUserNotificationEmail2";
+import { AddQuestionMasterVersions1900000000000 } from "../migrations/1900000000000-AddQuestionMasterVersions";
+import { AddProjectCodeIsLocked1910000000000 } from "../migrations/1910000000000-AddProjectCodeIsLocked";
 
 const entities = [
   Upload,
@@ -50,6 +53,7 @@ const entities = [
   Form,
   FormVersion,
   FormContribution,
+  QuestionMasterVersion,
 ];
 const migrations = [
   InitSchema1700000000000,
@@ -72,6 +76,8 @@ const migrations = [
   AddSubsidiaryNotificationEmails1870000000000,
   AddUserNotificationEmail1880000000000,
   AddUserNotificationEmail21890000000000,
+  AddQuestionMasterVersions1900000000000,
+  AddProjectCodeIsLocked1910000000000,
 ];
 
 /**

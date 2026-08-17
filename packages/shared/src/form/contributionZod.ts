@@ -10,6 +10,8 @@ export const translationTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("profileLabel"), field: z.enum(["firstName", "lastName", "email", "mobileNumber", "marketingOptin"]) }),
   z.object({ kind: z.literal("privacyPolicyText") }),
   z.object({ kind: z.literal("privacyPolicyLink") }),
+  z.object({ kind: z.literal("termsAndConditionsText") }),
+  z.object({ kind: z.literal("termsAndConditionsUrl") }),
   z.object({ kind: z.literal("consentText"), consentId: z.string() }),
   z.object({ kind: z.literal("consentLink"), consentId: z.string() }),
   z.object({ kind: z.literal("questionHeading"), questionId: z.string() }),

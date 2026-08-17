@@ -85,8 +85,8 @@ uploadRouter.post(
     // rather than merely validating it, so a tampered request still can't
     // upload under a different subsidiary. Admins (and standard users with no
     // assigned subsidiary) use whatever the request body says.
-    const effectiveSubsidiaryId =
-      !isAdminRole(req.auth!.role) && req.auth!.subsidiaryId ? req.auth!.subsidiaryId : subsidiaryId;
+    const isAdmin = isAdminRole(req.auth!.role);
+    const effectiveSubsidiaryId = !isAdmin && req.auth!.subsidiaryId ? req.auth!.subsidiaryId : subsidiaryId;
 
     const { upload, validation } = await createUpload({
       subsidiaryId: effectiveSubsidiaryId,
@@ -96,6 +96,7 @@ uploadRouter.post(
       uploadedByUsername: req.auth!.username,
       requiredOverrides: parseRequiredOverrides(requiredOverrides),
       variants: parseVariants(variants),
+      isAdmin,
     });
 
     res.status(201).json({ upload, validation });

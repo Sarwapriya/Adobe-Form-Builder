@@ -5,7 +5,13 @@ import path from "node:path";
 import { parseWorkbook } from "../../src/excel/parser";
 
 const DOCS_DIR = path.resolve(import.meta.dirname, "../../../../Documents");
-const files = readdirSync(DOCS_DIR).filter((f) => f.endsWith(".xlsx"));
+// Question Master workbooks (Documents/Question_Master_*.xlsx, QuestionMaster_*.xlsx)
+// are a different report format entirely — a flat per-(subsidiary, locale,
+// question/field) sheet consumed by questionMasterRows.ts, not a "Complete
+// Translations" translation document — so they're excluded from this glob rather
+// than failing the "no structural issues" assertions below, which assume the
+// translation-document shape.
+const files = readdirSync(DOCS_DIR).filter((f) => f.endsWith(".xlsx") && !/^question.?master/i.test(f));
 
 describe("parseWorkbook against real sample files", () => {
   it("finds all 4 sample files", () => {

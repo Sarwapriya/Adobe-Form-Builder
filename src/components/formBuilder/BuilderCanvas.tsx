@@ -377,6 +377,23 @@ export function PredefinedFieldToggles({
     });
   }
 
+  // Terms & Conditions is an informational link, not a consent checkbox — no
+  // required/visibleInVariants knobs (see TermsAndConditionsMeta's own doc
+  // comment), so it gets its own simple on/off toggle rather than joining
+  // consentToggleItems above.
+  function toggleTermsAndConditions(enabled: boolean) {
+    updateDefinition((d) => {
+      const nextFields = { ...d.fields };
+      if (!enabled) {
+        delete nextFields.termsAndConditions;
+        if (selectedField === "termsAndConditions") onSelectField(null);
+      } else {
+        nextFields.termsAndConditions = { textByLocale: {}, urlByLocale: {} };
+      }
+      return { ...d, fields: nextFields };
+    });
+  }
+
   if (!fields) return null;
   const currentFields = fields;
   const additionalConsents = currentFields.additionalConsents ?? [];
@@ -522,6 +539,29 @@ export function PredefinedFieldToggles({
       <Button size="small" startIcon={<AddIcon />} onClick={addConsent} sx={{ mt: 1 }}>
         Add another consent
       </Button>
+
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mt: 2.5, mb: 0.25 }}>
+        Terms & Conditions
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
+        An optional informational link shown next to the Submit button. You can publish without setting it — a
+        subsidiary user can also add their own locale's wording/link later.
+      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Chip
+          label="Terms and Conditions"
+          size="small"
+          variant={selectedField === "termsAndConditions" ? "filled" : "outlined"}
+          color={selectedField === "termsAndConditions" ? "primary" : "default"}
+          onClick={() => (currentFields.termsAndConditions ? onSelectField("termsAndConditions") : undefined)}
+          sx={{ cursor: currentFields.termsAndConditions ? "pointer" : "default" }}
+        />
+        <Switch
+          size="small"
+          checked={!!currentFields.termsAndConditions}
+          onChange={(e) => toggleTermsAndConditions(e.target.checked)}
+        />
+      </Box>
     </Paper>
   );
 }

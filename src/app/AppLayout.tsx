@@ -25,6 +25,7 @@ import PeopleIcon from "@mui/icons-material/People";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import TranslateIcon from "@mui/icons-material/Translate";
 import DomainIcon from "@mui/icons-material/Domain";
+import ListAltIcon from "@mui/icons-material/ListAlt";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
@@ -79,6 +80,7 @@ export function AppLayout() {
           { to: "/admin/configuration", label: "Configuration", icon: <SettingsIcon />, exact: true },
           { to: "/admin/users", label: "User Management", icon: <PeopleIcon />, exact: true },
           { to: "/admin/form-builder", label: "Form Initiator", icon: <DesignServicesIcon />, exact: false },
+          { to: "/admin/question-master", label: "Question Master", icon: <ListAltIcon />, exact: false },
         ]
       : []),
   ];

@@ -24,6 +24,10 @@ export type TranslationTarget = {
 } | {
     kind: "privacyPolicyLink";
 } | {
+    kind: "termsAndConditionsText";
+} | {
+    kind: "termsAndConditionsUrl";
+} | {
     kind: "consentText";
     consentId: string;
 } | {

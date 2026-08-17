@@ -1,11 +1,14 @@
+import type { FormDefinition } from "@formbuilder/shared";
 import { AppDataSource } from "../config/data-source";
 import { Form } from "../entities/Form";
+import { FormVersion } from "../entities/FormVersion";
 import { ProjectCode } from "../entities/ProjectCode";
 import { Subsidiary } from "../entities/Subsidiary";
 import { User } from "../entities/User";
 import { getAdminSetting } from "./adminSettingsService";
+import { listAdminNotificationEmails } from "./authService";
 import { listContributionsForForm } from "./formContributionService";
-import { sendCutoffReminder } from "./emailService";
+import { sendAdminPendingItemsSummary, sendCutoffReminder, type AdminPendingItem } from "./emailService";
 
 const DEFAULT_REMINDER_DAYS_BEFORE = 7;
 
@@ -29,6 +32,25 @@ async function isNotFinalized(form: Form): Promise<boolean> {
   return contributions[0]?.status !== "approved";
 }
 
+/** Whether this form's Terms & Conditions (see TermsAndConditionsMeta in
+ * formDefinition.ts) is missing entirely, or incomplete for any of the form's
+ * own locales — checked against the form's current *draft* version (always
+ * present, even before a form is ever published, and reflects the latest
+ * admin- or subsidiary-user edit) rather than its published version, so a
+ * subsidiary user's own translation fix is picked up immediately without
+ * needing an admin to republish first. */
+async function hasTermsAndConditionsGap(form: Form): Promise<boolean> {
+  if (!form.currentDraftVersionId) return true;
+  const version = await AppDataSource.getRepository(FormVersion).findOne({ where: { id: form.currentDraftVersionId } });
+  if (!version) return true;
+  const definition = JSON.parse(version.definition) as FormDefinition;
+  const termsAndConditions = definition.fields.termsAndConditions;
+  if (!termsAndConditions) return true;
+  return definition.locales.some(
+    (l) => !termsAndConditions.textByLocale?.[l.code] || !termsAndConditions.urlByLocale?.[l.code],
+  );
+}
+
 /** This subsidiary's own active standard users' emails, plus its two extra
  * notification addresses if set (see Subsidiary.notificationEmail1/2's own
  * doc comment) — deduplicated, since a user's email could coincidentally
@@ -47,18 +69,31 @@ async function resolveRecipients(subsidiaryName: string): Promise<string[]> {
 /**
  * Runs once per calendar day (see startCutoffReminderScheduler in index.ts):
  * for every open project code with a cutoffDate within the configured
- * reminder window, finds every subsidiary that has at least one not-yet-
- * finalized form under that code and emails that subsidiary's users (plus its
- * two extra addresses) a reminder listing exactly which forms still need
- * attention. Silent no-op for a project code with no cutoffDate set — no
- * reminder is ever sent for those. Best-effort throughout: one subsidiary's
- * email failing (see sendCutoffReminder, which never throws) never stops the
- * rest of the run.
+ * reminder window, finds every subsidiary that has at least one form under
+ * that code with something still pending — either not yet approved, or its
+ * Terms & Conditions not fully configured (see isNotFinalized/
+ * hasTermsAndConditionsGap above) — and emails that subsidiary's users (plus
+ * its two extra addresses) a reminder listing exactly which forms still need
+ * attention and why. Separately, every pending item across the *entire* run
+ * (every project code, every subsidiary) is also collected into one
+ * consolidated summary email sent once to every admin/superadmin's own
+ * notification email — a single digest rather than one email per form.
+ * Silent no-op for a project code with no cutoffDate set — no reminder is
+ * ever sent for those. Best-effort throughout: one subsidiary's (or the
+ * admin summary's) email failing (see sendCutoffReminder/
+ * sendAdminPendingItemsSummary, neither of which ever throws) never stops
+ * the rest of the run.
  */
 export async function runCutoffReminders(): Promise<void> {
   const daysBeforeSetting = await getAdminSetting("cutoffReminderDaysBefore");
   const daysBefore = daysBeforeSetting ? Number(daysBeforeSetting) || DEFAULT_REMINDER_DAYS_BEFORE : DEFAULT_REMINDER_DAYS_BEFORE;
   const today = new Date();
+
+  // Collected across the whole run so the one admin summary email at the end
+  // can cover every project code/subsidiary, not just the current loop
+  // iteration — the per-subsidiary emails below are still sent inline, one
+  // per (project code, subsidiary) pair, unchanged from before.
+  const allPendingItems: AdminPendingItem[] = [];
 
   const codes = await AppDataSource.getRepository(ProjectCode).find({ where: { isOpen: true } });
   for (const code of codes) {
@@ -77,21 +112,34 @@ export async function runCutoffReminders(): Promise<void> {
     }
 
     for (const [subsidiaryId, subsidiaryForms] of formsBySubsidiary) {
-      const notFinalized: Form[] = [];
+      const pendingForSubsidiary: AdminPendingItem[] = [];
       for (const form of subsidiaryForms) {
-        if (await isNotFinalized(form)) notFinalized.push(form);
+        const reasons: string[] = [];
+        if (await isNotFinalized(form)) reasons.push("Translation not yet approved");
+        if (await hasTermsAndConditionsGap(form)) reasons.push("Terms & Conditions not configured");
+        if (reasons.length === 0) continue;
+        pendingForSubsidiary.push({ subsidiaryId, projectCode: code.code, formName: form.name, cutoffDate: code.cutoffDate, reasons });
       }
-      if (notFinalized.length === 0) continue;
+      if (pendingForSubsidiary.length === 0) continue;
+
+      allPendingItems.push(...pendingForSubsidiary);
 
       const recipients = await resolveRecipients(subsidiaryId);
-      if (recipients.length === 0) continue;
+      if (recipients.length > 0) {
+        await sendCutoffReminder(recipients, {
+          subsidiaryId,
+          projectCode: code.code,
+          cutoffDate: code.cutoffDate,
+          items: pendingForSubsidiary.map((p) => ({ formName: p.formName, reasons: p.reasons })),
+        });
+      }
+    }
+  }
 
-      await sendCutoffReminder(recipients, {
-        subsidiaryId,
-        projectCode: code.code,
-        cutoffDate: code.cutoffDate,
-        formNames: notFinalized.map((f) => f.name),
-      });
+  if (allPendingItems.length > 0) {
+    const adminRecipients = await listAdminNotificationEmails();
+    if (adminRecipients.length > 0) {
+      await sendAdminPendingItemsSummary(adminRecipients, allPendingItems);
     }
   }
 }

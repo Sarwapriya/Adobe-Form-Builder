@@ -19,6 +19,7 @@ import { MyFormsListPage } from "./pages/MyFormsListPage.tsx";
 import { MyFormTranslatePage } from "./pages/MyFormTranslatePage.tsx";
 import { MySubmissionsPage } from "./pages/MySubmissionsPage.tsx";
 import { MySubsidiaryPage } from "./pages/MySubsidiaryPage.tsx";
+import { QuestionMasterPage } from "./pages/QuestionMasterPage.tsx";
 
 export default function App() {
   const silentRefresh = useAuthStore((s) => s.silentRefresh);
@@ -54,6 +55,7 @@ export default function App() {
                 <Route path="admin/users" element={<UserManagementPage />} />
                 <Route path="admin/form-builder" element={<FormBuilderListPage />} />
                 <Route path="admin/form-builder/:id" element={<FormBuilderEditorPage />} />
+                <Route path="admin/question-master" element={<QuestionMasterPage />} />
               </Route>
             </Route>
           </Route>

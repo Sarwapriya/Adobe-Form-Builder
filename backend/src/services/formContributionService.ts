@@ -11,6 +11,7 @@ import { AppDataSource } from "../config/data-source";
 import { Form } from "../entities/Form";
 import { FormVersion } from "../entities/FormVersion";
 import { FormContribution, type ContributionStatus } from "../entities/FormContribution";
+import { ProjectCode } from "../entities/ProjectCode";
 import { getAccessibleFormDetail } from "./formAccessService";
 import { updateDraft } from "./formBuilderService";
 
@@ -48,7 +49,7 @@ function toSummary(row: FormContribution): ContributionSummary {
   };
 }
 
-export type SubmitContributionOutcome = "ok" | "not_found" | "invalid";
+export type SubmitContributionOutcome = "ok" | "not_found" | "invalid" | "project_locked";
 
 export interface SubmitContributionResult {
   outcome: SubmitContributionOutcome;
@@ -70,6 +71,18 @@ export async function submitContribution(
 ): Promise<SubmitContributionResult> {
   const detail = await getAccessibleFormDetail(formId, subsidiaryId);
   if (!detail?.published) return { outcome: "not_found" };
+
+  // A locked project code freezes subsidiary contributions the same way it freezes
+  // Excel uploads — see ProjectCode.isLocked's own doc comment. Reachable only via
+  // subsidiaryFormsRouter (requireAuth-only, always subsidiary-scoped), so unlike
+  // uploadService.createUpload this needs no admin-exemption check — admins never
+  // submit contributions, they review them.
+  if (detail.projectCode) {
+    const projectCode = await AppDataSource.getRepository(ProjectCode).findOne({ where: { code: detail.projectCode } });
+    if (projectCode?.isLocked) {
+      return { outcome: "project_locked" };
+    }
+  }
 
   const validation = validateContribution(detail.published.definition, content);
   if (validation.errors.length > 0) {

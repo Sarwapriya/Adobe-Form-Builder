@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { Box, Button, Alert, Chip, IconButton, Menu, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ScienceIcon from "@mui/icons-material/Science";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import ClearIcon from "@mui/icons-material/Clear";

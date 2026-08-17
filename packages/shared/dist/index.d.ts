@@ -9,6 +9,8 @@ export { mapWorkbook, type MapResult } from "./excel/mapper";
 export { validateWorkbook } from "./excel/validator";
 export { resolveLocales, ENGLISH_LOCALE, type LocaleResolution, type UnresolvedLocale } from "./excel/localeDetection";
 export type { Issue, ParsedWorkbook, RawRow, ValidationResult, WorkbookMeta } from "./excel/types";
+export { buildQuestionMasterRows, type QuestionMasterRow } from "./excel/questionMasterRows";
+export { buildQuestionMasterWorkbook } from "./excel/questionMasterWorkbook";
 export type { AnswerDefinition, CallingCodeFieldMeta, ConsentDefinition, ConsentToggleMeta, ControlType, FormDefinition, LangSubtag, LocaleCode, LocaleInfo, LocalizedFieldMeta, MobileNumberFieldMeta, PageCopy, PrivacyPolicyMeta, ProfileFieldSet, QuestionDefinition, TermsAndConditionsMeta, ValidationMessageSet, } from "./form/formDefinition";
 export { resolveLocalizedText } from "./form/formDefinition";
 export { formDefinitionSchema } from "./form/formDefinitionZod";

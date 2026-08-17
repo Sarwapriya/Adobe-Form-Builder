@@ -74,6 +74,15 @@ export function validateFormDefinition(form: FormDefinition): ValidationResult {
     }
   }
 
+  if (form.fields.termsAndConditions) {
+    if (!form.fields.termsAndConditions.urlByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Terms and Conditions field has no link URL for the default locale."));
+    }
+    if (!form.fields.termsAndConditions.textByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Terms and Conditions field has no wording for the default locale."));
+    }
+  }
+
   if (form.fields.marketingOptin?.visibleInVariants && form.fields.marketingOptin.visibleInVariants.length === 0) {
     warnings.push(warn("The Marketing Opt-in field isn't shown in Full Form or One-Click — it won't appear anywhere until you enable at least one."));
   }

@@ -3,12 +3,15 @@ import type { FormEvent } from "react";
 import { Alert, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
+import EditOffIcon from "@mui/icons-material/EditOff";
+import EditIcon from "@mui/icons-material/Edit";
 import BadgeIcon from "@mui/icons-material/Badge";
 import { ApiError } from "../../api/apiClient";
 import {
   createProjectCode,
   listAllProjectCodes,
   setProjectCodeDateRange,
+  setProjectCodeLocked,
   setProjectCodeOpen,
   setProjectCodeValue,
   type ProjectCode,
@@ -24,13 +27,18 @@ function toDateInputValue(value: string | null): string {
 
 /**
  * Inline admin panel for managing project codes (campaigns): create new
- * ones, rename a code's own text value, toggle a code open/closed, and
- * set/edit each one's descriptive campaign date range plus its cutoff date.
+ * ones, rename a code's own text value, toggle a code open/closed, toggle a
+ * separate locked/unlocked freeze, and set/edit each one's descriptive campaign
+ * date range plus its cutoff date.
  * Closing a code blocks new uploads against it (enforced server-side — see
  * uploadService.createUpload) without touching uploads already made under
  * it; renaming likewise never touches anything already uploaded under the
  * old value (Upload.projectCode is a text snapshot, not a live reference —
- * see that column's own doc comment). Start/end date are purely informational
+ * see that column's own doc comment). Locking is independent of open/closed —
+ * it additionally blocks subsidiary Form Builder contributions (which open/closed
+ * never covers) and is the precondition for generating a Question Master; admins
+ * stay exempt from it (see backend ProjectCode entity's own doc comment). Start/end
+ * date are purely informational
  * and never enforced; cutoffDate isn't enforced here either but is meaningful
  * — see backend ProjectCode entity's own doc comment. Lives on
  * ConfigurationPage, admin/superadmin only (gated by AdminRoute);
@@ -47,6 +55,7 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
   const [newCutoffDate, setNewCutoffDate] = useState("");
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [togglingLockedId, setTogglingLockedId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
@@ -97,6 +106,20 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
       setError(err instanceof ApiError ? err.message : "Failed to update project code");
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function handleToggleLock(code: ProjectCode) {
+    setTogglingLockedId(code.id);
+    setError(null);
+    try {
+      await setProjectCodeLocked(code.id, !code.isLocked);
+      await refresh();
+      onChange?.();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update project code");
+    } finally {
+      setTogglingLockedId(null);
     }
   }
 
@@ -186,9 +209,11 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
               key={code.id}
               code={code}
               toggling={togglingId === code.id}
+              togglingLocked={togglingLockedId === code.id}
               saving={savingId === code.id}
               renaming={renamingId === code.id}
               onToggle={() => handleToggle(code)}
+              onToggleLock={() => handleToggleLock(code)}
               onSaveDateRange={(startDate, endDate, cutoffDate) => handleSaveDateRange(code.id, startDate, endDate, cutoffDate)}
               onRename={(newValue) => handleRename(code.id, newValue)}
             />
@@ -202,17 +227,21 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
 function ProjectCodeRow({
   code,
   toggling,
+  togglingLocked,
   saving,
   renaming,
   onToggle,
+  onToggleLock,
   onSaveDateRange,
   onRename,
 }: {
   code: ProjectCode;
   toggling: boolean;
+  togglingLocked: boolean;
   saving: boolean;
   renaming: boolean;
   onToggle: () => void;
+  onToggleLock: () => void;
   onSaveDateRange: (startDate: string, endDate: string, cutoffDate: string) => void;
   onRename: (code: string) => void;
 }) {
@@ -259,6 +288,19 @@ function ProjectCodeRow({
           onClick={onToggle}
           disabled={toggling}
           title={code.isOpen ? "Open — click to close" : "Closed — click to reopen"}
+          sx={{ minWidth: 100 }}
+        />
+        <Chip
+          label={code.isLocked ? "Locked" : "Unlocked"}
+          color={code.isLocked ? "warning" : "default"}
+          icon={code.isLocked ? <EditOffIcon /> : <EditIcon />}
+          onClick={onToggleLock}
+          disabled={togglingLocked}
+          title={
+            code.isLocked
+              ? "Locked — subsidiary uploads/contributions are frozen; click to unlock"
+              : "Unlocked — click to freeze subsidiary uploads/contributions and allow generating a Question Master"
+          }
           sx={{ minWidth: 100 }}
         />
       </Stack>

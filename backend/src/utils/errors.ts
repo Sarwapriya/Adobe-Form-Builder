@@ -39,6 +39,19 @@ export class ProjectCodeClosedError extends Error {
   }
 }
 
+/** Thrown when a non-admin (subsidiary/standard) user attempts an upload against a
+ * project code an admin has locked — see
+ * projectCodeService.assertProjectCodeUnlockedForUpload. Independent of
+ * ProjectCodeClosedError above: isOpen/closed gates uploads for everyone and is meant
+ * for the normal campaign window, while a lock is a more permanent freeze that admins
+ * stay exempt from. */
+export class ProjectCodeLockedError extends Error {
+  constructor(message = "This project code is locked") {
+    super(message);
+    this.name = "ProjectCodeLockedError";
+  }
+}
+
 /** Thrown when an upload is attempted for a subsidiary an admin has disabled
  * outright — see subsidiaryService.assertSubsidiaryActiveForUpload. Blocks
  * every project code for that subsidiary in one step, independent of (and

@@ -34,6 +34,8 @@ __export(index_exports, {
   ENGLISH_LOCALE: () => ENGLISH_LOCALE,
   RTL_LANGS: () => RTL_LANGS,
   applyContribution: () => applyContribution,
+  buildQuestionMasterRows: () => buildQuestionMasterRows,
+  buildQuestionMasterWorkbook: () => buildQuestionMasterWorkbook,
   contributionContentSchema: () => contributionContentSchema,
   defaultBuilderConfig: () => defaultBuilderConfig,
   findCallingCodeEntry: () => findCallingCodeEntry,
@@ -631,10 +633,274 @@ function checkMultilineMismatch(textByLocale, label, warnings) {
   }
 }
 
+// src/codegen/domIds.ts
+function answerDomKey(order) {
+  return `A${order}`;
+}
+function questionInputId(questionId, answerOrder) {
+  return `${questionId}${answerDomKey(answerOrder)}`;
+}
+
 // src/form/formDefinition.ts
 function resolveLocalizedText(map, locale, defaultLocale) {
   if (!map) return "";
   return map[locale] ?? map[defaultLocale] ?? "";
+}
+
+// src/excel/questionMasterRows.ts
+var MAX_CELL_LENGTH = 255;
+function yn(required) {
+  return required ? "Y" : "N";
+}
+function countryAlpha2(locale) {
+  return locale.split("_")[1] ?? "";
+}
+function clamp(value) {
+  return value.length > MAX_CELL_LENGTH ? value.slice(0, MAX_CELL_LENGTH) : value;
+}
+function clampRow(row) {
+  return {
+    division: clamp(row.division),
+    project: clamp(row.project),
+    subsidiary: clamp(row.subsidiary),
+    country_alpha_2: clamp(row.country_alpha_2),
+    locale: clamp(row.locale),
+    question_code: clamp(row.question_code),
+    question_text_full: clamp(row.question_text_full),
+    question_text_alias: clamp(row.question_text_alias),
+    mandatory_yn: row.mandatory_yn,
+    local_yn: row.local_yn,
+    type: row.type,
+    answer_code: clamp(row.answer_code),
+    answer_text_full: clamp(row.answer_text_full),
+    answer_text_alias: clamp(row.answer_text_alias)
+  };
+}
+function selfReferentialRow(base, type, answerCode, answerTextAlias) {
+  return {
+    ...base,
+    type,
+    answer_code: answerCode,
+    answer_text_full: base.question_text_full,
+    answer_text_alias: answerTextAlias
+  };
+}
+function buildProfileFieldRows(fields, locale, defaultLocale) {
+  const rows = [];
+  if (fields.firstName) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: "FIRSTNAME",
+          question_text_full: resolveLocalizedText(fields.firstName.labelByLocale, locale, defaultLocale),
+          question_text_alias: "firstname",
+          mandatory_yn: "Y",
+          local_yn: "Standard"
+        },
+        "Free text",
+        "firstName",
+        "firstname"
+      )
+    );
+  }
+  if (fields.lastName) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: "LASTNAME",
+          question_text_full: resolveLocalizedText(fields.lastName.labelByLocale, locale, defaultLocale),
+          question_text_alias: "lastname",
+          mandatory_yn: "Y",
+          local_yn: "Standard"
+        },
+        "Free text",
+        "lastName",
+        "lastname"
+      )
+    );
+  }
+  if (fields.email) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: "EMAIL",
+          question_text_full: resolveLocalizedText(fields.email.labelByLocale, locale, defaultLocale),
+          question_text_alias: "email",
+          mandatory_yn: "Y",
+          local_yn: "Standard"
+        },
+        "Free text",
+        "email",
+        "email"
+      )
+    );
+  }
+  const mobileField = fields.callingCode ?? fields.mobileNumber;
+  if (mobileField) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: "HPP_CODE",
+          question_text_full: resolveLocalizedText(mobileField.labelByLocale, locale, defaultLocale),
+          question_text_alias: "mobileNumber",
+          mandatory_yn: "Y",
+          local_yn: "Local"
+        },
+        "Free text",
+        "mobileNumber",
+        "mobileNumber"
+      )
+    );
+  }
+  if (fields.privacyPolicy) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: "PRIVACY POLICY_YN",
+          question_text_full: resolveLocalizedText(fields.privacyPolicy.textByLocale, locale, defaultLocale),
+          question_text_alias: "PRIVACY POLICY_YN",
+          mandatory_yn: yn(fields.privacyPolicy.required ?? true),
+          local_yn: "Local"
+        },
+        "checkbox",
+        "PRIVACY POLICY_YN",
+        "1 or 0"
+      )
+    );
+  }
+  if (fields.marketingOptin) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: "MKT_AGE_YN",
+          question_text_full: resolveLocalizedText(fields.marketingOptin.labelByLocale, locale, defaultLocale),
+          question_text_alias: "MKT_AGE_YN",
+          mandatory_yn: yn(fields.marketingOptin.required ?? false),
+          local_yn: "Standard"
+        },
+        "checkbox",
+        "MKT_AGE_YN",
+        "1 or 0"
+      )
+    );
+  }
+  if (fields.countryCode) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: "Country",
+          question_text_full: resolveLocalizedText(fields.countryCode.labelByLocale, locale, defaultLocale),
+          question_text_alias: "COUNTRY",
+          mandatory_yn: "Y",
+          local_yn: "Local"
+        },
+        "dropdown",
+        "Country",
+        "COUNTRY"
+      )
+    );
+  }
+  if (fields.termsAndConditions) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: "TERMS_AND_CONDITIONS",
+          question_text_full: resolveLocalizedText(fields.termsAndConditions.textByLocale, locale, defaultLocale),
+          question_text_alias: "termsAndConditions",
+          mandatory_yn: "Y",
+          local_yn: "Standard"
+        },
+        "Free text",
+        "termsAndConditionsLink",
+        "termsAndConditions"
+      )
+    );
+  }
+  for (const consent of fields.additionalConsents ?? []) {
+    rows.push(
+      selfReferentialRow(
+        {
+          question_code: consent.id,
+          question_text_full: resolveLocalizedText(consent.textByLocale, locale, defaultLocale),
+          question_text_alias: consent.id,
+          mandatory_yn: yn(consent.required ?? false),
+          local_yn: "Standard"
+        },
+        "checkbox",
+        consent.id,
+        "1 or 0"
+      )
+    );
+  }
+  return rows;
+}
+var QUESTION_TYPE_BY_CONTROL_TYPE = {
+  radio: "Single",
+  checkbox: "Multi",
+  dropdown: "dropdown"
+};
+function buildQuestionRows(question, locale, defaultLocale) {
+  const base = {
+    question_code: question.id,
+    question_text_full: resolveLocalizedText(question.headingByLocale, locale, defaultLocale),
+    question_text_alias: resolveLocalizedText(question.headingByLocale, defaultLocale, defaultLocale),
+    mandatory_yn: yn(question.required),
+    local_yn: "Standard"
+  };
+  const type = QUESTION_TYPE_BY_CONTROL_TYPE[question.controlType] ?? "Free text";
+  if (question.answers.length === 0) {
+    return [selfReferentialRow(base, type, question.id, base.question_text_alias)];
+  }
+  return question.answers.map((answer) => ({
+    ...base,
+    type,
+    answer_code: answerDomKey(answer.order),
+    answer_text_full: resolveLocalizedText(answer.textByLocale, locale, defaultLocale),
+    answer_text_alias: resolveLocalizedText(answer.textByLocale, defaultLocale, defaultLocale)
+  }));
+}
+function buildQuestionMasterRows(form, division, project) {
+  const rows = [];
+  const { subsidiary, defaultLocale } = form.meta;
+  for (const localeInfo of form.locales) {
+    const locale = localeInfo.code;
+    const base = { division, project, subsidiary, country_alpha_2: countryAlpha2(locale), locale };
+    for (const fieldRow of buildProfileFieldRows(form.fields, locale, defaultLocale)) {
+      rows.push(clampRow({ ...base, ...fieldRow }));
+    }
+    for (const question of form.questions) {
+      for (const questionRow of buildQuestionRows(question, locale, defaultLocale)) {
+        rows.push(clampRow({ ...base, ...questionRow }));
+      }
+    }
+  }
+  return rows;
+}
+
+// src/excel/questionMasterWorkbook.ts
+var XLSX2 = __toESM(require("xlsx"), 1);
+var COLUMNS = [
+  "division",
+  "project",
+  "subsidiary",
+  "country_alpha_2",
+  "locale",
+  "question_code",
+  "question_text_full",
+  "question_text_alias",
+  "mandatory_yn",
+  "local_yn",
+  "type",
+  "answer_code",
+  "answer_text_full",
+  "answer_text_alias"
+];
+function buildQuestionMasterWorkbook(rows) {
+  const sheet = XLSX2.utils.json_to_sheet(rows, { header: COLUMNS });
+  const workbook = XLSX2.utils.book_new();
+  XLSX2.utils.book_append_sheet(workbook, sheet, "Question Master");
+  const output = XLSX2.write(workbook, { type: "array", bookType: "xlsx" });
+  return new Uint8Array(output);
 }
 
 // src/form/formDefinitionZod.ts
@@ -916,6 +1182,14 @@ function validateFormDefinition(form) {
       warnings.push(warn("The Privacy Policy field isn't shown in Full Form or One-Click \u2014 it won't appear anywhere until you enable at least one."));
     }
   }
+  if (form.fields.termsAndConditions) {
+    if (!form.fields.termsAndConditions.urlByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Terms and Conditions field has no link URL for the default locale."));
+    }
+    if (!form.fields.termsAndConditions.textByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Terms and Conditions field has no wording for the default locale."));
+    }
+  }
   if (form.fields.marketingOptin?.visibleInVariants && form.fields.marketingOptin.visibleInVariants.length === 0) {
     warnings.push(warn("The Marketing Opt-in field isn't shown in Full Form or One-Click \u2014 it won't appear anywhere until you enable at least one."));
   }
@@ -1023,6 +1297,16 @@ function applyTranslationEntry(form, entry) {
       form.fields.privacyPolicy.linkUrlByLocale = { ...form.fields.privacyPolicy.linkUrlByLocale, [locale]: value };
       return;
     }
+    case "termsAndConditionsText": {
+      if (!form.fields.termsAndConditions) return;
+      form.fields.termsAndConditions.textByLocale = { ...form.fields.termsAndConditions.textByLocale, [locale]: value };
+      return;
+    }
+    case "termsAndConditionsUrl": {
+      if (!form.fields.termsAndConditions) return;
+      form.fields.termsAndConditions.urlByLocale = { ...form.fields.termsAndConditions.urlByLocale, [locale]: value };
+      return;
+    }
     case "consentText": {
       const consent = form.fields.additionalConsents?.find((c) => c.id === target.consentId);
       if (!consent) return;
@@ -1063,6 +1347,9 @@ function translationTargetExists(form, target) {
     case "privacyPolicyText":
     case "privacyPolicyLink":
       return !!form.fields.privacyPolicy;
+    case "termsAndConditionsText":
+    case "termsAndConditionsUrl":
+      return !!form.fields.termsAndConditions;
     case "consentText":
     case "consentLink":
       return !!form.fields.additionalConsents?.some((c) => c.id === target.consentId);
@@ -1080,6 +1367,9 @@ function describeTarget(target) {
     case "privacyPolicyText":
     case "privacyPolicyLink":
       return "Privacy Policy";
+    case "termsAndConditionsText":
+    case "termsAndConditionsUrl":
+      return "Terms and Conditions";
     case "consentText":
     case "consentLink":
       return `consent "${target.consentId}"`;
@@ -1147,6 +1437,8 @@ var translationTargetSchema = import_zod2.z.discriminatedUnion("kind", [
   import_zod2.z.object({ kind: import_zod2.z.literal("profileLabel"), field: import_zod2.z.enum(["firstName", "lastName", "email", "mobileNumber", "marketingOptin"]) }),
   import_zod2.z.object({ kind: import_zod2.z.literal("privacyPolicyText") }),
   import_zod2.z.object({ kind: import_zod2.z.literal("privacyPolicyLink") }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("termsAndConditionsText") }),
+  import_zod2.z.object({ kind: import_zod2.z.literal("termsAndConditionsUrl") }),
   import_zod2.z.object({ kind: import_zod2.z.literal("consentText"), consentId: import_zod2.z.string() }),
   import_zod2.z.object({ kind: import_zod2.z.literal("consentLink"), consentId: import_zod2.z.string() }),
   import_zod2.z.object({ kind: import_zod2.z.literal("questionHeading"), questionId: import_zod2.z.string() }),
@@ -3398,14 +3690,6 @@ function renderProfileFields(fields) {
   return parts.join("");
 }
 
-// src/codegen/domIds.ts
-function answerDomKey(order) {
-  return `A${order}`;
-}
-function questionInputId(questionId, answerOrder) {
-  return `${questionId}${answerDomKey(answerOrder)}`;
-}
-
 // src/codegen/html/fragments/renderQuestionModule.ts
 function renderQuestionModule(q) {
   const requiredStar = q.required ? '<span class="star">*</span>' : "";
@@ -3439,8 +3723,7 @@ var CDN_SCRIPTS = '<script type="text/javascript" src="https://code.jquery.com/j
 var FAVICON_TAG = '<link rel="shortcut icon" href="https://res6.mena2p.crm.samsung.com/res/tracking/Favicon.png">';
 var FONTS_TAG = '<link rel="stylesheet" href="samsungSS_fonts_2026.css">';
 var ADOBE_LAUNCH_SCRIPT = '<script src="https://assets.adobedtm.com/72afb75f5516/dd6b57adea42/launch-b679a712f5a6.min.js" async></script>';
-var TERMS_URL = "https://res6.mena2p.crm.samsung.com/res/tracking/SGE_Hand_Raiser _romotionNRaffle_TnCsv3.pdf";
-var termsLink = (extraClass) => `<a${extraClass ? ` class="${extraClass}"` : ""} style="text-align:center" href="${TERMS_URL}" target="_blank">* Terms and conditions apply.<span></span><img class="form_bottom_img" src="blue_arr.png"></a>`;
+var termsLink = (form, extraClass) => form.fields.termsAndConditions ? `<a${extraClass ? ` class="${extraClass}"` : ""} style="text-align:center" href="#" target="_blank" id="termsAndConditionsLink"><span></span><img class="form_bottom_img" src="blue_arr.png"></a>` : "";
 function renderPage(form, config, variant, fileNames) {
   const isOc = variant === "oc";
   const analyticsScript = config.analytics?.enabled ? ADOBE_LAUNCH_SCRIPT : "";
@@ -3487,7 +3770,7 @@ function renderPage(form, config, variant, fileNames) {
     }
   }
   const privacyBlock = consentChecks.length > 0 ? `<div class="form_bottom_check_group">${consentChecks.join("")}</div>` : "";
-  const submitBlock = '<button class="disabled" disabled id="btnSubmit"></button><div class="error" id="apiError" style="display:none"></div>' + termsLink(isOc ? "form_bottom_terms" : "");
+  const submitBlock = '<button class="disabled" disabled id="btnSubmit"></button><div class="error" id="apiError" style="display:none"></div>' + termsLink(form, isOc ? "form_bottom_terms" : "");
   const bottomGroup = isOc ? `${privacyBlock}<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>` : `<div class="form_bottom_group">${privacyBlock}${submitBlock}</div>`;
   const topHeading = '<h2><br class="b_850"><span></span></h2>';
   const topSubheading = '<p class="top_subheading"></p>';
@@ -4385,6 +4668,13 @@ function buildDataJs(form, config, fileNames) {
         imageAlt: "",
         url: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkUrlByLocale, locale, defaultLocale) : ""
       },
+      termsAndConditions: f.termsAndConditions ? resolveLocalizedText(f.termsAndConditions.textByLocale, locale, defaultLocale) : "",
+      termsAndConditionsLink: {
+        label: "",
+        image: "",
+        imageAlt: "",
+        url: f.termsAndConditions ? resolveLocalizedText(f.termsAndConditions.urlByLocale, locale, defaultLocale) : ""
+      },
       subscribe: f.marketingOptin ? resolveLocalizedText(f.marketingOptin.labelByLocale, locale, defaultLocale) : "",
       submitButton: resolveLocalizedText(f.submitButton.labelByLocale, locale, defaultLocale),
       hrTy: resolvePageCopy(form.thankYou, locale, defaultLocale),
@@ -4581,6 +4871,20 @@ $(document).ready(function ()\r
                 ckbLabelLink.attr("href", fields[language][ckbLabel.attr("for") + "Link"]["url"]);\r
             }\r
         });\r
+\r
+        // Terms & Conditions link (optional, admin/subsidiary-configured) \u2014 a\r
+        // standalone anchor sibling of #btnSubmit, not a form_bottom_check div, so\r
+        // it needs its own small population block rather than the generic loop\r
+        // above. Only present in the DOM at all when configured (see\r
+        // pageTemplate.ts), so this is a no-op otherwise.\r
+        var termsAndConditionsLink = $("#termsAndConditionsLink");\r
+\r
+        if(termsAndConditionsLink.length === 1)\r
+        {\r
+            termsAndConditionsLink.find("span").html(fields[language]["termsAndConditions"]);\r
+\r
+            termsAndConditionsLink.attr("href", fields[language]["termsAndConditionsLink"]["url"]);\r
+        }\r
 \r
         // Submit Button\r
         $("#btnSubmit").html(fields[language]["submitButton"]);\r
@@ -5591,6 +5895,20 @@ $(document).ready(function ()\r
             }\r
         });\r
 \r
+        // Terms & Conditions link (optional, admin/subsidiary-configured) \u2014 a\r
+        // standalone anchor sibling of #btnSubmit, not a form_bottom_check div, so\r
+        // it needs its own small population block rather than the generic loop\r
+        // above. Only present in the DOM at all when configured (see\r
+        // pageTemplate.ts), so this is a no-op otherwise.\r
+        var termsAndConditionsLink = $("#termsAndConditionsLink");\r
+\r
+        if(termsAndConditionsLink.length === 1)\r
+        {\r
+            termsAndConditionsLink.find("span").html(fields[language]["termsAndConditions"]);\r
+\r
+            termsAndConditionsLink.attr("href", fields[language]["termsAndConditionsLink"]["url"]);\r
+        }\r
+\r
         // Submit Button\r
         $("#btnSubmit").html(fields[language]["submitButton"]);\r
         \r
@@ -6534,6 +6852,8 @@ function defaultBuilderConfig() {
   ENGLISH_LOCALE,
   RTL_LANGS,
   applyContribution,
+  buildQuestionMasterRows,
+  buildQuestionMasterWorkbook,
   contributionContentSchema,
   defaultBuilderConfig,
   findCallingCodeEntry,

@@ -22,6 +22,8 @@ export type TranslationTarget =
   | { kind: "profileLabel"; field: "firstName" | "lastName" | "email" | "mobileNumber" | "marketingOptin" }
   | { kind: "privacyPolicyText" }
   | { kind: "privacyPolicyLink" }
+  | { kind: "termsAndConditionsText" }
+  | { kind: "termsAndConditionsUrl" }
   | { kind: "consentText"; consentId: string }
   | { kind: "consentLink"; consentId: string }
   | { kind: "questionHeading"; questionId: string }
@@ -75,6 +77,16 @@ function applyTranslationEntry(form: FormDefinition, entry: TranslationEntry): v
       form.fields.privacyPolicy.linkUrlByLocale = { ...form.fields.privacyPolicy.linkUrlByLocale, [locale]: value };
       return;
     }
+    case "termsAndConditionsText": {
+      if (!form.fields.termsAndConditions) return;
+      form.fields.termsAndConditions.textByLocale = { ...form.fields.termsAndConditions.textByLocale, [locale]: value };
+      return;
+    }
+    case "termsAndConditionsUrl": {
+      if (!form.fields.termsAndConditions) return;
+      form.fields.termsAndConditions.urlByLocale = { ...form.fields.termsAndConditions.urlByLocale, [locale]: value };
+      return;
+    }
     case "consentText": {
       const consent = form.fields.additionalConsents?.find((c) => c.id === target.consentId);
       if (!consent) return;
@@ -116,6 +128,9 @@ function translationTargetExists(form: FormDefinition, target: TranslationTarget
     case "privacyPolicyText":
     case "privacyPolicyLink":
       return !!form.fields.privacyPolicy;
+    case "termsAndConditionsText":
+    case "termsAndConditionsUrl":
+      return !!form.fields.termsAndConditions;
     case "consentText":
     case "consentLink":
       return !!form.fields.additionalConsents?.some((c) => c.id === target.consentId);
@@ -134,6 +149,9 @@ function describeTarget(target: TranslationTarget): string {
     case "privacyPolicyText":
     case "privacyPolicyLink":
       return "Privacy Policy";
+    case "termsAndConditionsText":
+    case "termsAndConditionsUrl":
+      return "Terms and Conditions";
     case "consentText":
     case "consentLink":
       return `consent "${target.consentId}"`;

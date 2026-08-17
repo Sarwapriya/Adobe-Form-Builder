@@ -27,6 +27,7 @@ import {
   createProjectCode,
   listProjectCodes,
   setProjectCodeDateRange,
+  setProjectCodeLocked,
   setProjectCodeOpen,
   setProjectCodeValue,
 } from "../services/projectCodeService";
@@ -43,6 +44,12 @@ import {
   listSubsidiaryProjectBlocks,
 } from "../services/subsidiaryProjectBlockService";
 import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
+import {
+  generateQuestionMaster,
+  getReadiness as getQuestionMasterReadiness,
+  getVersionFile as getQuestionMasterVersionFile,
+  listVersions as listQuestionMasterVersions,
+} from "../services/questionMasterService";
 import type { UploadStatus } from "../entities/Upload";
 
 export const adminRouter = Router();
@@ -218,26 +225,28 @@ adminRouter.post(
 const updateProjectCodeSchema = z.object({
   code: z.string().trim().min(1).optional(),
   isOpen: z.boolean().optional(),
+  isLocked: z.boolean().optional(),
   startDate: dateStringSchema.nullable().optional(),
   endDate: dateStringSchema.nullable().optional(),
   cutoffDate: dateStringSchema.nullable().optional(),
 });
 
-// Closing a project code here is the only thing that blocks new uploads
-// against it — see uploadService.createUpload's call to
-// assertProjectCodeOpenForUpload. It does not affect uploads already made
-// under that code. startDate/endDate are purely descriptive (see
-// ProjectCode entity) and applied independently of isOpen/code — any of the
-// three can be sent alone (e.g. the "click a chip to toggle" UI only ever
-// sends isOpen; the date-range editor only ever sends the dates; the rename
-// field only ever sends code) or together. Renaming (code) never touches
+// Closing a project code here blocks new uploads against it for everyone — see
+// uploadService.createUpload's call to assertProjectCodeOpenForUpload. Locking it
+// (isLocked) is a separate, more permanent freeze that only blocks non-admin
+// uploads/contributions — see ProjectCode.isLocked's own doc comment. Neither affects
+// uploads already made under that code. startDate/endDate are purely descriptive (see
+// ProjectCode entity) and every field here is applied independently — any of them
+// can be sent alone (e.g. the "click a chip to toggle" UI only ever sends isOpen or
+// isLocked; the date-range editor only ever sends the dates; the rename field only
+// ever sends code) or together. Renaming (code) never touches
 // uploads already made under the old value — see setProjectCodeValue's own
 // doc comment.
 adminRouter.patch(
   "/project-codes/:id",
   validateBody(updateProjectCodeSchema),
   asyncHandler(async (req, res) => {
-    const { code, isOpen, ...dateRange } = req.body as z.infer<typeof updateProjectCodeSchema>;
+    const { code, isOpen, isLocked, ...dateRange } = req.body as z.infer<typeof updateProjectCodeSchema>;
 
     let updated = null;
     if (code !== undefined) {
@@ -245,6 +254,9 @@ adminRouter.patch(
     }
     if (isOpen !== undefined) {
       updated = await setProjectCodeOpen(req.params.id, isOpen);
+    }
+    if (isLocked !== undefined) {
+      updated = await setProjectCodeLocked(req.params.id, isLocked);
     }
     if ("startDate" in dateRange || "endDate" in dateRange || "cutoffDate" in dateRange) {
       updated = await setProjectCodeDateRange(req.params.id, dateRange);
@@ -650,5 +662,74 @@ adminRouter.get(
     res.set("Content-Type", "text/html");
     res.set("Content-Disposition", `attachment; filename="qa-report-${req.params.id}.html"`);
     res.send(result.html);
+  })
+);
+
+// Every active-subsidiary Form under a project code, plus whether each has been
+// published yet — lets the Question Master page show who isn't ready before an admin
+// clicks Generate. See questionMasterService.getReadiness.
+adminRouter.get(
+  "/question-master/readiness",
+  asyncHandler(async (req, res) => {
+    const projectCode = typeof req.query.projectCode === "string" ? req.query.projectCode : undefined;
+    if (!projectCode) {
+      res.status(400).json({ error: "projectCode query param is required" });
+      return;
+    }
+    const readiness = await getQuestionMasterReadiness(projectCode);
+    res.json(readiness);
+  })
+);
+
+const generateQuestionMasterSchema = z.object({
+  projectCode: z.string().trim().min(1),
+  division: z.string().trim().max(50).optional(),
+});
+
+// Compiles every published form under the given project code into a new, versioned
+// Question Master .xlsx. See questionMasterService.generateQuestionMaster.
+adminRouter.post(
+  "/question-master/generate",
+  validateBody(generateQuestionMasterSchema),
+  asyncHandler(async (req, res) => {
+    const { projectCode, division } = req.body as z.infer<typeof generateQuestionMasterSchema>;
+    const result = await generateQuestionMaster(projectCode, division ?? "", req.auth!.sub);
+    if (result.outcome === "project_not_found") {
+      res.status(404).json({ error: `Unknown project code "${projectCode}"` });
+      return;
+    }
+    if (result.outcome === "not_locked") {
+      res.status(409).json({ error: "This project code must be locked before generating a Question Master" });
+      return;
+    }
+    res.status(201).json(result.version);
+  })
+);
+
+// Every Question Master version generated for a project code, newest first.
+adminRouter.get(
+  "/question-master/versions",
+  asyncHandler(async (req, res) => {
+    const projectCode = typeof req.query.projectCode === "string" ? req.query.projectCode : undefined;
+    if (!projectCode) {
+      res.status(400).json({ error: "projectCode query param is required" });
+      return;
+    }
+    const versions = await listQuestionMasterVersions(projectCode);
+    res.json(versions);
+  })
+);
+
+adminRouter.get(
+  "/question-master/versions/:id/download",
+  asyncHandler(async (req, res) => {
+    const result = await getQuestionMasterVersionFile(req.params.id);
+    if (result.outcome === "not_found") {
+      res.status(404).json({ error: "Question Master version not found" });
+      return;
+    }
+    res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.set("Content-Disposition", `attachment; filename="${result.fileName}"`);
+    res.send(result.buffer);
   })
 );

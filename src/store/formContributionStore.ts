@@ -30,6 +30,10 @@ export function targetKey(target: TranslationTarget): string {
       return "privacyPolicyText";
     case "privacyPolicyLink":
       return "privacyPolicyLink";
+    case "termsAndConditionsText":
+      return "termsAndConditionsText";
+    case "termsAndConditionsUrl":
+      return "termsAndConditionsUrl";
     case "consentText":
       return `consentText:${target.consentId}`;
     case "consentLink":

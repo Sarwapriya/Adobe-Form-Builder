@@ -24,6 +24,18 @@ export class ProjectCode {
   @Column({ type: "bit", default: true })
   isOpen!: boolean;
 
+  /** A separate, more permanent freeze from `isOpen` above: once locked, subsidiary
+   * (non-admin) users can no longer submit Form Builder contributions or Excel uploads
+   * for this project code — see projectCodeService.assertProjectCodeUnlockedForUpload
+   * (uploads) and formContributionService.submitContribution (contributions), neither of
+   * which `isOpen` ever covered (it only ever gated new uploads). Admins stay exempt from
+   * both checks. Also the precondition for generating a Question Master (see
+   * questionMasterService.generateQuestionMaster) — locking guarantees nothing can
+   * change out from under a generated snapshot. Toggled by an admin, independent of
+   * `isOpen`. */
+  @Column({ type: "bit", default: false })
+  isLocked!: boolean;
+
   /** Informational campaign date range (e.g. "this campaign runs Jun 1 -
    * Jun 30") — purely descriptive, shown in the admin UI. Neither bound is
    * enforced against new uploads; `isOpen` above is the only thing that

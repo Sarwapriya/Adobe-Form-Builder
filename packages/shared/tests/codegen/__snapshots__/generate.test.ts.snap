@@ -51,6 +51,13 @@ const fields = {
       "imageAlt": "",
       "url": ""
     },
+    "termsAndConditions": "",
+    "termsAndConditionsLink": {
+      "label": "",
+      "image": "",
+      "imageAlt": "",
+      "url": ""
+    },
     "subscribe": "",
     "submitButton": "Submit",
     "hrTy": {
@@ -86,6 +93,13 @@ const fields = {
     "callingCodeDropdownFirstEntry": "",
     "privacyPolicy": "",
     "privacyPolicyLink": {
+      "label": "",
+      "image": "",
+      "imageAlt": "",
+      "url": ""
+    },
+    "termsAndConditions": "",
+    "termsAndConditionsLink": {
       "label": "",
       "image": "",
       "imageAlt": "",
@@ -1026,7 +1040,7 @@ exports[`generateSolution > matches the reference fixture snapshot (ff.html) 1`]
 <div class="main">
 <form action="" id="dataForm">
 <div class="form_top_group"><div class="form_text_bx"><p class="form_label"><span></span><span class="star">*</span></p><div class="input_wrap"><input autocapitalize="none" autocomplete="off" autocorrect="off" data-parsley-trigger="blur" data-parsley-error-message="Enter a valid Email address" data-parsley-pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" data-parsley-required="true" data-parsley-type="email" data-pt-api="y" id="email" maxlength="128" name="email" placeholder="" spellcheck="false" type="email"><div class="btn_clear"></div></div></div></div>
-<div class="form_check_group"><div class="form_check_module" id="Q1"><div class="form_check_title"><h3><span></span><span class="star">*</span></h3><p></p></div><div class="radio_group"><div class="radio_wrap"><input type="radio" id="Q1A1" name="Q1" value="A1" data-pt-api="y" data-parsley-error-message="Must select atleast one"><label for="Q1A1"><p></p></label></div><div class="radio_wrap"><input type="radio" id="Q1A2" name="Q1" value="A2" data-pt-api="y"><label for="Q1A2"><p></p></label></div></div></div><div class="form_check_module" id="Q2"><div class="form_check_title"><h3><span></span><span class="star">*</span></h3><p></p></div><div class="form_check_list_wrap"><div class="form_check_list"><input type="checkbox" id="Q2A1" name="Q2" value="A1" data-pt-api="y"><label for="Q2A1"><p></p></label></div><div class="form_check_list"><input type="checkbox" id="Q2A2" name="Q2" value="A2" data-pt-api="y"><label for="Q2A2"><p></p></label></div></div></div><div class="form_check_module" id="Q3"><div class="form_check_title"><h3><span></span></h3><p></p></div><div class="form_text_bx"><div class="input_wrap"><textarea id="Q3" name="Q3" rows="3" data-pt-api="y"></textarea></div></div></div><div class="form_bottom_group"><button class="disabled" disabled id="btnSubmit"></button><div class="error" id="apiError" style="display:none"></div><a style="text-align:center" href="https://res6.mena2p.crm.samsung.com/res/tracking/SGE_Hand_Raiser _romotionNRaffle_TnCsv3.pdf" target="_blank">* Terms and conditions apply.<span></span><img class="form_bottom_img" src="blue_arr.png"></a></div></div>
+<div class="form_check_group"><div class="form_check_module" id="Q1"><div class="form_check_title"><h3><span></span><span class="star">*</span></h3><p></p></div><div class="radio_group"><div class="radio_wrap"><input type="radio" id="Q1A1" name="Q1" value="A1" data-pt-api="y" data-parsley-error-message="Must select atleast one"><label for="Q1A1"><p></p></label></div><div class="radio_wrap"><input type="radio" id="Q1A2" name="Q1" value="A2" data-pt-api="y"><label for="Q1A2"><p></p></label></div></div></div><div class="form_check_module" id="Q2"><div class="form_check_title"><h3><span></span><span class="star">*</span></h3><p></p></div><div class="form_check_list_wrap"><div class="form_check_list"><input type="checkbox" id="Q2A1" name="Q2" value="A1" data-pt-api="y"><label for="Q2A1"><p></p></label></div><div class="form_check_list"><input type="checkbox" id="Q2A2" name="Q2" value="A2" data-pt-api="y"><label for="Q2A2"><p></p></label></div></div></div><div class="form_check_module" id="Q3"><div class="form_check_title"><h3><span></span></h3><p></p></div><div class="form_text_bx"><div class="input_wrap"><textarea id="Q3" name="Q3" rows="3" data-pt-api="y"></textarea></div></div></div><div class="form_bottom_group"><button class="disabled" disabled id="btnSubmit"></button><div class="error" id="apiError" style="display:none"></div></div></div>
 </form>
 </div>
 </div>

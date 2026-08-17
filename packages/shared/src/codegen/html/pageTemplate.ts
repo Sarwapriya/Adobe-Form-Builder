@@ -10,10 +10,10 @@ const CDN_SCRIPTS =
   '<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/parsleyjs@2/dist/parsley.min.js"></script>\n' +
   '<script src="https://cdnjs.cloudflare.com/ajax/libs/libphonenumber-js/1.11.4/libphonenumber-js.min.js"></script>';
 
-// Favicon/fonts/terms-link are hardcoded to the reference's literal values (inert
-// URLs/links, no executable behavior) rather than sourced from BuilderConfig — the
-// generated FF.js/OC.js are byte-identical copies of the reference scripts, so the
-// HTML they run against needs to be the reference's own markup, not a generic reskin.
+// Favicon/fonts are hardcoded to the reference's literal values (inert URLs, no
+// executable behavior) rather than sourced from BuilderConfig — the generated
+// FF.js/OC.js are byte-identical copies of the reference scripts, so the HTML they
+// run against needs to be the reference's own markup, not a generic reskin.
 //
 // The Adobe Launch tag is different: it's Samsung's live production Adobe Experience
 // Platform tag, tied to Samsung's own domain/config. Loading it unconditionally (as
@@ -28,10 +28,18 @@ const FAVICON_TAG = '<link rel="shortcut icon" href="https://res6.mena2p.crm.sam
 const FONTS_TAG = '<link rel="stylesheet" href="samsungSS_fonts_2026.css">';
 const ADOBE_LAUNCH_SCRIPT =
   '<script src="https://assets.adobedtm.com/72afb75f5516/dd6b57adea42/launch-b679a712f5a6.min.js" async></script>';
-const TERMS_URL = "https://res6.mena2p.crm.samsung.com/res/tracking/SGE_Hand_Raiser _romotionNRaffle_TnCsv3.pdf";
-const termsLink = (extraClass: string) =>
-  `<a${extraClass ? ` class="${extraClass}"` : ""} style="text-align:center" href="${TERMS_URL}" target="_blank">` +
-  '* Terms and conditions apply.<span></span><img class="form_bottom_img" src="blue_arr.png"></a>';
+
+// Terms & Conditions link — an empty-text-node anchor populated at runtime from
+// `fields[language]["termsAndConditions"]`/`["termsAndConditionsLink"]` (see
+// buildDataJs.ts and the reference scripts' own termsAndConditionsLink population
+// block), same convention as privacyPolicyLink just below. Rendered only when
+// `form.fields.termsAndConditions` is set — an unconfigured form shows no link at
+// all rather than the previously-hardcoded, campaign-specific Samsung PDF link.
+const termsLink = (form: FormDefinition, extraClass: string) =>
+  form.fields.termsAndConditions
+    ? `<a${extraClass ? ` class="${extraClass}"` : ""} style="text-align:center" href="#" target="_blank" id="termsAndConditionsLink">` +
+      '<span></span><img class="form_bottom_img" src="blue_arr.png"></a>'
+    : "";
 
 /**
  * Renders the full page for either variant. Both FF and OC share the same overall
@@ -129,7 +137,7 @@ export function renderPage(form: FormDefinition, config: BuilderConfig, variant:
   const submitBlock =
     '<button class="disabled" disabled id="btnSubmit"></button>' +
     '<div class="error" id="apiError" style="display:none"></div>' +
-    termsLink(isOc ? "form_bottom_terms" : "");
+    termsLink(form, isOc ? "form_bottom_terms" : "");
 
   // OC's floating form_bottom_bar has no room for the consent group inside it (it's
   // a fixed-position bar with just the submit button/terms link — see reference

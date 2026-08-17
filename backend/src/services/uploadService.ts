@@ -10,7 +10,7 @@ import { absoluteFilePath, hasExcelFileSignature, saveGeneratedFiles, saveSource
 import { classifyFileType, generateFromWorkbook, type GenerationResult } from "./generationService";
 import { sendUploadNotification } from "./emailService";
 import { getAdminSetting } from "./adminSettingsService";
-import { assertProjectCodeOpenForUpload } from "./projectCodeService";
+import { assertProjectCodeOpenForUpload, assertProjectCodeUnlockedForUpload } from "./projectCodeService";
 import { assertSubsidiaryActiveForUpload } from "./subsidiaryService";
 import { assertNotBlocked } from "./subsidiaryProjectBlockService";
 
@@ -214,6 +214,11 @@ export interface CreateUploadInput {
    * own variant picker. Omitted means both (see generateFromWorkbook's own
    * default), same as before this feature existed. */
   variants?: FormVariant[];
+  /** Whether the caller is an admin/superadmin — see upload.router.ts's
+   * isAdminRole(req.auth!.role) computation. Admins stay exempt from
+   * assertProjectCodeUnlockedForUpload below (see ProjectCode.isLocked's own doc
+   * comment); every other gate here applies to admins the same as anyone else. */
+  isAdmin: boolean;
 }
 
 export interface CreateUploadResult {
@@ -242,16 +247,21 @@ export interface CreateUploadResult {
  * before this function ever sees it.
  */
 export async function createUpload(input: CreateUploadInput): Promise<CreateUploadResult> {
-  const { subsidiaryId, projectCode, file, userId, uploadedByUsername, requiredOverrides, variants } = input;
+  const { subsidiaryId, projectCode, file, userId, uploadedByUsername, requiredOverrides, variants, isAdmin } = input;
 
   // Checked before anything else — no point validating the file signature or
   // parsing it if the project code is closed globally, the subsidiary is
   // disabled outright, or this specific pair is blocked (see
-  // subsidiaryService.ts / subsidiaryProjectBlockService.ts). Three
-  // independent gates — any one blocks the upload, regardless of the others.
+  // subsidiaryService.ts / subsidiaryProjectBlockService.ts). Independent
+  // gates — any one blocks the upload, regardless of the others.
   await assertProjectCodeOpenForUpload(projectCode);
   await assertSubsidiaryActiveForUpload(subsidiaryId);
   await assertNotBlocked(subsidiaryId, projectCode);
+  // Locking is a separate, more permanent freeze admins stay exempt from — see
+  // ProjectCode.isLocked's own doc comment.
+  if (!isAdmin) {
+    await assertProjectCodeUnlockedForUpload(projectCode);
+  }
 
   // Checked here (not just in fileService's multer fileFilter, which only
   // sees the extension/MIME before the full buffer exists) so a renamed

@@ -147,6 +147,37 @@ describe("generated bundle (ff.html + data file + FF js) wired together", () => 
     expect(btn.disabled).toBe(false);
   });
 
+  it("populates the Terms and Conditions link's href/text at runtime when configured", async () => {
+    const form = sampleFormDefinition();
+    form.fields.termsAndConditions = {
+      textByLocale: { en_GB: "* Terms and conditions apply." },
+      urlByLocale: { en_GB: "https://example.com/terms.pdf" },
+    };
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+
+    const ffHtml = buildFfHtml(form, config, fileNames);
+    const dataJs = buildDataJs(form, config, fileNames);
+    const ffJs = buildFfJs(fileNames);
+    await runGeneratedBundle(ffHtml.contents, dataJs.contents, ffJs.contents);
+
+    const ffLink = document.getElementById("termsAndConditionsLink");
+    expect(ffLink?.getAttribute("href")).toBe("https://example.com/terms.pdf");
+    expect(ffLink?.querySelector("span")?.textContent).toBe("* Terms and conditions apply.");
+  });
+
+  it("renders no Terms and Conditions link at all when unconfigured (absent, not a hardcoded fallback)", async () => {
+    const form = sampleFormDefinition();
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+    const html = buildFfHtml(form, config, fileNames);
+    const dataJs = buildDataJs(form, config, fileNames);
+    const ffJs = buildFfJs(fileNames);
+    await runGeneratedBundle(html.contents, dataJs.contents, ffJs.contents);
+
+    expect(document.getElementById("termsAndConditionsLink")).toBeNull();
+  });
+
   it("populates the countryCode/callingCode dropdowns from the full country_subsidiary/subsidiary_detail tables, resolved from the active locale's country", async () => {
     const originalLocation = window.location.href;
     window.history.pushState({}, "", "/ff.html?lang=ar_AE");

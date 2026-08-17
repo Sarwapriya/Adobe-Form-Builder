@@ -170,6 +170,7 @@ CREATE TABLE ProjectCodes (
     id         UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
     code       NVARCHAR(100) NOT NULL UNIQUE,
     isOpen     BIT NOT NULL DEFAULT 1,
+    isLocked   BIT NOT NULL DEFAULT 0,
     startDate  DATE NULL,
     endDate    DATE NULL,
     cutoffDate DATE NULL,
@@ -237,6 +238,25 @@ CREATE TABLE QaTestCaseResults (
     createdAt DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
 CREATE INDEX IX_QaTestCaseResults_qaRunId ON QaTestCaseResults(qaRunId);
+
+-- One generated snapshot of the "Question Master" admin export for a project code — a
+-- flat, versioned .xlsx compiled from every active subsidiary's published Form under
+-- that project (see questionMasterService.ts). version is assigned once, at generation
+-- time. division has no equivalent anywhere else in the app — an admin types it into
+-- the Generate dialog each time, recorded per-version here.
+CREATE TABLE QuestionMasterVersions (
+    id                UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    projectCode       NVARCHAR(100) NOT NULL,
+    version           INT NOT NULL,
+    division          NVARCHAR(50) NOT NULL DEFAULT '',
+    filePath          NVARCHAR(500) NOT NULL,
+    subsidiaryCount   INT NOT NULL DEFAULT 0,
+    totalRows         INT NOT NULL DEFAULT 0,
+    generatedByUserId UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
+    generatedAt       DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+CREATE UNIQUE INDEX UQ_QuestionMasterVersions_projectCode_version ON QuestionMasterVersions(projectCode, version);
+CREATE INDEX IX_QuestionMasterVersions_projectCode ON QuestionMasterVersions(projectCode);
 
 -- Admin-configurable toggle read by the submit endpoint to decide whether
 -- submitting an upload locks that version's generated files against further

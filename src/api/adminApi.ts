@@ -207,6 +207,14 @@ export function setProjectCodeOpen(id: string, isOpen: boolean): Promise<Project
   return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { isOpen });
 }
 
+/** Locking a project code blocks subsidiary (non-admin) uploads and Form Builder
+ * contributions against it, and becomes the precondition for generating a Question
+ * Master (see `ProjectCode.isLocked`'s own doc comment) — a separate, more permanent
+ * freeze from `setProjectCodeOpen` above. Admins stay exempt. */
+export function setProjectCodeLocked(id: string, isLocked: boolean): Promise<ProjectCode> {
+  return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { isLocked });
+}
+
 /** Renames a project code's own text value (server rejects an exact
  * case-insensitive duplicate with a 409). Does not retroactively change
  * anything already uploaded under the old value — see backend

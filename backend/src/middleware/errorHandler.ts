@@ -6,6 +6,7 @@ import {
   NotFoundError,
   ConflictError,
   ProjectCodeClosedError,
+  ProjectCodeLockedError,
   SubsidiaryInactiveError,
   SubsidiaryProjectBlockedError,
   ProjectCodeMismatchError,
@@ -44,6 +45,7 @@ export function errorHandler(
   if (
     err instanceof ConflictError ||
     err instanceof ProjectCodeClosedError ||
+    err instanceof ProjectCodeLockedError ||
     err instanceof SubsidiaryInactiveError ||
     err instanceof SubsidiaryProjectBlockedError
   ) {

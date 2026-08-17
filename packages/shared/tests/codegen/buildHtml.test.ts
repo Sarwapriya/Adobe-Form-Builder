@@ -48,6 +48,11 @@ describe("buildFfHtml", () => {
     // No privacy checkbox rendered since the fixture has no privacyPolicy field.
     expect(doc.querySelector("#privacyPolicy")).toBeNull();
 
+    // No Terms and Conditions link rendered since the fixture has no
+    // termsAndConditions field — absent means not rendered, same as every
+    // other optional field, not a fallback to some hardcoded default link.
+    expect(doc.querySelector("#termsAndConditionsLink")).toBeNull();
+
     // All text nodes stay empty — text is injected at runtime by the reference script.
     expect(doc.querySelector("#Q1 h3 span")?.textContent).toBe("");
   });
@@ -80,13 +85,31 @@ describe("buildFfHtml", () => {
     expect(doc.documentElement.getAttribute("dir")).toBe("rtl");
   });
 
-  it("always includes the reference's exact static head/skeleton (title, favicon, fonts, T&C link)", () => {
+  it("always includes the reference's exact static head/skeleton (title, favicon, fonts)", () => {
     const form = sampleFormDefinition();
     const file = buildFfHtml(form, defaultBuilderConfig(), resolveFileNames(form, defaultBuilderConfig()));
     expect(file.contents).toContain("<title>Samsung</title>");
     expect(file.contents).toContain("https://res6.mena2p.crm.samsung.com/res/tracking/Favicon.png");
     expect(file.contents).toContain("samsungSS_fonts_2026.css");
-    expect(file.contents).toContain("* Terms and conditions apply.");
+  });
+
+  it("renders an empty-text-node Terms and Conditions link, in both variants, only when configured", () => {
+    const form = sampleFormDefinition();
+    form.fields.termsAndConditions = {
+      textByLocale: { en_GB: "* Terms and conditions apply." },
+      urlByLocale: { en_GB: "https://example.com/terms.pdf" },
+    };
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+
+    const ffDoc = new DOMParser().parseFromString(buildFfHtml(form, config, fileNames).contents, "text/html");
+    const ffLink = ffDoc.querySelector("#termsAndConditionsLink");
+    expect(ffLink).not.toBeNull();
+    expect(ffLink?.getAttribute("href")).toBe("#"); // populated at runtime, not baked in
+    expect(ffLink?.textContent).toBe(""); // text injected at runtime by the reference script
+
+    const ocDoc = new DOMParser().parseFromString(buildOcHtml(form, config, fileNames).contents, "text/html");
+    expect(ocDoc.querySelector("#termsAndConditionsLink")).not.toBeNull();
   });
 
   it("only includes the Adobe Launch tag when analytics is explicitly enabled — it's Samsung's live production tag and actively rewrites/clears the page outside Samsung's own site", () => {

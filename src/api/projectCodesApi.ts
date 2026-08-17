@@ -4,6 +4,12 @@ export interface ProjectCode {
   id: string;
   code: string;
   isOpen: boolean;
+  /** A separate, more permanent freeze from `isOpen` — once locked, subsidiary
+   * (non-admin) users can no longer submit Form Builder contributions or Excel
+   * uploads for this project code, and it becomes the precondition for generating a
+   * Question Master (see backend ProjectCode entity's own doc comment). Admins stay
+   * exempt. */
+  isLocked: boolean;
   /** Purely descriptive campaign date range ("YYYY-MM-DD"), never enforced
    * against uploads — see backend ProjectCode entity's own doc comment. */
   startDate: string | null;

@@ -15,7 +15,15 @@ import { BuilderValidationPanel } from "../components/formBuilder/BuilderValidat
 import { BuilderActionBar } from "../components/formBuilder/BuilderActionBar";
 import { ContributionReviewPanel } from "../components/formBuilder/ContributionReviewPanel";
 
-const PROFILE_FIELD_KEYS = new Set<string>(["firstName", "lastName", "email", "mobileNumber", "privacyPolicy", "marketingOptin"] satisfies ProfileFieldKey[]);
+const PROFILE_FIELD_KEYS = new Set<string>([
+  "firstName",
+  "lastName",
+  "email",
+  "mobileNumber",
+  "privacyPolicy",
+  "marketingOptin",
+  "termsAndConditions",
+] satisfies ProfileFieldKey[]);
 
 /** Admin-added consents beyond the two fixed slots above use dynamic
  * "consentExtraN" ids (see formBuilderHelpers.createConsent) rather than a fixed

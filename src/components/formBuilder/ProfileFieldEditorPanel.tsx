@@ -5,7 +5,14 @@ import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { ConsentVisibilityControls } from "./ConsentVisibilityControls";
 import { consentVariants } from "./formBuilderHelpers";
 
-export type ProfileFieldKey = "firstName" | "lastName" | "email" | "mobileNumber" | "privacyPolicy" | "marketingOptin";
+export type ProfileFieldKey =
+  | "firstName"
+  | "lastName"
+  | "email"
+  | "mobileNumber"
+  | "privacyPolicy"
+  | "marketingOptin"
+  | "termsAndConditions";
 
 const FIELD_LABEL: Record<ProfileFieldKey, string> = {
   firstName: "First Name",
@@ -14,6 +21,7 @@ const FIELD_LABEL: Record<ProfileFieldKey, string> = {
   mobileNumber: "Mobile Number",
   privacyPolicy: "Privacy Policy Consent",
   marketingOptin: "Marketing Opt-in",
+  termsAndConditions: "Terms and Conditions",
 };
 
 /** Config drawer content for a predefined profile field. Mobile Number gets an
@@ -99,6 +107,65 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
             updateDefinition((d) => ({ ...d, fields: { ...d.fields, privacyPolicy: { ...d.fields.privacyPolicy!, required } } }))
           }
           onVariantChange={toggleVariant}
+        />
+      </Stack>
+    );
+  }
+
+  if (fieldKey === "termsAndConditions") {
+    const termsAndConditions = definition!.fields.termsAndConditions!;
+    const text = resolveLocalizedText(termsAndConditions.textByLocale, defaultLocale, defaultLocale);
+    const url = resolveLocalizedText(termsAndConditions.urlByLocale, defaultLocale, defaultLocale);
+
+    return (
+      <Stack spacing={2}>
+        <Typography variant="subtitle1" fontWeight={700}>
+          {FIELD_LABEL.termsAndConditions}
+        </Typography>
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          An optional informational link shown next to the Submit button — not a checkbox, nothing to gate Submit
+          on. You can publish without filling this in; a subsidiary user can also add their own locale's wording
+          and link later, from the Translate & Extend page.
+        </Alert>
+        <TextField
+          label="Wording"
+          size="small"
+          fullWidth
+          multiline
+          minRows={2}
+          value={text}
+          helperText='e.g. "* Terms and conditions apply."'
+          onChange={(e) =>
+            updateDefinition((d) => ({
+              ...d,
+              fields: {
+                ...d.fields,
+                termsAndConditions: {
+                  ...d.fields.termsAndConditions!,
+                  textByLocale: { ...d.fields.termsAndConditions!.textByLocale, [defaultLocale]: e.target.value },
+                },
+              },
+            }))
+          }
+        />
+        <TextField
+          label="Link URL"
+          size="small"
+          fullWidth
+          value={url}
+          helperText="The Terms and Conditions page this link points to."
+          onChange={(e) =>
+            updateDefinition((d) => ({
+              ...d,
+              fields: {
+                ...d.fields,
+                termsAndConditions: {
+                  ...d.fields.termsAndConditions!,
+                  urlByLocale: { ...d.fields.termsAndConditions!.urlByLocale, [defaultLocale]: e.target.value },
+                },
+              },
+            }))
+          }
         />
       </Stack>
     );

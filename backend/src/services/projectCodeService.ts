@@ -1,7 +1,7 @@
 import { AppDataSource } from "../config/data-source";
 import { ProjectCode } from "../entities/ProjectCode";
 import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
-import { ConflictError, NotFoundError, ProjectCodeClosedError } from "../utils/errors";
+import { ConflictError, NotFoundError, ProjectCodeClosedError, ProjectCodeLockedError } from "../utils/errors";
 
 /** Every project code, newest first — the admin management view (shows both
  * open and closed). */
@@ -116,6 +116,18 @@ export async function setProjectCodeOpen(id: string, isOpen: boolean): Promise<P
   return repo.save(existing);
 }
 
+/** Toggles a project code locked/unlocked — see ProjectCode.isLocked's own doc
+ * comment for what locking actually blocks (subsidiary uploads/contributions) and how
+ * it differs from isOpen. Returns null if the id doesn't exist. */
+export async function setProjectCodeLocked(id: string, isLocked: boolean): Promise<ProjectCode | null> {
+  const repo = AppDataSource.getRepository(ProjectCode);
+  const existing = await repo.findOne({ where: { id } });
+  if (!existing) return null;
+
+  existing.isLocked = isLocked;
+  return repo.save(existing);
+}
+
 /** Updates a project code's campaign date range. Each field is applied only
  * if present in `dateRange` (an explicit `null` clears that bound; an
  * omitted key leaves it as-is) — lets the admin UI save just the field that
@@ -151,5 +163,22 @@ export async function assertProjectCodeOpenForUpload(code: string): Promise<void
   }
   if (!projectCode.isOpen) {
     throw new ProjectCodeClosedError(`Project code "${code}" is closed for new uploads`);
+  }
+}
+
+/**
+ * Called from uploadService.createUpload alongside assertProjectCodeOpenForUpload,
+ * but only for non-admin uploaders — see ProjectCode.isLocked's own doc comment for why
+ * this is a separate, more permanent freeze from isOpen/closed. Throws NotFoundError if
+ * no project code matches, or ProjectCodeLockedError if an admin has locked it. A no-op
+ * (resolves) if it's unlocked.
+ */
+export async function assertProjectCodeUnlockedForUpload(code: string): Promise<void> {
+  const projectCode = await AppDataSource.getRepository(ProjectCode).findOne({ where: { code } });
+  if (!projectCode) {
+    throw new NotFoundError(`Unknown project code "${code}"`);
+  }
+  if (projectCode.isLocked) {
+    throw new ProjectCodeLockedError(`Project code "${code}" is locked for new uploads`);
   }
 }

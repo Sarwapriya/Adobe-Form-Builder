@@ -150,22 +150,23 @@ export interface CutoffReminderDetails {
   subsidiaryId: string;
   projectCode: string;
   cutoffDate: Date;
-  /** Names of the forms under this project that this subsidiary still hasn't
-   * gotten approved — see cutoffReminderService.ts's own doc comment for
-   * exactly what "not yet approved" means. */
-  formNames: string[];
+  /** Each form under this project that this subsidiary still has something
+   * pending on, plus why — "Translation not yet approved" and/or "Terms &
+   * Conditions not configured" (see cutoffReminderService.ts's own doc
+   * comments for exactly what each reason means). A form only appears here
+   * once, with every reason that applies to it, not once per reason. */
+  items: { formName: string; reasons: string[] }[];
 }
 
 function buildCutoffReminderMessage(to: string[], details: CutoffReminderDetails) {
   const link = `${process.env.FRONTEND_URL ?? ""}/my-forms`;
   const cutoff = formatDateOnly(details.cutoffDate);
-  const subject = `Reminder: forms pending approval for "${details.projectCode}" (cutoff ${cutoff})`;
+  const subject = `Reminder: forms pending for "${details.projectCode}" (cutoff ${cutoff})`;
   const text =
     `The following form(s) for subsidiary "${details.subsidiaryId}" under project "${details.projectCode}" ` +
-    `are not yet approved, and this project's cutoff date is ${cutoff}:\n\n` +
-    details.formNames.map((name) => `- ${name}`).join("\n") +
-    `\n\nPlease review and submit any needed translations, questions, or consents for admin approval before the ` +
-    `cutoff: ${link}\n`;
+    `still need attention, and this project's cutoff date is ${cutoff}:\n\n` +
+    details.items.map((item) => `- ${item.formName}: ${item.reasons.join("; ")}`).join("\n") +
+    `\n\nPlease review and address the item(s) above before the cutoff: ${link}\n`;
 
   return { to: to.join(", "), from: resolveFrom(to[0]), subject, text };
 }
@@ -190,6 +191,55 @@ export async function sendCutoffReminder(recipients: string[], details: CutoffRe
     await transporter.sendMail(buildCutoffReminderMessage(recipients, details));
   } catch (err) {
     console.error("Failed to send cutoff reminder email", err);
+  }
+}
+
+/** One pending item across the whole daily cutoff-reminder run, for the admin
+ * summary email below — same shape whether the form's gap is "not yet
+ * approved," "Terms & Conditions not configured," or both. */
+export interface AdminPendingItem {
+  subsidiaryId: string;
+  projectCode: string;
+  formName: string;
+  cutoffDate: Date;
+  reasons: string[];
+}
+
+function buildAdminPendingSummaryMessage(to: string[], items: AdminPendingItem[]) {
+  const link = `${process.env.FRONTEND_URL ?? ""}/admin/form-builder`;
+  const subject = `Reminder: ${items.length} form${items.length === 1 ? "" : "s"} pending before cutoff`;
+  const text =
+    `The following forms still need attention before their project's cutoff date:\n\n` +
+    items
+      .map(
+        (item) =>
+          `- ${item.formName} (subsidiary "${item.subsidiaryId}", project "${item.projectCode}", cutoff ${formatDateOnly(item.cutoffDate)}): ${item.reasons.join("; ")}`,
+      )
+      .join("\n") +
+    `\n\nReview them in the Form Initiator: ${link}\n`;
+
+  return { to: to.join(", "), from: resolveFrom(to[0]), subject, text };
+}
+
+/**
+ * Sends ONE consolidated summary email to every admin recipient, covering
+ * every pending item across every subsidiary/project code from a single
+ * cutoff-reminder run — deliberately not one email per form or per
+ * subsidiary, so admins get one digest instead of a flood. Same
+ * never-throws/best-effort/console-only discipline as sendCutoffReminder; a
+ * no-op if there are no recipients or nothing pending.
+ */
+export async function sendAdminPendingItemsSummary(recipients: string[], items: AdminPendingItem[]): Promise<void> {
+  if (recipients.length === 0 || items.length === 0) return;
+  try {
+    ensureInitialized();
+    if (!transporter) {
+      console.warn("SMTP not configured (SMTP_HOST) — skipping admin pending-items summary email");
+      return;
+    }
+    await transporter.sendMail(buildAdminPendingSummaryMessage(recipients, items));
+  } catch (err) {
+    console.error("Failed to send admin pending-items summary email", err);
   }
 }
 

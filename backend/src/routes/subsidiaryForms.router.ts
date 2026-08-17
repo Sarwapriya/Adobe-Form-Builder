@@ -83,6 +83,10 @@ subsidiaryFormsRouter.post(
       res.status(422).json({ error: "contribution is not valid", validation: result.validation });
       return;
     }
+    if (result.outcome === "project_locked") {
+      res.status(409).json({ error: "This project code is locked — contributions can no longer be submitted" });
+      return;
+    }
     res.status(201).json(result.contribution);
   }),
 );
