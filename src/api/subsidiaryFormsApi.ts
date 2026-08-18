@@ -44,6 +44,13 @@ export function submitAdHocFormForReview(formId: string): Promise<void> {
   return apiClient.post<void>(`/api/v1/forms/adhoc/${formId}/submit-for-review`);
 }
 
+/** Allowed while still draft or pending review; the server rejects this with a
+ * 409 once an admin has published the form (see deleteAdHocForm in
+ * formBuilderService.ts). */
+export function deleteAdHocForm(formId: string): Promise<void> {
+  return apiClient.delete<void>(`/api/v1/forms/adhoc/${formId}`);
+}
+
 export type ContributionStatus = "pending" | "approved" | "rejected";
 
 export const CONTRIBUTION_STATUS_LABEL: Record<ContributionStatus, string> = {

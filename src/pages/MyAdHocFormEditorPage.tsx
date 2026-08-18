@@ -4,6 +4,7 @@ import { Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { useFormBuilderStore } from "../store/formBuilderStore";
 import { PageHeader } from "../components/common/PageHeader";
+import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
 import { SubsidiaryLocalePicker } from "../components/formBuilder/SubsidiaryLocalePicker";
 import { BuilderCanvas, PredefinedFieldToggles } from "../components/formBuilder/BuilderCanvas";
 import { QuestionEditorPanel } from "../components/formBuilder/QuestionEditorPanel";
@@ -34,8 +35,12 @@ function isConsentId(key: string): boolean {
  * (restricted to this subsidiary's admin-managed master locale list, no free
  * text) and AdHocActionBar instead of BuilderActionBar (Submit for Review, not
  * Publish — an admin publishes it via AdHocReviewPanel after picking a Project
- * Code, never asked here). No CampaignHeaderPanel — name is fixed at creation
- * and subsidiary/project code aren't editable by the subsidiary user at all.
+ * Code, never asked here). CampaignHeaderPanel is reused as-is for the
+ * heading/subheading/submit-button-label copy — every text field in this
+ * builder, including SubsidiaryLocalePicker's enable/disable-only locale list,
+ * is always edited in the form's single default locale, no per-locale editing
+ * UI. Only the form's name is fixed at creation and subsidiary/project code
+ * aren't editable by the subsidiary user at all.
  * No VariantConfigPanel either — an ad-hoc form is always Full Form only (no
  * One-Click), enforced both here (the panel that would add "oc" is simply
  * never rendered) and server-side (formBuilderService's defaultConfig seeds
@@ -85,6 +90,7 @@ export function MyAdHocFormEditorPage() {
       <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2, alignItems: "flex-start" }}>
         <Box sx={{ flex: "1 1 auto", minWidth: 0, width: "100%" }}>
           <SubsidiaryLocalePicker subsidiaryName={subsidiaryId} />
+          <CampaignHeaderPanel />
           <PredefinedFieldToggles selectedField={selected} onSelectField={pendingReview ? () => {} : setSelected} />
           <BuilderCanvas
             selectedQuestionId={PROFILE_FIELD_KEYS.has(selected ?? "") || isConsentId(selected ?? "") ? null : selected}

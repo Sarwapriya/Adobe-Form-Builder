@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Alert,
@@ -8,10 +7,6 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   FormControlLabel,
   MenuItem,
   Paper,
@@ -19,13 +14,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { ApiError } from "../api/apiClient";
-import { createForm, deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
-import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
-import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
+import { deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 
@@ -43,12 +35,15 @@ const STATUS_OPTIONS: Array<{ value: FormStatus | ""; label: string }> = [
 ];
 
 /**
- * Admin/superadmin-only landing page for the visual form builder — lists every
- * builder-authored form (fully separate from the Excel-upload-driven Uploads
- * list elsewhere in the app) and lets an admin create a new one, which opens
- * straight into the editor (FormBuilderEditorPage) for its first edit.
+ * "Ad-hoc Forms" — the Form Initiator submenu page for subsidiary-initiated
+ * submissions (origin: "adhoc", see MyAdHocFormEditorPage on the subsidiary
+ * side), fully separate from the sibling "HR Form Initiator" submenu page
+ * (HrFormInitiatorListPage), which only ever covers admin-authored forms.
+ * No "New Form" button here — an admin never creates an ad-hoc form directly,
+ * only reviews (AdHocReviewPanel, on the shared FormBuilderEditorPage) what a
+ * subsidiary user has already submitted.
  */
-export function FormBuilderListPage() {
+export function AdHocFormInitiatorListPage() {
   const navigate = useNavigate();
   const [forms, setForms] = useState<FormListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,21 +51,17 @@ export function FormBuilderListPage() {
   const [statusFilter, setStatusFilter] = useState<FormStatus | "">("");
   const [pendingReviewOnly, setPendingReviewOnly] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
-  const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
-  const [newName, setNewName] = useState("");
-  const [newSubsidiaryId, setNewSubsidiaryId] = useState("");
-  const [newProjectCode, setNewProjectCode] = useState("");
-  const [creating, setCreating] = useState(false);
   const [confirmDeleteForm, setConfirmDeleteForm] = useState<FormListItem | null>(null);
 
   async function refresh() {
     setLoading(true);
     setError(null);
     try {
-      const result = await listForms({ status: statusFilter || undefined, pendingReview: pendingReviewOnly || undefined });
+      const result = await listForms({
+        status: statusFilter || undefined,
+        pendingReview: pendingReviewOnly || undefined,
+        origin: "adhoc",
+      });
       setForms(result.items);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load forms");
@@ -83,36 +74,6 @@ export function FormBuilderListPage() {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, pendingReviewOnly]);
-
-  useEffect(() => {
-    if (!createOpen) return;
-    listSubsidiaries().then(setSubsidiaries).catch(() => undefined);
-    listOpenProjectCodes().then(setProjectCodes).catch(() => undefined);
-  }, [createOpen]);
-
-  async function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    if (!newName.trim() || !newSubsidiaryId) return;
-
-    setCreating(true);
-    setError(null);
-    try {
-      const form = await createForm({
-        name: newName.trim(),
-        subsidiaryId: newSubsidiaryId,
-        projectCode: newProjectCode || undefined,
-      });
-      setCreateOpen(false);
-      setNewName("");
-      setNewSubsidiaryId("");
-      setNewProjectCode("");
-      navigate(`/admin/form-builder/${form.id}`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create form");
-    } finally {
-      setCreating(false);
-    }
-  }
 
   async function handleConfirmDelete() {
     if (!confirmDeleteForm) return;
@@ -133,16 +94,11 @@ export function FormBuilderListPage() {
     <Box>
       <PageHeader
         icon={<DesignServicesIcon />}
-        title="Form Initiator"
-        subtitle="Visually build, preview, and publish web forms — no Excel workbook required."
-        action={
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-            New Form
-          </Button>
-        }
+        title="Ad-hoc Forms"
+        subtitle="Forms subsidiary users built themselves via My Forms — review, pick a Project Code, and approve or reject."
       />
 
-      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
+      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
         <TextField
           select
           label="Status"
@@ -174,7 +130,7 @@ export function FormBuilderListPage() {
       ) : forms.length === 0 ? (
         <Paper sx={{ p: 3 }}>
           <Typography variant="body2" color="text.secondary">
-            No forms yet — click "New Form" to create one.
+            No ad-hoc forms yet.
           </Typography>
         </Paper>
       ) : (
@@ -197,7 +153,6 @@ export function FormBuilderListPage() {
               {form.publishedVersionNumber != null && (
                 <Chip label={`v${form.publishedVersionNumber}`} size="small" variant="outlined" />
               )}
-              {form.origin === "adhoc" && <Chip label="Ad-hoc" size="small" variant="outlined" />}
               {form.pendingReview && <Chip label="Pending review" size="small" color="warning" />}
               <Chip label={form.status} color={STATUS_COLOR[form.status]} size="small" />
               <Button
@@ -226,58 +181,6 @@ export function FormBuilderListPage() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmDeleteForm(null)}
       />
-
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="xs" fullWidth>
-        <Box component="form" onSubmit={handleCreate}>
-          <DialogTitle>New Form</DialogTitle>
-          <DialogContent>
-            <Stack spacing={2} sx={{ pt: 1 }}>
-              <TextField
-                label="Name"
-                size="small"
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                required
-              />
-              <TextField
-                select
-                label="Subsidiary"
-                size="small"
-                value={newSubsidiaryId}
-                onChange={(e) => setNewSubsidiaryId(e.target.value)}
-                required
-              >
-                {subsidiaries.map((s) => (
-                  <MenuItem key={s.id} value={s.name}>
-                    {s.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                select
-                label="Project Code (optional)"
-                size="small"
-                value={newProjectCode}
-                onChange={(e) => setNewProjectCode(e.target.value)}
-              >
-                <MenuItem value="">None</MenuItem>
-                {projectCodes.map((pc) => (
-                  <MenuItem key={pc.id} value={pc.code}>
-                    {pc.code}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={!newName.trim() || !newSubsidiaryId || creating}>
-              {creating ? "Creating..." : "Create"}
-            </Button>
-          </DialogActions>
-        </Box>
-      </Dialog>
     </Box>
   );
 }

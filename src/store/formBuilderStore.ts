@@ -8,6 +8,7 @@ import {
   unpublishForm as apiUnpublishForm,
   updateDraft as apiUpdateDraft,
   type FormDetail,
+  type FormOrigin,
   type FormStatus,
 } from "../api/formBuilderApi";
 import {
@@ -26,6 +27,12 @@ export type FormBuilderMode = "admin" | "adhoc";
 interface FormBuilderState {
   formId: string | null;
   mode: FormBuilderMode;
+  /** The form's own origin ("admin" or "adhoc"), from FormDetail.origin — distinct
+   * from `mode` above, which only reflects which API base loadForm used and stays
+   * "admin" even when an admin opens an ad-hoc submission through Form Initiator
+   * for review. Drives hiding VariantConfigPanel (no One-Click) for ad-hoc forms
+   * on FormBuilderEditorPage. */
+  origin: FormOrigin;
   name: string;
   subsidiaryId: string;
   projectCode: string | null;
@@ -33,13 +40,6 @@ interface FormBuilderState {
   pendingReview: boolean;
   submittedForReviewAt: string | null;
   reviewNote: string | null;
-  /** Which locale's text every builder panel (QuestionEditorPanel,
-   * ProfileFieldEditorPanel, ConsentEditorPanel) currently reads/writes —
-   * defaults to the form's own default locale on every load. Only the ad-hoc
-   * builder's SubsidiaryLocalePicker exposes a switcher for this today; admin's
-   * own LocaleManagerPanel doesn't, so admin's editing experience is unchanged
-   * (activeLocale simply never moves off defaultLocale there). */
-  activeLocale: string;
   definition: FormDefinition | null;
   config: BuilderConfig | null;
   validation: ValidationResult;
@@ -50,7 +50,6 @@ interface FormBuilderState {
   error: string | null;
 
   loadForm: (formId: string, mode?: FormBuilderMode) => Promise<void>;
-  setActiveLocale: (locale: string) => void;
   updateDefinition: (updater: (definition: FormDefinition) => FormDefinition) => void;
   updateConfig: (patch: Partial<BuilderConfig>) => void;
   saveDraft: () => Promise<boolean>;
@@ -72,6 +71,7 @@ function applyDetail(detail: FormDetail, mode: FormBuilderMode) {
   return {
     formId: detail.id,
     mode,
+    origin: detail.origin,
     name: detail.name,
     subsidiaryId: detail.subsidiaryId,
     projectCode: detail.projectCode,
@@ -79,7 +79,6 @@ function applyDetail(detail: FormDetail, mode: FormBuilderMode) {
     pendingReview: detail.pendingReview,
     submittedForReviewAt: detail.submittedForReviewAt,
     reviewNote: detail.reviewNote,
-    activeLocale: content?.definition.meta.defaultLocale ?? "en_GB",
     definition: content?.definition ?? null,
     config: content?.config ?? null,
     validation: content ? validateFormDefinition(content.definition) : EMPTY_VALIDATION,
@@ -90,6 +89,7 @@ function applyDetail(detail: FormDetail, mode: FormBuilderMode) {
 export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
   formId: null,
   mode: "admin",
+  origin: "admin",
   name: "",
   subsidiaryId: "",
   projectCode: null,
@@ -97,7 +97,6 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
   pendingReview: false,
   submittedForReviewAt: null,
   reviewNote: null,
-  activeLocale: "en_GB",
   definition: null,
   config: null,
   validation: EMPTY_VALIDATION,
@@ -117,10 +116,6 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
     } finally {
       set({ loading: false });
     }
-  },
-
-  setActiveLocale(locale) {
-    set({ activeLocale: locale });
   },
 
   updateDefinition(updater) {
@@ -230,6 +225,7 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
     set({
       formId: null,
       mode: "admin",
+      origin: "admin",
       name: "",
       subsidiaryId: "",
       projectCode: null,
@@ -237,7 +233,6 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
       pendingReview: false,
       submittedForReviewAt: null,
       reviewNote: null,
-      activeLocale: "en_GB",
       definition: null,
       config: null,
       validation: EMPTY_VALIDATION,

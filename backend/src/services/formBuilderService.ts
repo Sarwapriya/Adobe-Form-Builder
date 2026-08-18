@@ -206,6 +206,10 @@ export interface ListFormsOptions {
   /** When set, filters to forms currently awaiting adhoc review (or explicitly
    * excludes them) — the admin Form Initiator list's "Pending review only" toggle. */
   pendingReview?: boolean;
+  /** "admin" or "adhoc" — backs the two separate Form Initiator submenu pages
+   * (HR Form Initiator / Ad-hoc Forms), same split as the subsidiary side's own
+   * My Forms submenu. */
+  origin?: FormOrigin;
 }
 
 /** Admin-facing list — every builder form regardless of who created it (this feature
@@ -229,6 +233,9 @@ export async function listForms(options: ListFormsOptions = {}): Promise<PagedRe
   }
   if (options.pendingReview !== undefined) {
     qb.andWhere("form.pendingReview = :pendingReview", { pendingReview: options.pendingReview });
+  }
+  if (options.origin) {
+    qb.andWhere("form.origin = :origin", { origin: options.origin });
   }
 
   qb.orderBy("form.updatedAt", "DESC").skip(skip).take(pageSize);
@@ -489,6 +496,26 @@ export async function rejectAdHocForm(formId: string, reviewNote?: string): Prom
     reviewNote: reviewNote ?? null,
     reviewedAt: new Date(),
   });
+  return "ok";
+}
+
+export type DeleteAdHocOutcome = "ok" | "not_found" | "already_published";
+
+/** A subsidiary user's own "Delete" action on their ad-hoc form (My Forms →
+ * Ad-hoc Forms) — allowed while still a draft or awaiting admin review, blocked
+ * once an admin has approved/published it (see approveAdHocForm, which calls
+ * publishForm) since a published form has downstream FormVersion/GeneratedFiles
+ * rows a subsidiary user shouldn't be able to remove themselves. Checks
+ * publishedVersionId rather than the current status so a form an admin later
+ * unpublished stays undeletable too — "ever published", not "currently
+ * published". Reuses the existing generic deleteForm, which itself
+ * hard-deletes a never-published form (no FormVersion/GeneratedFiles rows
+ * exist yet to worry about). */
+export async function deleteAdHocForm(formId: string, subsidiaryId: string): Promise<DeleteAdHocOutcome> {
+  const form = await findOwnedAdHocForm(formId, subsidiaryId);
+  if (!form) return "not_found";
+  if (form.publishedVersionId !== null) return "already_published";
+  await deleteForm(formId);
   return "ok";
 }
 

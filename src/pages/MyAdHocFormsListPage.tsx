@@ -10,18 +10,19 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Paper,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import TranslateIcon from "@mui/icons-material/Translate";
-import EditOffIcon from "@mui/icons-material/EditOff";
+import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { ApiError } from "../api/apiClient";
-import { createAdHocForm, listMyAdHocForms, listMyForms } from "../api/subsidiaryFormsApi";
+import { createAdHocForm, deleteAdHocForm, listMyAdHocForms } from "../api/subsidiaryFormsApi";
 import type { FormListItem } from "../api/formBuilderApi";
-import { ContributionStatusBar } from "../components/formContribution/ContributionStatusBar";
 import { PageHeader } from "../components/common/PageHeader";
 
 type AdHocStatusLabel = "Draft" | "Pending review" | "Rejected" | "Published";
@@ -41,35 +42,27 @@ const AD_HOC_STATUS_COLOR: Record<AdHocStatusLabel, "default" | "warning" | "err
 };
 
 /**
- * Landing page for a subsidiary-scoped standard user's own view of forms —
- * split into two clearly-separate categories:
- *  - "Ad-hoc Forms": brand-new forms this user builds themselves from scratch
- *    (see MyAdHocFormEditorPage) — an admin reviews and picks the Project Code
- *    before one goes live.
- *  - "HR Forms": every currently *published* form an admin created and
- *    allocated to this subsidiary (minus any whose project code is blocked,
- *    mirroring the same access rule the upload flow already applies — see
- *    backend's formAccessService.ts). Read-only here; clicking one opens the
- *    Translate & Extend page, the only way a standard user can contribute to it.
+ * "Ad-hoc Forms" — the My Forms submenu page for brand-new forms a subsidiary
+ * user builds themselves from scratch (see MyAdHocFormEditorPage). An admin
+ * reviews and picks the Project Code before one goes live. Split out from the
+ * combined My Forms page into its own sidebar submenu entry, alongside the
+ * sibling "HR Forms" page (MyHrFormsListPage).
  */
-export function MyFormsListPage() {
+export function MyAdHocFormsListPage() {
   const navigate = useNavigate();
-  const [forms, setForms] = useState<FormListItem[]>([]);
   const [adHocForms, setAdHocForms] = useState<FormListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function refresh() {
     setLoading(true);
     setError(null);
-    Promise.all([listMyForms(), listMyAdHocForms()])
-      .then(([published, adHoc]) => {
-        setForms(published);
-        setAdHocForms(adHoc);
-      })
+    listMyAdHocForms()
+      .then(setAdHocForms)
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : "Failed to load forms");
       })
@@ -97,12 +90,26 @@ export function MyFormsListPage() {
     }
   }
 
+  async function handleDelete(form: FormListItem) {
+    if (!window.confirm(`Delete "${form.name}"? This can't be undone.`)) return;
+    setDeletingId(form.id);
+    setError(null);
+    try {
+      await deleteAdHocForm(form.id);
+      setAdHocForms((prev) => prev.filter((f) => f.id !== form.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete form");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <Box>
       <PageHeader
-        icon={<TranslateIcon />}
-        title="My Forms"
-        subtitle="Ad-hoc forms you build yourself, and HR forms your admin created and allocated to your subsidiary."
+        icon={<DesignServicesIcon />}
+        title="Ad-hoc Forms"
+        subtitle="Brand-new forms you build yourself. An admin reviews each one (and picks its Project Code) before it goes live."
       />
 
       {error && (
@@ -111,16 +118,9 @@ export function MyFormsListPage() {
         </Alert>
       )}
 
-      <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
+      <Paper sx={{ p: 2, borderRadius: 3 }}>
         <Stack direction="row" alignItems="center" sx={{ mb: 1.5 }}>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="subtitle1" fontWeight={700}>
-              Ad-hoc Forms
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              A brand-new form you build yourself. An admin reviews it (and picks its Project Code) before it goes live.
-            </Typography>
-          </Box>
+          <Box sx={{ flexGrow: 1 }} />
           <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
             New Ad-hoc Form
           </Button>
@@ -160,60 +160,32 @@ export function MyFormsListPage() {
                       {form.projectCode ? ` · ${form.projectCode}` : ""}
                     </Typography>
                   </Box>
-                  <Chip label={statusLabel} size="small" color={AD_HOC_STATUS_COLOR[statusLabel]} />
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <Chip label={statusLabel} size="small" color={AD_HOC_STATUS_COLOR[statusLabel]} />
+                    {form.status === "draft" && (
+                      <Tooltip title="Delete">
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Delete"
+                            disabled={deletingId === form.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDelete(form);
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                  </Stack>
                 </Box>
               );
             })}
           </Stack>
         )}
       </Paper>
-
-      <Box sx={{ mb: 1.5 }}>
-        <Typography variant="subtitle1" fontWeight={700}>
-          HR Forms
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Published forms your admin created and allocated to your subsidiary — add translations, questions, or
-          consents for review.
-        </Typography>
-      </Box>
-
-      {loading ? (
-        <CircularProgress size={24} />
-      ) : forms.length === 0 ? (
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="body2" color="text.secondary">
-            No HR forms are available for your subsidiary yet.
-          </Typography>
-        </Paper>
-      ) : (
-        <Stack spacing={1}>
-          {forms.map((form) => (
-            <Paper key={form.id} sx={{ p: 2, cursor: "pointer" }} onClick={() => navigate(`/my-forms/${form.id}`)}>
-              <Stack direction="row" alignItems="center" gap={2}>
-                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Typography variant="subtitle1" fontWeight={700} noWrap>
-                    {form.name}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {form.subsidiaryId}
-                    {form.projectCode ? ` · ${form.projectCode}` : ""} · Updated {new Date(form.updatedAt).toLocaleString()}
-                  </Typography>
-                </Box>
-                {form.projectCodeLocked && (
-                  <Chip icon={<EditOffIcon />} label="Locked" size="small" color="warning" />
-                )}
-                {form.publishedVersionNumber != null && <Chip label={`v${form.publishedVersionNumber}`} size="small" variant="outlined" />}
-              </Stack>
-              {form.myContributionProgress && (
-                <Box sx={{ mt: 1.5, maxWidth: 360 }}>
-                  <ContributionStatusBar progress={form.myContributionProgress} />
-                </Box>
-              )}
-            </Paper>
-          ))}
-        </Stack>
-      )}
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>New Ad-hoc Form</DialogTitle>

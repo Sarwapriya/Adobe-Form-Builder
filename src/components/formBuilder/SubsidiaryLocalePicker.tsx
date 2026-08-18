@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Chip, Paper, Stack, Typography } from "@mui/material";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { listSubsidiaryLocales, type SubsidiaryLocale } from "../../api/subsidiaryLocalesApi";
 
@@ -14,12 +14,14 @@ import { listSubsidiaryLocales, type SubsidiaryLocale } from "../../api/subsidia
  * subsidiary's real fallback as soon as the master list loads, one time only
  * (no subsidiary's master fallback is ever literally "en_GB", so the swap can't
  * misfire against an already-configured form).
+ *
+ * Enable/disable only — every text field in the ad-hoc builder is always
+ * edited in the form's single default (fallback) locale, so there's no
+ * per-locale "editing" selector here.
  */
 export function SubsidiaryLocalePicker({ subsidiaryName }: { subsidiaryName: string }) {
   const definition = useFormBuilderStore((s) => s.definition);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
-  const activeLocale = useFormBuilderStore((s) => s.activeLocale);
-  const setActiveLocale = useFormBuilderStore((s) => s.setActiveLocale);
   const [masterLocales, setMasterLocales] = useState<SubsidiaryLocale[] | null>(null);
 
   useEffect(() => {
@@ -60,9 +62,6 @@ export function SubsidiaryLocalePicker({ subsidiaryName }: { subsidiaryName: str
     if (master.isFallback || !definition) return; // always on, can't be removed
     if (selectedCodes.has(master.code)) {
       updateDefinition((d) => ({ ...d, locales: d.locales.filter((l) => l.code !== master.code) }));
-      // Editing whatever locale just got removed no longer makes sense — fall
-      // back to the form's own default locale (the fallback, always present).
-      if (activeLocale === master.code) setActiveLocale(definition.meta.defaultLocale);
     } else {
       updateDefinition((d) => ({
         ...d,
@@ -101,24 +100,6 @@ export function SubsidiaryLocalePicker({ subsidiaryName }: { subsidiaryName: str
             ))}
           </Stack>
         ))}
-      {definition.locales.length > 1 && (
-        <TextField
-          select
-          size="small"
-          label="Editing"
-          value={activeLocale}
-          onChange={(e) => setActiveLocale(e.target.value)}
-          sx={{ mt: 1.5, minWidth: 160 }}
-          helperText="Every question, field, and answer below is edited for whichever locale is selected here."
-        >
-          {definition.locales.map((l) => (
-            <MenuItem key={l.code} value={l.code}>
-              {l.code}
-              {l.code === definition.meta.defaultLocale ? " (fallback)" : ""}
-            </MenuItem>
-          ))}
-        </TextField>
-      )}
     </Paper>
   );
 }

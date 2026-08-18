@@ -26,8 +26,11 @@ export interface FormListItem {
   createdAt: string;
   updatedAt: string;
   publishedVersionNumber: number | null;
-  /** "admin" (Form Initiator) or "adhoc" (a subsidiary user's own My Forms
-   * submission) — drives the "Ad-hoc" badge on FormBuilderListPage. */
+  /** "admin" (HR Form Initiator) or "adhoc" (a subsidiary user's own My Forms
+   * submission) — the `origin` param on listForms() is what splits
+   * HrFormInitiatorListPage from AdHocFormInitiatorListPage (the Form Initiator
+   * submenu's two pages); also read by formBuilderStore/FormBuilderEditorPage to
+   * hide VariantConfigPanel for ad-hoc forms. */
   origin: FormOrigin;
   /** True while an adhoc submission awaits admin review — drives the "Pending
    * review" badge and AdHocReviewPanel. Always false for "admin"-origin forms. */
@@ -83,6 +86,7 @@ export type ListFormsParams = {
   page?: number;
   pageSize?: number;
   pendingReview?: boolean;
+  origin?: FormOrigin;
 };
 
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {

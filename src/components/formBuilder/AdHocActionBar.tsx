@@ -1,18 +1,29 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Alert, Button, Chip, Paper, Stack, Typography } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { ApiError } from "../../api/apiClient";
+import { deleteAdHocForm } from "../../api/subsidiaryFormsApi";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
 
 /** Ad-hoc builder counterpart to BuilderActionBar.tsx — Preview / Save Draft /
- * Submit for Review, no Publish/Unpublish (a subsidiary user never publishes
- * their own ad-hoc form directly; an admin does, via AdHocReviewPanel's Approve
- * action, after picking the project code). Submit is disabled once the form is
- * already pending review — see MyAdHocFormEditorPage's own locked-fields
- * treatment for the same condition. */
+ * Submit for Review / Delete, no Publish/Unpublish (a subsidiary user never
+ * publishes their own ad-hoc form directly; an admin does, via
+ * AdHocReviewPanel's Approve action, after picking the project code). Submit
+ * is disabled once the form is already pending review — see
+ * MyAdHocFormEditorPage's own locked-fields treatment for the same condition.
+ * Delete is only offered while status is still "draft" (covers plain draft,
+ * pending review, and rejected-and-editable-again — every pre-publish state);
+ * once an admin approves/publishes, status flips to "published" and the
+ * server itself would reject the delete anyway (see deleteAdHocForm in
+ * formBuilderService.ts) — this just avoids showing a button that would fail. */
 export function AdHocActionBar() {
+  const navigate = useNavigate();
+  const formId = useFormBuilderStore((s) => s.formId);
   const status = useFormBuilderStore((s) => s.status);
   const pendingReview = useFormBuilderStore((s) => s.pendingReview);
   const reviewNote = useFormBuilderStore((s) => s.reviewNote);
@@ -26,6 +37,8 @@ export function AdHocActionBar() {
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const statusLabel = pendingReview ? "Pending review" : status === "published" ? "Published" : "Draft";
   const statusColor = pendingReview ? "warning" : status === "published" ? "success" : "default";
@@ -41,6 +54,21 @@ export function AdHocActionBar() {
     setNotice(null);
     const ok = await submitForReview();
     if (ok) setNotice("Submitted for review.");
+  }
+
+  async function handleDelete() {
+    if (!formId) return;
+    if (!window.confirm("Delete this form? This can't be undone.")) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await deleteAdHocForm(formId);
+      navigate("/my-forms/adhoc");
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : "Failed to delete form");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -63,6 +91,11 @@ export function AdHocActionBar() {
         >
           {publishing ? "Submitting..." : "Submit for Review"}
         </Button>
+        {status === "draft" && (
+          <Button size="small" color="error" startIcon={<DeleteIcon />} disabled={deleting} onClick={() => void handleDelete()}>
+            {deleting ? "Deleting..." : "Delete"}
+          </Button>
+        )}
       </Stack>
       {pendingReview && (
         <Alert severity="info" sx={{ mt: 1.5, borderRadius: 2 }}>
@@ -80,6 +113,11 @@ export function AdHocActionBar() {
       {error && (
         <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => useFormBuilderStore.setState({ error: null })}>
           {error}
+        </Alert>
+      )}
+      {deleteError && (
+        <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => setDeleteError(null)}>
+          {deleteError}
         </Alert>
       )}
       {notice && !error && (

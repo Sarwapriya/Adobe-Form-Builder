@@ -1,4 +1,4 @@
-import { Box, Typography } from "@mui/material";
+import { Box, Stack, Typography } from "@mui/material";
 import type { ContributionProgress } from "../../api/formBuilderApi";
 
 const STAGES = ["Submitted", "Reviewed by admin", "Admin approved", "Published"] as const;
@@ -30,6 +30,14 @@ export function ContributionStatusBar({ progress }: { progress: ContributionProg
 
   return (
     <Box sx={{ width: "100%" }}>
+      <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 0.5 }}>
+        <Typography variant="caption" color={rejected ? "error" : "text.secondary"}>
+          {rejected ? "Rejected — resubmit to restart review" : STAGES[completed - 1]}
+        </Typography>
+        <Typography variant="caption" fontWeight={700} color={rejected ? "error" : "primary"}>
+          {rejected ? "0%" : `${Math.round(percent)}%`}
+        </Typography>
+      </Stack>
       <Box
         sx={{
           width: "100%",
@@ -52,9 +60,6 @@ export function ContributionStatusBar({ progress }: { progress: ContributionProg
           />
         )}
       </Box>
-      <Typography variant="caption" color={rejected ? "error" : "text.secondary"} sx={{ mt: 0.5, display: "block" }}>
-        {rejected ? "Rejected — resubmit to restart review" : STAGES[completed - 1]}
-      </Typography>
     </Box>
   );
 }

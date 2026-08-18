@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
-import { Alert, Box, Button, Chip, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
+import { Alert, Box, Chip, IconButton, Paper, Stack, Typography } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import { isRtlLangSubtag, langDisplayName, migrateDefaultLocale } from "@formbuilder/shared";
+import { migrateDefaultLocale } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { listSubsidiaryLocales, type SubsidiaryLocale } from "../../api/subsidiaryLocalesApi";
-
-const LOCALE_CODE_PATTERN = /^[a-zA-Z]{2,3}_[A-Z]{2}$/;
 
 /**
  * Admin-managed list of the form's locales, entirely driven by what's added here —
@@ -18,12 +15,18 @@ const LOCALE_CODE_PATTERN = /^[a-zA-Z]{2,3}_[A-Z]{2}$/;
  * reordering or removing changes which locale that is, `migrateDefaultLocale`
  * (see localeMigration.ts) backfills the new fallback's text from the old one so
  * the form keeps rendering the same content instead of going blank.
+ *
+ * Locales are toggled on/off from that subsidiary's admin-managed master locale
+ * list (SubsidiaryLocale, see subsidiaryLocaleService.ts) via a chip row, same
+ * enable/disable interaction as the subsidiary side's own SubsidiaryLocalePicker
+ * — no free-text entry. Once every master locale has been added, the row simply
+ * shows every chip already filled — nothing more to add, so no separate "all
+ * added" control is needed. If a subsidiary needs a locale that isn't in its
+ * master list yet, add it there first (Configuration page), then it appears here.
  */
 export function LocaleManagerPanel() {
   const definition = useFormBuilderStore((s) => s.definition);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
-  const [newCode, setNewCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [masterLocales, setMasterLocales] = useState<SubsidiaryLocale[]>([]);
 
   const subsidiaryName = definition?.meta.subsidiary;
@@ -47,37 +50,14 @@ export function LocaleManagerPanel() {
 
   if (!definition) return null;
   const locales = definition.locales;
+  const addedCodes = new Set(locales.map((l) => l.code));
 
   function addLocaleFromMaster(master: SubsidiaryLocale) {
-    if (locales.some((l) => l.code === master.code)) return;
-    setError(null);
     updateDefinition((d) => ({
       ...d,
       locales: [
         ...d.locales,
         { code: master.code, langSubtag: master.langSubtag, isRtl: master.isRtl, sourceColumn: "builder" as const, label: master.label },
-      ],
-    }));
-  }
-
-  function addLocale() {
-    const code = newCode.trim();
-    if (!LOCALE_CODE_PATTERN.test(code)) {
-      setError('Use the format "<lang>_<COUNTRY>", e.g. "ar_AE" or "fr_FR".');
-      return;
-    }
-    if (locales.some((l) => l.code === code)) {
-      setError(`"${code}" is already on this form.`);
-      return;
-    }
-    const langSubtag = code.split("_")[0].toLowerCase();
-    setError(null);
-    setNewCode("");
-    updateDefinition((d) => ({
-      ...d,
-      locales: [
-        ...d.locales,
-        { code, langSubtag, isRtl: isRtlLangSubtag(langSubtag), sourceColumn: "builder" as const, label: langDisplayName(langSubtag) },
       ],
     }));
   }
@@ -91,6 +71,14 @@ export function LocaleManagerPanel() {
       const migrated = wasDefault ? migrateDefaultLocale(d, remaining[0].code, { removeOldLocale: true }) : d;
       return { ...migrated, locales: remaining };
     });
+  }
+
+  function toggleMasterLocale(master: SubsidiaryLocale) {
+    if (addedCodes.has(master.code)) {
+      removeLocale(master.code);
+    } else {
+      addLocaleFromMaster(master);
+    }
   }
 
   function moveLocale(index: number, delta: number) {
@@ -141,10 +129,18 @@ export function LocaleManagerPanel() {
           </Box>
         ))}
       </Stack>
-      {masterLocales.length > 0 && (
-        <Box sx={{ mb: 1.5 }}>
+      {!subsidiaryName ? (
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          Set the campaign's Subsidiary above to choose from its allowed locales.
+        </Alert>
+      ) : masterLocales.length === 0 ? (
+        <Alert severity="warning" sx={{ borderRadius: 2 }}>
+          No locales are configured for {subsidiaryName} yet — add some on the Configuration page first.
+        </Alert>
+      ) : (
+        <Box>
           <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
-            Quick add from {subsidiaryName}&apos;s allowed locales:
+            {subsidiaryName}&apos;s allowed locales:
           </Typography>
           <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
             {masterLocales.map((m) => (
@@ -152,33 +148,14 @@ export function LocaleManagerPanel() {
                 key={m.code}
                 size="small"
                 label={m.isFallback ? `${m.code} (fallback)` : m.code}
-                disabled={locales.some((l) => l.code === m.code)}
-                onClick={() => addLocaleFromMaster(m)}
+                color={addedCodes.has(m.code) ? "primary" : "default"}
+                variant={addedCodes.has(m.code) ? "filled" : "outlined"}
+                disabled={addedCodes.has(m.code) && locales.length <= 1}
+                onClick={() => toggleMasterLocale(m)}
               />
             ))}
           </Stack>
         </Box>
-      )}
-      <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-        <TextField
-          size="small"
-          placeholder="ar_AE"
-          value={newCode}
-          onChange={(e) => {
-            setNewCode(e.target.value);
-            setError(null);
-          }}
-          onKeyDown={(e) => e.key === "Enter" && addLocale()}
-          sx={{ maxWidth: 160 }}
-        />
-        <Button size="small" startIcon={<AddIcon />} onClick={addLocale}>
-          Add locale
-        </Button>
-      </Box>
-      {error && (
-        <Alert severity="error" sx={{ mt: 1, borderRadius: 2 }}>
-          {error}
-        </Alert>
       )}
     </Paper>
   );

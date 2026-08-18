@@ -3,6 +3,7 @@ import {
   Avatar,
   Box,
   Chip,
+  Collapse,
   Divider,
   Drawer,
   IconButton,
@@ -15,6 +16,8 @@ import {
 } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DescriptionIcon from "@mui/icons-material/Description";
 import LogoutIcon from "@mui/icons-material/Logout";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
@@ -34,12 +37,26 @@ const EXPANDED_WIDTH = 260;
 const COLLAPSED_WIDTH = 76;
 const COLLAPSE_STORAGE_KEY = "sidebarCollapsed";
 
+interface NavChild {
+  to: string;
+  label: string;
+  /** Whether this child should read as active for a given pathname — a
+   * function rather than a plain exact/prefix flag because "HR Forms" needs
+   * to stay highlighted on an individual form's translate page
+   * ("/my-forms/:id"), which isn't a literal prefix of its own link target. */
+  isActive: (pathname: string) => boolean;
+}
+
 interface NavItem {
   to: string;
   label: string;
   icon: ReactNode;
   /** Exact-match only — otherwise "/admin" would also read as active while on "/admin/history". */
   exact: boolean;
+  /** Sub-menu items, expandable under the parent when the sidebar isn't
+   * collapsed. In collapsed (icon-rail) mode the parent just links straight
+   * to the first child instead of showing a menu. */
+  children?: NavChild[];
 }
 
 /** Shell for every authenticated page: a collapsible left sidebar (nav +
@@ -54,6 +71,7 @@ export function AppLayout() {
   const location = useLocation();
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true");
+  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
@@ -68,7 +86,24 @@ export function AppLayout() {
     { to: "/", label: "Upload History", icon: <UploadFileIcon />, exact: true },
     ...(user?.subsidiaryId
       ? [
-          { to: "/my-forms", label: "My Forms", icon: <TranslateIcon />, exact: false },
+          {
+            to: "/my-forms",
+            label: "My Forms",
+            icon: <TranslateIcon />,
+            exact: false,
+            children: [
+              {
+                to: "/my-forms/adhoc",
+                label: "Ad-hoc Forms",
+                isActive: (p: string) => p.startsWith("/my-forms/adhoc"),
+              },
+              {
+                to: "/my-forms/hr",
+                label: "HR Forms",
+                isActive: (p: string) => p.startsWith("/my-forms") && !p.startsWith("/my-forms/adhoc"),
+              },
+            ],
+          },
           { to: "/my-submissions", label: "My Submissions", icon: <HistoryIcon />, exact: true },
           { to: "/my-subsidiary", label: "My Subsidiary", icon: <DomainIcon />, exact: true },
         ]
@@ -79,7 +114,24 @@ export function AppLayout() {
           { to: "/admin/history", label: "All History", icon: <HistoryIcon />, exact: true },
           { to: "/admin/configuration", label: "Configuration", icon: <SettingsIcon />, exact: true },
           { to: "/admin/users", label: "User Management", icon: <PeopleIcon />, exact: true },
-          { to: "/admin/form-builder", label: "Form Initiator", icon: <DesignServicesIcon />, exact: false },
+          {
+            to: "/admin/form-builder",
+            label: "Form Initiator",
+            icon: <DesignServicesIcon />,
+            exact: false,
+            children: [
+              {
+                to: "/admin/form-builder/hr",
+                label: "HR Form Initiator",
+                isActive: (p: string) => p.startsWith("/admin/form-builder/hr"),
+              },
+              {
+                to: "/admin/form-builder/adhoc",
+                label: "Ad-hoc Forms",
+                isActive: (p: string) => p.startsWith("/admin/form-builder/adhoc"),
+              },
+            ],
+          },
           { to: "/admin/question-master", label: "Question Master", icon: <ListAltIcon />, exact: false },
         ]
       : []),
@@ -133,12 +185,22 @@ export function AppLayout() {
 
         <List sx={{ px: 1.25, py: 1.5, flexGrow: 1 }}>
           {navItems.map((item) => {
-            const selected = item.exact ? location.pathname === item.to : location.pathname.startsWith(item.to);
+            const hasChildren = !!item.children?.length;
+            const selected = hasChildren
+              ? item.children!.some((c) => c.isActive(location.pathname))
+              : item.exact
+                ? location.pathname === item.to
+                : location.pathname.startsWith(item.to);
+            const isOpen = hasChildren && !collapsed && (expandedMenus[item.to] ?? selected);
+
+            const linkProps =
+              hasChildren && !collapsed
+                ? { onClick: () => setExpandedMenus((m) => ({ ...m, [item.to]: !isOpen })) }
+                : { component: Link, to: hasChildren ? item.children![0].to : item.to };
+
             const button = (
               <ListItemButton
-                key={item.to}
-                component={Link}
-                to={item.to}
+                {...linkProps}
                 selected={selected}
                 sx={{
                   borderRadius: 2,
@@ -162,14 +224,52 @@ export function AppLayout() {
                 {!collapsed && (
                   <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }} />
                 )}
+                {hasChildren && !collapsed && (isOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />)}
               </ListItemButton>
             );
-            return collapsed ? (
-              <Tooltip key={item.to} title={item.label} placement="right">
-                {button}
-              </Tooltip>
-            ) : (
-              button
+
+            return (
+              <Box key={item.to}>
+                {collapsed ? (
+                  <Tooltip title={item.label} placement="right">
+                    {button}
+                  </Tooltip>
+                ) : (
+                  button
+                )}
+                {hasChildren && !collapsed && (
+                  <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                    <List component="div" disablePadding>
+                      {item.children!.map((child) => {
+                        const childSelected = child.isActive(location.pathname);
+                        return (
+                          <ListItemButton
+                            key={child.to}
+                            component={Link}
+                            to={child.to}
+                            selected={childSelected}
+                            sx={{
+                              borderRadius: 2,
+                              mb: 0.5,
+                              ml: 2,
+                              minHeight: 36,
+                              color: "rgba(255,255,255,0.75)",
+                              "&.Mui-selected": { bgcolor: "rgba(255,255,255,0.16)", color: "#fff" },
+                              "&.Mui-selected:hover": { bgcolor: "rgba(255,255,255,0.20)" },
+                              "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+                            }}
+                          >
+                            <ListItemText
+                              primary={child.label}
+                              primaryTypographyProps={{ fontWeight: childSelected ? 700 : 500, fontSize: 13 }}
+                            />
+                          </ListItemButton>
+                        );
+                      })}
+                    </List>
+                  </Collapse>
+                )}
+              </Box>
             );
           })}
         </List>

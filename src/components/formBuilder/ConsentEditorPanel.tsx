@@ -15,13 +15,12 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
   const formVariants = useFormBuilderStore((s): FormVariant[] => s.config?.variants ?? ["ff", "oc"]);
   const defaultLocale = definition?.meta.defaultLocale ?? "en_GB";
-  const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
   const consent = definition?.fields.additionalConsents?.find((c) => c.id === consentId);
 
   if (!consent) return null;
 
-  const text = resolveLocalizedText(consent.textByLocale, activeLocale, defaultLocale);
-  const linkUrl = consent.linkUrlByLocale ? resolveLocalizedText(consent.linkUrlByLocale, activeLocale, defaultLocale) : "";
+  const text = resolveLocalizedText(consent.textByLocale, defaultLocale, defaultLocale);
+  const linkUrl = consent.linkUrlByLocale ? resolveLocalizedText(consent.linkUrlByLocale, defaultLocale, defaultLocale) : "";
 
   function patchConsent(patch: Partial<typeof consent>) {
     updateDefinition((d) => ({
@@ -57,11 +56,6 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
         Shown as a checkbox in the "before submit" section. Its checked state is included in the submission payload
         under <code>additionalConsents.{consent.id}</code>.
       </Alert>
-      {activeLocale !== defaultLocale && (
-        <Typography variant="caption" color="text.secondary">
-          Editing text for <strong>{activeLocale}</strong> — other settings below always apply to every locale.
-        </Typography>
-      )}
       <TextField
         label="Consent text"
         size="small"
@@ -69,7 +63,7 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
         multiline
         minRows={2}
         value={text}
-        onChange={(e) => patchConsent({ textByLocale: { ...consent.textByLocale, [activeLocale]: e.target.value } })}
+        onChange={(e) => patchConsent({ textByLocale: { ...consent.textByLocale, [defaultLocale]: e.target.value } })}
       />
       <FormControlLabel
         control={
@@ -86,7 +80,7 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
           size="small"
           fullWidth
           value={linkUrl}
-          onChange={(e) => patchConsent({ linkUrlByLocale: { ...consent.linkUrlByLocale, [activeLocale]: e.target.value } })}
+          onChange={(e) => patchConsent({ linkUrlByLocale: { ...consent.linkUrlByLocale, [defaultLocale]: e.target.value } })}
         />
       )}
       <ConsentVisibilityControls

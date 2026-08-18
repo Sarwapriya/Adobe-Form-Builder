@@ -13,9 +13,11 @@ import { ConfigurationPage } from "./pages/ConfigurationPage.tsx";
 import { UserManagementPage } from "./pages/UserManagementPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { UploadHistoryPage } from "./pages/UploadHistoryPage.tsx";
-import { FormBuilderListPage } from "./pages/FormBuilderListPage.tsx";
+import { HrFormInitiatorListPage } from "./pages/HrFormInitiatorListPage.tsx";
+import { AdHocFormInitiatorListPage } from "./pages/AdHocFormInitiatorListPage.tsx";
 import { FormBuilderEditorPage } from "./pages/FormBuilderEditorPage.tsx";
-import { MyFormsListPage } from "./pages/MyFormsListPage.tsx";
+import { MyAdHocFormsListPage } from "./pages/MyAdHocFormsListPage.tsx";
+import { MyHrFormsListPage } from "./pages/MyHrFormsListPage.tsx";
 import { MyFormTranslatePage } from "./pages/MyFormTranslatePage.tsx";
 import { MyAdHocFormEditorPage } from "./pages/MyAdHocFormEditorPage.tsx";
 import { MySubmissionsPage } from "./pages/MySubmissionsPage.tsx";
@@ -45,7 +47,9 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route index element={<UploadHistoryPage />} />
-              <Route path="my-forms" element={<MyFormsListPage />} />
+              <Route path="my-forms" element={<Navigate to="/my-forms/hr" replace />} />
+              <Route path="my-forms/hr" element={<MyHrFormsListPage />} />
+              <Route path="my-forms/adhoc" element={<MyAdHocFormsListPage />} />
               <Route path="my-forms/adhoc/:id" element={<MyAdHocFormEditorPage />} />
               <Route path="my-forms/:id" element={<MyFormTranslatePage />} />
               <Route path="my-submissions" element={<MySubmissionsPage />} />
@@ -55,7 +59,9 @@ export default function App() {
                 <Route path="admin/history" element={<AdminHistoryPage />} />
                 <Route path="admin/configuration" element={<ConfigurationPage />} />
                 <Route path="admin/users" element={<UserManagementPage />} />
-                <Route path="admin/form-builder" element={<FormBuilderListPage />} />
+                <Route path="admin/form-builder" element={<Navigate to="/admin/form-builder/hr" replace />} />
+                <Route path="admin/form-builder/hr" element={<HrFormInitiatorListPage />} />
+                <Route path="admin/form-builder/adhoc" element={<AdHocFormInitiatorListPage />} />
                 <Route path="admin/form-builder/:id" element={<FormBuilderEditorPage />} />
                 <Route path="admin/question-master" element={<QuestionMasterPage />} />
               </Route>

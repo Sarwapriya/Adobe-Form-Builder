@@ -21,7 +21,7 @@ import {
   type ListFormsOptions,
 } from "../services/formBuilderService";
 import { approveContribution, listContributionsForForm, rejectContribution } from "../services/formContributionService";
-import type { FormStatus } from "../entities/Form";
+import type { FormOrigin, FormStatus } from "../entities/Form";
 
 export const formBuilderRouter = Router();
 
@@ -32,6 +32,11 @@ function isFormStatus(value: unknown): value is FormStatus {
   return typeof value === "string" && FORM_STATUS_VALUES.has(value as FormStatus);
 }
 
+const FORM_ORIGIN_VALUES = new Set<FormOrigin>(["admin", "adhoc"]);
+function isFormOrigin(value: unknown): value is FormOrigin {
+  return typeof value === "string" && FORM_ORIGIN_VALUES.has(value as FormOrigin);
+}
+
 function parseListOptions(req: Request): ListFormsOptions {
   return {
     status: isFormStatus(req.query.status) ? req.query.status : undefined,
@@ -40,6 +45,7 @@ function parseListOptions(req: Request): ListFormsOptions {
     page: parsePositiveInt(req.query.page),
     pageSize: parsePositiveInt(req.query.pageSize),
     pendingReview: req.query.pendingReview === "true" ? true : req.query.pendingReview === "false" ? false : undefined,
+    origin: isFormOrigin(req.query.origin) ? req.query.origin : undefined,
   };
 }
 

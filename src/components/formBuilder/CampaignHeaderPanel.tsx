@@ -6,7 +6,10 @@ import { useFormBuilderStore } from "../../store/formBuilderStore";
  * rendered above the form's fields (see pageTemplate.ts's `<h2>`/`.top_subheading`
  * markup and renderProfileField.ts's submit button, both sourced from these
  * same FormDefinition.fields entries). Which output variant(s) get generated
- * is configured separately — see VariantConfigPanel. */
+ * is configured separately — see VariantConfigPanel. Also reused as-is by the
+ * ad-hoc builder (MyAdHocFormEditorPage) so subsidiary users have somewhere to
+ * set this copy too — always in the form's single default locale, same as
+ * every other text field in the builder. */
 export function CampaignHeaderPanel() {
   const definition = useFormBuilderStore((s) => s.definition);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);

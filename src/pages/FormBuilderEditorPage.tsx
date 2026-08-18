@@ -38,7 +38,14 @@ function isConsentId(key: string): boolean {
  * The main builder screen: campaign heading/subheading, predefined-field
  * toggles + the drag-and-drop question canvas on the left, a config panel for
  * whatever's currently selected on the right, and the Preview/Save
- * Draft/Publish/Unpublish action bar pinned at the bottom.
+ * Draft/Publish/Unpublish action bar pinned at the bottom. Shared by both Form
+ * Initiator submenu pages (HrFormInitiatorListPage / AdHocFormInitiatorListPage)
+ * — which one an admin came from is inferred from the loaded form's own
+ * `origin`, not the URL, since `/admin/form-builder/:id` doesn't distinguish
+ * them. VariantConfigPanel (Full Form / One-Click) is hidden for `origin ===
+ * "adhoc"` forms — ad-hoc forms are always Full Form only, same rule already
+ * enforced server-side (formBuilderService's defaultConfig) and on the
+ * subsidiary side's own ad-hoc builder.
  */
 export function FormBuilderEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +56,7 @@ export function FormBuilderEditorPage() {
   const name = useFormBuilderStore((s) => s.name);
   const subsidiaryId = useFormBuilderStore((s) => s.subsidiaryId);
   const projectCode = useFormBuilderStore((s) => s.projectCode);
+  const origin = useFormBuilderStore((s) => s.origin);
   const pendingReview = useFormBuilderStore((s) => s.pendingReview);
   const loadForm = useFormBuilderStore((s) => s.loadForm);
   const reset = useFormBuilderStore((s) => s.reset);
@@ -81,8 +89,8 @@ export function FormBuilderEditorPage() {
           </>
         }
         titleNoWrap
-        onBack={() => navigate("/admin/form-builder")}
-        backLabel="Back to Form Initiator list"
+        onBack={() => navigate(origin === "adhoc" ? "/admin/form-builder/adhoc" : "/admin/form-builder/hr")}
+        backLabel={origin === "adhoc" ? "Back to Ad-hoc Forms" : "Back to HR Form Initiator"}
       />
 
       <BuilderValidationPanel />
@@ -95,7 +103,7 @@ export function FormBuilderEditorPage() {
         <Box sx={{ flex: "1 1 auto", minWidth: 0, width: "100%" }}>
           <CampaignHeaderPanel />
           <LocaleManagerPanel />
-          <VariantConfigPanel />
+          {origin !== "adhoc" && <VariantConfigPanel />}
           <PredefinedFieldToggles selectedField={selected} onSelectField={setSelected} />
           <BuilderCanvas
             selectedQuestionId={PROFILE_FIELD_KEYS.has(selected ?? "") || isConsentId(selected ?? "") ? null : selected}

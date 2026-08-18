@@ -8,6 +8,7 @@ import { getAccessibleFormDetail, listAccessibleForms } from "../services/formAc
 import { listOwnContributions, listOwnContributionsAllForms, submitContribution } from "../services/formContributionService";
 import {
   createForm,
+  deleteAdHocForm,
   findOwnedAdHocForm,
   getFormDetail,
   listMyAdHocForms,
@@ -141,6 +142,27 @@ subsidiaryFormsRouter.post(
     }
     if (outcome === "already_pending") {
       res.status(409).json({ error: "This form is already awaiting review" });
+      return;
+    }
+    res.status(204).send();
+  }),
+);
+
+subsidiaryFormsRouter.delete(
+  "/adhoc/:id",
+  asyncHandler(async (req, res) => {
+    const subsidiaryId = req.auth!.subsidiaryId;
+    if (!subsidiaryId) {
+      res.status(404).json({ error: "form not found" });
+      return;
+    }
+    const outcome = await deleteAdHocForm(req.params.id, subsidiaryId);
+    if (outcome === "not_found") {
+      res.status(404).json({ error: "form not found" });
+      return;
+    }
+    if (outcome === "already_published") {
+      res.status(409).json({ error: "This form has already been published and can no longer be deleted" });
       return;
     }
     res.status(204).send();
