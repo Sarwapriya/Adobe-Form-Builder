@@ -4,17 +4,13 @@ import { Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { useFormBuilderStore } from "../store/formBuilderStore";
 import { PageHeader } from "../components/common/PageHeader";
-import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
-import { LocaleManagerPanel } from "../components/formBuilder/LocaleManagerPanel";
-import { VariantConfigPanel } from "../components/formBuilder/VariantConfigPanel";
+import { SubsidiaryLocalePicker } from "../components/formBuilder/SubsidiaryLocalePicker";
 import { BuilderCanvas, PredefinedFieldToggles } from "../components/formBuilder/BuilderCanvas";
 import { QuestionEditorPanel } from "../components/formBuilder/QuestionEditorPanel";
 import { ProfileFieldEditorPanel, type ProfileFieldKey } from "../components/formBuilder/ProfileFieldEditorPanel";
 import { ConsentEditorPanel } from "../components/formBuilder/ConsentEditorPanel";
 import { BuilderValidationPanel } from "../components/formBuilder/BuilderValidationPanel";
-import { BuilderActionBar } from "../components/formBuilder/BuilderActionBar";
-import { ContributionReviewPanel } from "../components/formBuilder/ContributionReviewPanel";
-import { AdHocReviewPanel } from "../components/formBuilder/AdHocReviewPanel";
+import { AdHocActionBar } from "../components/formBuilder/AdHocActionBar";
 
 const PROFILE_FIELD_KEYS = new Set<string>([
   "firstName",
@@ -27,20 +23,25 @@ const PROFILE_FIELD_KEYS = new Set<string>([
   "submitButton",
 ] satisfies ProfileFieldKey[]);
 
-/** Admin-added consents beyond the two fixed slots above use dynamic
- * "consentExtraN" ids (see formBuilderHelpers.createConsent) rather than a fixed
- * key union, so they're routed by prefix instead of set membership. */
 function isConsentId(key: string): boolean {
   return key.startsWith("consentExtra");
 }
 
 /**
- * The main builder screen: campaign heading/subheading, predefined-field
- * toggles + the drag-and-drop question canvas on the left, a config panel for
- * whatever's currently selected on the right, and the Preview/Save
- * Draft/Publish/Unpublish action bar pinned at the bottom.
+ * A subsidiary user's own self-service form builder — same editing surface as
+ * admin's FormBuilderEditorPage (BuilderCanvas + editor panels, reused
+ * unmodified), but with SubsidiaryLocalePicker instead of LocaleManagerPanel
+ * (restricted to this subsidiary's admin-managed master locale list, no free
+ * text) and AdHocActionBar instead of BuilderActionBar (Submit for Review, not
+ * Publish — an admin publishes it via AdHocReviewPanel after picking a Project
+ * Code, never asked here). No CampaignHeaderPanel — name is fixed at creation
+ * and subsidiary/project code aren't editable by the subsidiary user at all.
+ * No VariantConfigPanel either — an ad-hoc form is always Full Form only (no
+ * One-Click), enforced both here (the panel that would add "oc" is simply
+ * never rendered) and server-side (formBuilderService's defaultConfig seeds
+ * `variants: ["ff"]` for origin: "adhoc" forms at creation time).
  */
-export function FormBuilderEditorPage() {
+export function MyAdHocFormEditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const loading = useFormBuilderStore((s) => s.loading);
@@ -48,7 +49,6 @@ export function FormBuilderEditorPage() {
   const definition = useFormBuilderStore((s) => s.definition);
   const name = useFormBuilderStore((s) => s.name);
   const subsidiaryId = useFormBuilderStore((s) => s.subsidiaryId);
-  const projectCode = useFormBuilderStore((s) => s.projectCode);
   const pendingReview = useFormBuilderStore((s) => s.pendingReview);
   const loadForm = useFormBuilderStore((s) => s.loadForm);
   const reset = useFormBuilderStore((s) => s.reset);
@@ -56,7 +56,7 @@ export function FormBuilderEditorPage() {
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
-    if (id) void loadForm(id);
+    if (id) void loadForm(id, "adhoc");
     return () => reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -74,37 +74,30 @@ export function FormBuilderEditorPage() {
       <PageHeader
         icon={<DesignServicesIcon />}
         title={name || "Edit Form"}
-        subtitle={
-          <>
-            {subsidiaryId}
-            {projectCode ? ` · ${projectCode}` : ""}
-          </>
-        }
+        subtitle={subsidiaryId}
         titleNoWrap
-        onBack={() => navigate("/admin/form-builder")}
-        backLabel="Back to Form Initiator list"
+        onBack={() => navigate("/my-forms")}
+        backLabel="Back to My Forms"
       />
 
       <BuilderValidationPanel />
 
-      {id && pendingReview && <AdHocReviewPanel formId={id} />}
-
-      {id && <ContributionReviewPanel formId={id} />}
-
       <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2, alignItems: "flex-start" }}>
         <Box sx={{ flex: "1 1 auto", minWidth: 0, width: "100%" }}>
-          <CampaignHeaderPanel />
-          <LocaleManagerPanel />
-          <VariantConfigPanel />
-          <PredefinedFieldToggles selectedField={selected} onSelectField={setSelected} />
+          <SubsidiaryLocalePicker subsidiaryName={subsidiaryId} />
+          <PredefinedFieldToggles selectedField={selected} onSelectField={pendingReview ? () => {} : setSelected} />
           <BuilderCanvas
             selectedQuestionId={PROFILE_FIELD_KEYS.has(selected ?? "") || isConsentId(selected ?? "") ? null : selected}
-            onSelectQuestion={setSelected}
+            onSelectQuestion={pendingReview ? () => {} : setSelected}
           />
         </Box>
 
         <Paper sx={{ p: 2, width: { xs: "100%", md: 280 }, flexShrink: 0, position: "sticky", top: 16 }}>
-          {selected && PROFILE_FIELD_KEYS.has(selected) ? (
+          {pendingReview ? (
+            <Typography variant="body2" color="text.secondary">
+              This form is awaiting admin review — editing is locked.
+            </Typography>
+          ) : selected && PROFILE_FIELD_KEYS.has(selected) ? (
             <ProfileFieldEditorPanel fieldKey={selected as ProfileFieldKey} />
           ) : selected && isConsentId(selected) ? (
             <ConsentEditorPanel consentId={selected} onDeleted={() => setSelected(null)} />
@@ -118,7 +111,7 @@ export function FormBuilderEditorPage() {
         </Paper>
       </Stack>
 
-      <BuilderActionBar />
+      <AdHocActionBar />
     </Box>
   );
 }

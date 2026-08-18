@@ -12,7 +12,8 @@ export type ProfileFieldKey =
   | "mobileNumber"
   | "privacyPolicy"
   | "marketingOptin"
-  | "termsAndConditions";
+  | "termsAndConditions"
+  | "submitButton";
 
 const FIELD_LABEL: Record<ProfileFieldKey, string> = {
   firstName: "First Name",
@@ -22,6 +23,7 @@ const FIELD_LABEL: Record<ProfileFieldKey, string> = {
   privacyPolicy: "Privacy Policy Consent",
   marketingOptin: "Marketing Opt-in",
   termsAndConditions: "Terms and Conditions",
+  submitButton: "Submit Button",
 };
 
 /** Config drawer content for a predefined profile field. Mobile Number gets an
@@ -37,14 +39,46 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
   const formVariants = useFormBuilderStore((s): FormVariant[] => s.config?.variants ?? ["ff", "oc"]);
   const defaultLocale = definition?.meta.defaultLocale ?? "en_GB";
-  const field = definition?.fields[fieldKey];
+  const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
+  const field = fieldKey === "submitButton" ? definition?.fields.submitButton : definition?.fields[fieldKey];
 
   if (!field) return null;
 
+  const localeHint = activeLocale !== defaultLocale && (
+    <Typography variant="caption" color="text.secondary">
+      Editing text for <strong>{activeLocale}</strong> — other settings below always apply to every locale.
+    </Typography>
+  );
+
+  if (fieldKey === "submitButton") {
+    const submitButton = definition!.fields.submitButton;
+    const label = resolveLocalizedText(submitButton.labelByLocale, activeLocale, defaultLocale);
+    return (
+      <Stack spacing={2}>
+        <Typography variant="subtitle1" fontWeight={700}>
+          {FIELD_LABEL.submitButton}
+        </Typography>
+        {localeHint}
+        <TextField
+          label="Label"
+          size="small"
+          fullWidth
+          value={label}
+          onChange={(e) =>
+            updateDefinition((d) => ({
+              ...d,
+              fields: { ...d.fields, submitButton: { ...d.fields.submitButton, labelByLocale: { ...d.fields.submitButton.labelByLocale, [activeLocale]: e.target.value } } },
+            }))
+          }
+        />
+      </Stack>
+    );
+  }
+
   if (fieldKey === "privacyPolicy") {
     const privacyPolicy = definition!.fields.privacyPolicy!;
-    const text = resolveLocalizedText(privacyPolicy.textByLocale, defaultLocale, defaultLocale);
-    const linkUrl = resolveLocalizedText(privacyPolicy.linkUrlByLocale, defaultLocale, defaultLocale);
+    const text = resolveLocalizedText(privacyPolicy.textByLocale, activeLocale, defaultLocale);
+    const linkUrl = resolveLocalizedText(privacyPolicy.linkUrlByLocale, activeLocale, defaultLocale);
 
     function toggleVariant(variant: FormVariant, checked: boolean) {
       const current = consentVariants(definition!.fields.privacyPolicy!);
@@ -62,6 +96,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           channel that delivered their link, so this defaults to Full Form only — enable One-Click below if this
           campaign needs it there too.
         </Alert>
+        {localeHint}
         <TextField
           label="Consent text"
           size="small"
@@ -75,7 +110,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
               ...d,
               fields: {
                 ...d.fields,
-                privacyPolicy: { ...d.fields.privacyPolicy!, textByLocale: { ...d.fields.privacyPolicy!.textByLocale, [defaultLocale]: e.target.value } },
+                privacyPolicy: { ...d.fields.privacyPolicy!, textByLocale: { ...d.fields.privacyPolicy!.textByLocale, [activeLocale]: e.target.value } },
               },
             }))
           }
@@ -93,7 +128,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
                 ...d.fields,
                 privacyPolicy: {
                   ...d.fields.privacyPolicy!,
-                  linkUrlByLocale: { ...d.fields.privacyPolicy!.linkUrlByLocale, [defaultLocale]: e.target.value },
+                  linkUrlByLocale: { ...d.fields.privacyPolicy!.linkUrlByLocale, [activeLocale]: e.target.value },
                 },
               },
             }))
@@ -114,8 +149,8 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
 
   if (fieldKey === "termsAndConditions") {
     const termsAndConditions = definition!.fields.termsAndConditions!;
-    const text = resolveLocalizedText(termsAndConditions.textByLocale, defaultLocale, defaultLocale);
-    const url = resolveLocalizedText(termsAndConditions.urlByLocale, defaultLocale, defaultLocale);
+    const text = resolveLocalizedText(termsAndConditions.textByLocale, activeLocale, defaultLocale);
+    const url = resolveLocalizedText(termsAndConditions.urlByLocale, activeLocale, defaultLocale);
 
     return (
       <Stack spacing={2}>
@@ -127,6 +162,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           on. You can publish without filling this in; a subsidiary user can also add their own locale's wording
           and link later, from the Translate & Extend page.
         </Alert>
+        {localeHint}
         <TextField
           label="Wording"
           size="small"
@@ -142,7 +178,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
                 ...d.fields,
                 termsAndConditions: {
                   ...d.fields.termsAndConditions!,
-                  textByLocale: { ...d.fields.termsAndConditions!.textByLocale, [defaultLocale]: e.target.value },
+                  textByLocale: { ...d.fields.termsAndConditions!.textByLocale, [activeLocale]: e.target.value },
                 },
               },
             }))
@@ -161,7 +197,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
                 ...d.fields,
                 termsAndConditions: {
                   ...d.fields.termsAndConditions!,
-                  urlByLocale: { ...d.fields.termsAndConditions!.urlByLocale, [defaultLocale]: e.target.value },
+                  urlByLocale: { ...d.fields.termsAndConditions!.urlByLocale, [activeLocale]: e.target.value },
                 },
               },
             }))
@@ -173,7 +209,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
 
   if (fieldKey === "marketingOptin") {
     const marketingOptin = definition!.fields.marketingOptin!;
-    const label = resolveLocalizedText(marketingOptin.labelByLocale, defaultLocale, defaultLocale);
+    const label = resolveLocalizedText(marketingOptin.labelByLocale, activeLocale, defaultLocale);
 
     function toggleVariant(variant: FormVariant, checked: boolean) {
       const current = consentVariants(definition!.fields.marketingOptin!);
@@ -189,6 +225,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
         <Alert severity="info" sx={{ borderRadius: 2 }}>
           Shown as a checkbox in the "before submit" section.
         </Alert>
+        {localeHint}
         <TextField
           label="Label"
           size="small"
@@ -197,7 +234,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
-              fields: { ...d.fields, marketingOptin: { ...d.fields.marketingOptin!, labelByLocale: { ...d.fields.marketingOptin!.labelByLocale, [defaultLocale]: e.target.value } } },
+              fields: { ...d.fields, marketingOptin: { ...d.fields.marketingOptin!, labelByLocale: { ...d.fields.marketingOptin!.labelByLocale, [activeLocale]: e.target.value } } },
             }))
           }
         />
@@ -218,14 +255,14 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   // can only be a LocalizedFieldMeta/MobileNumberFieldMeta — both have
   // labelByLocale. TS can't correlate that with the earlier `fieldKey` checks on
   // their own (different variable), hence the assertion.
-  const label = resolveLocalizedText((field as { labelByLocale: Record<string, string> }).labelByLocale, defaultLocale, defaultLocale);
+  const label = resolveLocalizedText((field as { labelByLocale: Record<string, string> }).labelByLocale, activeLocale, defaultLocale);
 
   function patchLabel(value: string) {
     updateDefinition((d) => {
       const current = d.fields[fieldKey] as { labelByLocale?: Record<string, string> } | undefined;
       return {
         ...d,
-        fields: { ...d.fields, [fieldKey]: { ...current, labelByLocale: { ...current?.labelByLocale, [defaultLocale]: value } } },
+        fields: { ...d.fields, [fieldKey]: { ...current, labelByLocale: { ...current?.labelByLocale, [activeLocale]: value } } },
       };
     });
   }
@@ -235,6 +272,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
       <Typography variant="subtitle1" fontWeight={700}>
         {FIELD_LABEL[fieldKey]}
       </Typography>
+      {localeHint}
       <TextField label="Label" size="small" fullWidth value={label} onChange={(e) => patchLabel(e.target.value)} />
 
       {fieldKey === "mobileNumber" && definition?.fields.mobileNumber && (

@@ -11,7 +11,7 @@ import {
   type ValidationResult,
 } from "@formbuilder/shared";
 import { AppDataSource } from "../config/data-source";
-import { Form, type FormStatus } from "../entities/Form";
+import { Form, type FormOrigin, type FormStatus } from "../entities/Form";
 import { FormVersion, type FormVersionStatus } from "../entities/FormVersion";
 import { GeneratedFile as GeneratedFileEntity, type GeneratedFileType } from "../entities/GeneratedFile";
 import { resolvePaging, type PagedResult } from "../utils/queryParsing";
@@ -49,8 +49,11 @@ function emptyFormDefinition(subsidiaryId: string): FormDefinition {
   };
 }
 
-function defaultConfig(): BuilderConfig {
-  return { ...defaultBuilderConfig(), variants: ["ff", "oc"] };
+/** Ad-hoc forms are Full Form only — a subsidiary user's own self-service form
+ * never gets a One-Click variant (not requested for that flow; the builder UI
+ * also never shows a way to add one back, see MyAdHocFormEditorPage.tsx). */
+function defaultConfig(origin: FormOrigin): BuilderConfig {
+  return { ...defaultBuilderConfig(), variants: origin === "adhoc" ? ["ff"] : ["ff", "oc"] };
 }
 
 /** The calling standard user's own latest-contribution progress for a form — drives
@@ -76,6 +79,17 @@ export interface FormListItem {
   createdAt: Date;
   updatedAt: Date;
   publishedVersionNumber: number | null;
+  /** "admin" (Form Initiator) or "adhoc" (a subsidiary user's own My Forms
+   * submission) — see Form.origin's own doc comment. */
+  origin: FormOrigin;
+  /** True while an adhoc submission awaits admin review — see
+   * submitAdHocFormForReview/approveAdHocForm/rejectAdHocForm below. Always false
+   * for "admin"-origin forms. */
+  pendingReview: boolean;
+  submittedForReviewAt: Date | null;
+  reviewedAt: Date | null;
+  /** Set on reject, shown to the subsidiary user; cleared on the next review. */
+  reviewNote: string | null;
   /** Only ever populated by formAccessService's subsidiary-scoped listing, never by
    * admin's own listForms (there's no single "calling user" whose contribution
    * would apply) — null if they've never submitted one, undefined from the admin
@@ -99,6 +113,11 @@ function toListItem(form: Form, publishedVersionNumber: number | null = null): F
     createdAt: form.createdAt,
     updatedAt: form.updatedAt,
     publishedVersionNumber,
+    origin: form.origin,
+    pendingReview: form.pendingReview,
+    submittedForReviewAt: form.submittedForReviewAt,
+    reviewedAt: form.reviewedAt,
+    reviewNote: form.reviewNote,
   };
 }
 
@@ -126,13 +145,16 @@ export interface CreateFormInput {
   subsidiaryId: string;
   projectCode?: string | null;
   userId: string;
+  /** Defaults to "admin" — pass "adhoc" for a subsidiary user's own My Forms
+   * submission (see subsidiaryForms.router.ts's POST /adhoc). */
+  origin?: FormOrigin;
 }
 
 /** Creates a new builder form: an empty draft FormVersion plus the Form row pointing
  * at it. No generation happens yet — a brand-new form has no questions, so it
  * wouldn't pass validateFormDefinition anyway (expected; only Publish enforces that). */
 export async function createForm(input: CreateFormInput): Promise<FormListItem> {
-  const { name, subsidiaryId, projectCode, userId } = input;
+  const { name, subsidiaryId, projectCode, userId, origin = "admin" } = input;
 
   return AppDataSource.transaction(async (manager) => {
     const formId = crypto.randomUUID();
@@ -149,6 +171,7 @@ export async function createForm(input: CreateFormInput): Promise<FormListItem> 
         subsidiaryId,
         projectCode: projectCode ?? null,
         status: "draft",
+        origin,
         currentDraftVersionId: null,
         publishedVersionId: null,
         createdByUserId: userId,
@@ -161,7 +184,7 @@ export async function createForm(input: CreateFormInput): Promise<FormListItem> 
         formId,
         versionNumber: null,
         definition: JSON.stringify(emptyFormDefinition(subsidiaryId)),
-        config: JSON.stringify(defaultConfig()),
+        config: JSON.stringify(defaultConfig(origin)),
         status: "draft",
         createdByUserId: userId,
       }),
@@ -180,6 +203,9 @@ export interface ListFormsOptions {
   status?: FormStatus;
   subsidiaryId?: string;
   search?: string;
+  /** When set, filters to forms currently awaiting adhoc review (or explicitly
+   * excludes them) — the admin Form Initiator list's "Pending review only" toggle. */
+  pendingReview?: boolean;
 }
 
 /** Admin-facing list — every builder form regardless of who created it (this feature
@@ -201,6 +227,9 @@ export async function listForms(options: ListFormsOptions = {}): Promise<PagedRe
   if (options.search) {
     qb.andWhere("form.name LIKE :search", { search: `%${options.search}%` });
   }
+  if (options.pendingReview !== undefined) {
+    qb.andWhere("form.pendingReview = :pendingReview", { pendingReview: options.pendingReview });
+  }
 
   qb.orderBy("form.updatedAt", "DESC").skip(skip).take(pageSize);
 
@@ -215,6 +244,25 @@ export async function listForms(options: ListFormsOptions = {}): Promise<PagedRe
     toListItem(form, form.publishedVersionId ? (versionNumberById.get(form.publishedVersionId) ?? null) : null),
   );
   return { items, total, page, pageSize };
+}
+
+/** A subsidiary user's own adhoc forms, every status (draft/pending/published/
+ * unpublished) — the My Forms page's "My ad-hoc forms" section. Unlike listForms
+ * above, this is never paginated (a subsidiary user's own submission count is
+ * always small) and always scoped to exactly one subsidiary + origin. */
+export async function listMyAdHocForms(subsidiaryId: string): Promise<FormListItem[]> {
+  const forms = await AppDataSource.getRepository(Form).find({
+    where: { subsidiaryId, origin: "adhoc", isDeleted: false },
+    order: { updatedAt: "DESC" },
+  });
+  const publishedVersionIds = forms.map((f) => f.publishedVersionId).filter((id): id is string => id !== null);
+  const publishedVersions = publishedVersionIds.length
+    ? await AppDataSource.getRepository(FormVersion).find({ where: publishedVersionIds.map((id) => ({ id })) })
+    : [];
+  const versionNumberById = new Map(publishedVersions.map((v) => [v.id, v.versionNumber]));
+  return forms.map((form) =>
+    toListItem(form, form.publishedVersionId ? (versionNumberById.get(form.publishedVersionId) ?? null) : null),
+  );
 }
 
 export async function getFormDetail(formId: string): Promise<FormDetail | null> {
@@ -358,6 +406,89 @@ export async function unpublishForm(formId: string): Promise<UnpublishOutcome> {
 
   await AppDataSource.getRepository(Form).update(formId, { status: "unpublished", updatedAt: new Date() });
   await AppDataSource.getRepository(FormVersion).update(form.publishedVersionId, { unpublishedAt: new Date() });
+  return "ok";
+}
+
+/** Ownership-check helper for a subsidiary user's own adhoc form, mirroring
+ * uploadService's findOwnedUpload convention: returns null identically whether the
+ * form doesn't exist, isn't theirs, or was admin-authored, so a router 404 never
+ * leaks which case occurred. Used by every subsidiaryForms.router.ts /adhoc/* route. */
+export function findOwnedAdHocForm(formId: string, subsidiaryId: string): Promise<Form | null> {
+  return AppDataSource.getRepository(Form).findOne({
+    where: { id: formId, subsidiaryId, origin: "adhoc", isDeleted: false },
+  });
+}
+
+export type SubmitAdHocOutcome = "ok" | "not_found" | "already_pending";
+
+/** A subsidiary user's "Submit for Review" action — flips pendingReview on, so an
+ * admin sees it in their review queue (AdHocReviewPanel.tsx) and further draft
+ * edits are blocked (subsidiaryForms.router.ts's PATCH /adhoc/:id/draft checks
+ * this) until approveAdHocForm/rejectAdHocForm below resolve it. */
+export async function submitAdHocFormForReview(formId: string, subsidiaryId: string): Promise<SubmitAdHocOutcome> {
+  const form = await findOwnedAdHocForm(formId, subsidiaryId);
+  if (!form) return "not_found";
+  if (form.pendingReview) return "already_pending";
+
+  await AppDataSource.getRepository(Form).update(formId, {
+    pendingReview: true,
+    submittedForReviewAt: new Date(),
+    reviewNote: null,
+  });
+  return "ok";
+}
+
+export type ApproveAdHocOutcome = "ok" | "not_found" | "not_adhoc" | "not_pending" | "invalid";
+
+export interface ApproveAdHocResult {
+  outcome: ApproveAdHocOutcome;
+  validation?: ValidationResult;
+}
+
+/** The admin review queue's "Approve" action — the one point a project code gets
+ * attached to an adhoc form (never asked of the subsidiary user, see the feature's
+ * own requirement), then reuses publishForm as-is: same validate/generate/publish
+ * path admin's own Publish button uses everywhere else. If the draft turns out to
+ * be invalid, pendingReview is left cleared (not put back to pending) — the
+ * subsidiary sees an ordinary editable draft again and can fix it and resubmit,
+ * same recovery shape a reject gives them. */
+export async function approveAdHocForm(formId: string, projectCode: string, userId: string): Promise<ApproveAdHocResult> {
+  const form = await AppDataSource.getRepository(Form).findOne({ where: { id: formId, isDeleted: false } });
+  if (!form) return { outcome: "not_found" };
+  if (form.origin !== "adhoc") return { outcome: "not_adhoc" };
+  if (!form.pendingReview) return { outcome: "not_pending" };
+
+  await AppDataSource.getRepository(Form).update(formId, {
+    projectCode,
+    pendingReview: false,
+    reviewNote: null,
+    reviewedAt: new Date(),
+  });
+
+  const result = await publishForm(formId, userId);
+  if (result.outcome === "not_found") return { outcome: "not_found" };
+  if (result.outcome === "invalid") return { outcome: "invalid", validation: result.validation };
+  return { outcome: "ok" };
+}
+
+export type RejectAdHocOutcome = "ok" | "not_found" | "not_adhoc" | "not_pending";
+
+/** The admin review queue's "Reject" action — leaves the form untouched (still
+ * draft) but clears pendingReview so the subsidiary user can edit and resubmit,
+ * with an optional note explaining why (shown on their own ad-hoc editor page,
+ * same "reviewer note visible to the submitter" convention as
+ * formContributionService.rejectContribution). */
+export async function rejectAdHocForm(formId: string, reviewNote?: string): Promise<RejectAdHocOutcome> {
+  const form = await AppDataSource.getRepository(Form).findOne({ where: { id: formId, isDeleted: false } });
+  if (!form) return "not_found";
+  if (form.origin !== "adhoc") return "not_adhoc";
+  if (!form.pendingReview) return "not_pending";
+
+  await AppDataSource.getRepository(Form).update(formId, {
+    pendingReview: false,
+    reviewNote: reviewNote ?? null,
+    reviewedAt: new Date(),
+  });
   return "ok";
 }
 

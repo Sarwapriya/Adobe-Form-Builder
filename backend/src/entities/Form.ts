@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
 
 export type FormStatus = "draft" | "published" | "unpublished";
+export type FormOrigin = "admin" | "adhoc";
 
 /**
  * A builder-authored form/campaign — the schema-authored counterpart to Upload's
@@ -33,6 +34,33 @@ export class Form {
 
   @Column({ type: "nvarchar", length: 20, default: "draft" })
   status!: FormStatus;
+
+  /** "admin" for every form created via Form Initiator (the only kind before this
+   * column existed — see default below), "adhoc" for one a subsidiary user created
+   * themselves via My Forms. Purely informational (a badge in admin's Form
+   * Initiator list) — an approved-and-published adhoc form behaves identically to
+   * an admin-authored one everywhere downstream (Question Master, generation). */
+  @Column({ type: "nvarchar", length: 10, default: "admin" })
+  origin!: FormOrigin;
+
+  /** True while a subsidiary-submitted adhoc form is awaiting admin review — see
+   * formBuilderService.submitAdHocFormForReview/approveAdHocForm/rejectAdHocForm.
+   * Draft edits are blocked (both client-side and server-side) while this is true.
+   * Always false for "admin"-origin forms. */
+  @Column({ type: "bit", default: false })
+  pendingReview!: boolean;
+
+  @Column({ type: "datetimeoffset", nullable: true })
+  submittedForReviewAt!: Date | null;
+
+  @Column({ type: "datetimeoffset", nullable: true })
+  reviewedAt!: Date | null;
+
+  /** Set by rejectAdHocForm so the subsidiary user knows why — shown on their own
+   * ad-hoc editor page. Cleared on the next approve/reject cycle, same "only the
+   * latest review's own note" convention as FormContribution.reviewNote. */
+  @Column({ type: "nvarchar", length: 2000, nullable: true })
+  reviewNote!: string | null;
 
   @Column({ type: "uniqueidentifier", nullable: true })
   currentDraftVersionId!: string | null;

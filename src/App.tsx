@@ -17,6 +17,7 @@ import { FormBuilderListPage } from "./pages/FormBuilderListPage.tsx";
 import { FormBuilderEditorPage } from "./pages/FormBuilderEditorPage.tsx";
 import { MyFormsListPage } from "./pages/MyFormsListPage.tsx";
 import { MyFormTranslatePage } from "./pages/MyFormTranslatePage.tsx";
+import { MyAdHocFormEditorPage } from "./pages/MyAdHocFormEditorPage.tsx";
 import { MySubmissionsPage } from "./pages/MySubmissionsPage.tsx";
 import { MySubsidiaryPage } from "./pages/MySubsidiaryPage.tsx";
 import { QuestionMasterPage } from "./pages/QuestionMasterPage.tsx";
@@ -45,6 +46,7 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route index element={<UploadHistoryPage />} />
               <Route path="my-forms" element={<MyFormsListPage />} />
+              <Route path="my-forms/adhoc/:id" element={<MyAdHocFormEditorPage />} />
               <Route path="my-forms/:id" element={<MyFormTranslatePage />} />
               <Route path="my-submissions" element={<MySubmissionsPage />} />
               <Route path="my-subsidiary" element={<MySubsidiaryPage />} />

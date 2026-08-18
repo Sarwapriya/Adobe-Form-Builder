@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { Alert, Box, Button, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Alert, Box, Button, Chip, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import { isRtlLangSubtag, langDisplayName, migrateDefaultLocale } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { listSubsidiaryLocales, type SubsidiaryLocale } from "../../api/subsidiaryLocalesApi";
 
 const LOCALE_CODE_PATTERN = /^[a-zA-Z]{2,3}_[A-Z]{2}$/;
 
@@ -23,9 +24,41 @@ export function LocaleManagerPanel() {
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
   const [newCode, setNewCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [masterLocales, setMasterLocales] = useState<SubsidiaryLocale[]>([]);
+
+  const subsidiaryName = definition?.meta.subsidiary;
+  useEffect(() => {
+    if (!subsidiaryName) {
+      setMasterLocales([]);
+      return;
+    }
+    let cancelled = false;
+    listSubsidiaryLocales(subsidiaryName)
+      .then((rows) => {
+        if (!cancelled) setMasterLocales(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setMasterLocales([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [subsidiaryName]);
 
   if (!definition) return null;
   const locales = definition.locales;
+
+  function addLocaleFromMaster(master: SubsidiaryLocale) {
+    if (locales.some((l) => l.code === master.code)) return;
+    setError(null);
+    updateDefinition((d) => ({
+      ...d,
+      locales: [
+        ...d.locales,
+        { code: master.code, langSubtag: master.langSubtag, isRtl: master.isRtl, sourceColumn: "builder" as const, label: master.label },
+      ],
+    }));
+  }
 
   function addLocale() {
     const code = newCode.trim();
@@ -108,6 +141,24 @@ export function LocaleManagerPanel() {
           </Box>
         ))}
       </Stack>
+      {masterLocales.length > 0 && (
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+            Quick add from {subsidiaryName}&apos;s allowed locales:
+          </Typography>
+          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+            {masterLocales.map((m) => (
+              <Chip
+                key={m.code}
+                size="small"
+                label={m.isFallback ? `${m.code} (fallback)` : m.code}
+                disabled={locales.some((l) => l.code === m.code)}
+                onClick={() => addLocaleFromMaster(m)}
+              />
+            ))}
+          </Stack>
+        </Box>
+      )}
       <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
         <TextField
           size="small"

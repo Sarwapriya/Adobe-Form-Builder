@@ -4,6 +4,7 @@ import type { ContributionSummary } from "./subsidiaryFormsApi";
 
 export type FormStatus = "draft" | "published" | "unpublished";
 export type FormVersionStatus = "draft" | "published" | "archived";
+export type FormOrigin = "admin" | "adhoc";
 
 /** The calling standard user's own latest-contribution progress for a form — drives
  * the 4-stage status bar on "My Forms" (Submitted → Reviewed by admin → Approved →
@@ -25,6 +26,15 @@ export interface FormListItem {
   createdAt: string;
   updatedAt: string;
   publishedVersionNumber: number | null;
+  /** "admin" (Form Initiator) or "adhoc" (a subsidiary user's own My Forms
+   * submission) — drives the "Ad-hoc" badge on FormBuilderListPage. */
+  origin: FormOrigin;
+  /** True while an adhoc submission awaits admin review — drives the "Pending
+   * review" badge and AdHocReviewPanel. Always false for "admin"-origin forms. */
+  pendingReview: boolean;
+  submittedForReviewAt: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
   /** Only populated by the subsidiary-user "My Forms" listing (`/api/v1/forms`) —
    * null if they've never submitted one. Always undefined from the admin listing. */
   myContributionProgress?: ContributionProgress | null;
@@ -72,9 +82,10 @@ export type ListFormsParams = {
   search?: string;
   page?: number;
   pageSize?: number;
+  pendingReview?: boolean;
 };
 
-function buildQuery(params: Record<string, string | number | undefined>): string {
+function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== "") search.set(key, String(value));
@@ -167,6 +178,27 @@ export function approveContribution(formId: string, contributionId: string, revi
 
 export function rejectContribution(formId: string, contributionId: string, reviewNote?: string): Promise<void> {
   return apiClient.post<void>(`/api/v1/admin/forms/${formId}/contributions/${contributionId}/reject`, { reviewNote });
+}
+
+/** Admin review queue actions for a subsidiary user's own "ad-hoc" submission
+ * (see AdHocReviewPanel.tsx) — distinct from the contribution approve/reject
+ * above. Approve is the one point a project code gets attached (never asked of
+ * the subsidiary), and reuses the same 422/FormInvalidError shape publishForm
+ * already throws, since it calls the same publish path server-side. */
+export async function approveAdHocForm(formId: string, projectCode: string): Promise<void> {
+  try {
+    await apiClient.post<void>(`/api/v1/admin/forms/${formId}/adhoc/approve`, { projectCode });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 422) {
+      const validation = (err.body as { validation?: ValidationResult } | undefined)?.validation;
+      if (validation) throw new FormInvalidError(validation);
+    }
+    throw err;
+  }
+}
+
+export function rejectAdHocForm(formId: string, reviewNote?: string): Promise<void> {
+  return apiClient.post<void>(`/api/v1/admin/forms/${formId}/adhoc/reject`, { reviewNote });
 }
 
 export type { Issue, ValidationResult };

@@ -5,6 +5,7 @@ import { ProjectCodeManager } from "../components/admin/ProjectCodeManager";
 import { SubsidiaryManager } from "../components/admin/SubsidiaryManager";
 import { SubsidiaryProjectBlockManager } from "../components/admin/SubsidiaryProjectBlockManager";
 import { SubsidiaryProjectBulkBlockManager } from "../components/admin/SubsidiaryProjectBulkBlockManager";
+import { SubsidiaryLocaleManager } from "../components/admin/SubsidiaryLocaleManager";
 import { PageHeader } from "../components/common/PageHeader";
 
 /**
@@ -45,6 +46,7 @@ export function ConfigurationPage() {
         refreshSignal={restrictionsRefreshSignal}
         onChange={bumpRestrictionsRefresh}
       />
+      <SubsidiaryLocaleManager />
     </Box>
   );
 }

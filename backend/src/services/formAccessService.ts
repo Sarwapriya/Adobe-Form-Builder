@@ -36,6 +36,11 @@ async function toListItem(
     createdAt: form.createdAt,
     updatedAt: form.updatedAt,
     publishedVersionNumber: publishedVersion?.versionNumber ?? null,
+    origin: form.origin,
+    pendingReview: form.pendingReview,
+    submittedForReviewAt: form.submittedForReviewAt,
+    reviewedAt: form.reviewedAt,
+    reviewNote: form.reviewNote,
     myContributionProgress,
     projectCodeLocked,
   };

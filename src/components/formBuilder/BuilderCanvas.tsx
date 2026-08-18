@@ -491,6 +491,18 @@ export function PredefinedFieldToggles({
       <Stack spacing={0.5}>{profileItems.map(renderItem)}</Stack>
 
       <Typography variant="subtitle1" fontWeight={700} sx={{ mt: 2.5, mb: 0.25 }}>
+        Submit Button
+      </Typography>
+      <Chip
+        label="Submit Button"
+        size="small"
+        variant={selectedField === "submitButton" ? "filled" : "outlined"}
+        color={selectedField === "submitButton" ? "primary" : "default"}
+        onClick={() => onSelectField("submitButton")}
+        sx={{ cursor: "pointer" }}
+      />
+
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mt: 2.5, mb: 0.25 }}>
         Consent
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>

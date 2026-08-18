@@ -2,6 +2,7 @@ import { apiClient } from "./apiClient";
 import type { PagedResult, UploadListItem, UploadStatus } from "./uploadsApi";
 import type { ProjectCode } from "./projectCodesApi";
 import type { Subsidiary } from "./subsidiariesApi";
+import type { SubsidiaryLocale } from "./subsidiaryLocalesApi";
 
 export type { ProjectCode } from "./projectCodesApi";
 export type { Subsidiary } from "./subsidiariesApi";
@@ -304,4 +305,29 @@ export function createSubsidiaryProjectBlock(subsidiaryName: string, projectCode
  * uploadService.createUpload). */
 export function deleteSubsidiaryProjectBlock(id: string): Promise<void> {
   return apiClient.delete(`/api/v1/admin/subsidiary-project-blocks/${id}`);
+}
+
+/** GET /api/v1/admin/subsidiary-locales — every subsidiary's master locale list,
+ * for the Configuration page's SubsidiaryLocaleManager. Read-only "which locales
+ * can this subsidiary's users pick" access for any authenticated user lives at
+ * /api/v1/subsidiary-locales instead (see subsidiaryLocalesApi.ts). */
+export function listAllSubsidiaryLocales(): Promise<SubsidiaryLocale[]> {
+  return apiClient.get<SubsidiaryLocale[]>("/api/v1/admin/subsidiary-locales");
+}
+
+export interface CreateSubsidiaryLocaleInput {
+  subsidiaryName: string;
+  code: string;
+  langSubtag: string;
+  isRtl: boolean;
+  label: string;
+  isFallback: boolean;
+}
+
+export function addSubsidiaryLocale(input: CreateSubsidiaryLocaleInput): Promise<SubsidiaryLocale> {
+  return apiClient.post<SubsidiaryLocale>("/api/v1/admin/subsidiary-locales", input);
+}
+
+export function deleteSubsidiaryLocale(id: string): Promise<void> {
+  return apiClient.delete(`/api/v1/admin/subsidiary-locales/${id}`);
 }

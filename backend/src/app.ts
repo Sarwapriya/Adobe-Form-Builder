@@ -14,6 +14,7 @@ import { projectCodeRouter } from "./routes/projectCode.router";
 import { subsidiaryRouter } from "./routes/subsidiary.router";
 import { formBuilderRouter } from "./routes/formBuilder.router";
 import { subsidiaryFormsRouter } from "./routes/subsidiaryForms.router";
+import { subsidiaryLocaleRouter } from "./routes/subsidiaryLocale.router";
 
 export const app = express();
 
@@ -39,5 +40,6 @@ app.use("/api/v1/project-codes", projectCodeRouter);
 app.use("/api/v1/subsidiaries", subsidiaryRouter);
 app.use("/api/v1/admin/forms", formBuilderRouter);
 app.use("/api/v1/forms", subsidiaryFormsRouter);
+app.use("/api/v1/subsidiary-locales", subsidiaryLocaleRouter);
 
 app.use(errorHandler);

@@ -43,6 +43,11 @@ import {
   deleteSubsidiaryProjectBlock,
   listSubsidiaryProjectBlocks,
 } from "../services/subsidiaryProjectBlockService";
+import {
+  addSubsidiaryLocale,
+  listAllSubsidiaryLocales,
+  removeSubsidiaryLocale,
+} from "../services/subsidiaryLocaleService";
 import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
 import {
   generateQuestionMaster,
@@ -384,6 +389,52 @@ adminRouter.delete(
     const deleted = await deleteSubsidiaryProjectBlock(req.params.id);
     if (!deleted) {
       res.status(404).json({ error: "block not found" });
+      return;
+    }
+    res.status(204).send();
+  })
+);
+
+// The admin-managed master list of which locale codes each subsidiary's users
+// may pick from — read by both admin's own Form Initiator (a convenience picker
+// alongside free text) and a subsidiary user's own ad-hoc form builder
+// (restricted, no free text — see subsidiaryLocale.router.ts's read-only GET).
+adminRouter.get(
+  "/subsidiary-locales",
+  asyncHandler(async (_req, res) => {
+    const locales = await listAllSubsidiaryLocales();
+    res.json(locales);
+  })
+);
+
+const createSubsidiaryLocaleSchema = z.object({
+  subsidiaryName: z.string().trim().min(1),
+  code: z
+    .string()
+    .trim()
+    .regex(/^[a-zA-Z]{2,3}_[A-Z]{2}$/, 'Use the format "<lang>_<COUNTRY>", e.g. "ar_AE"'),
+  langSubtag: z.string().trim().min(2).max(3),
+  isRtl: z.boolean(),
+  label: z.string().trim().min(1),
+  isFallback: z.boolean(),
+});
+
+adminRouter.post(
+  "/subsidiary-locales",
+  validateBody(createSubsidiaryLocaleSchema),
+  asyncHandler(async (req, res) => {
+    const input = req.body as z.infer<typeof createSubsidiaryLocaleSchema>;
+    const created = await addSubsidiaryLocale(input);
+    res.status(201).json(created);
+  })
+);
+
+adminRouter.delete(
+  "/subsidiary-locales/:id",
+  asyncHandler(async (req, res) => {
+    const deleted = await removeSubsidiaryLocale(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: "locale not found" });
       return;
     }
     res.status(204).send();

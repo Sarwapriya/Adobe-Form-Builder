@@ -7,6 +7,7 @@ import { requireAdmin } from "../middleware/authJwt";
 import { validateBody } from "../middleware/validate";
 import { buildFormVersionPreview, type PreviewVariant } from "../services/previewService";
 import {
+  approveAdHocForm,
   buildFormZip,
   createForm,
   deleteForm,
@@ -14,6 +15,7 @@ import {
   listForms,
   listFormVersions,
   publishForm,
+  rejectAdHocForm,
   unpublishForm,
   updateDraft,
   type ListFormsOptions,
@@ -37,6 +39,7 @@ function parseListOptions(req: Request): ListFormsOptions {
     search: typeof req.query.search === "string" ? req.query.search : undefined,
     page: parsePositiveInt(req.query.page),
     pageSize: parsePositiveInt(req.query.pageSize),
+    pendingReview: req.query.pendingReview === "true" ? true : req.query.pendingReview === "false" ? false : undefined,
   };
 }
 
@@ -198,6 +201,62 @@ formBuilderRouter.get(
   asyncHandler(async (req, res) => {
     const contributions = await listContributionsForForm(req.params.id);
     res.json(contributions);
+  }),
+);
+
+// Admin review queue for a subsidiary user's own "ad-hoc" submission (see
+// formBuilderService.submitAdHocFormForReview) — distinct from the
+// contribution approve/reject above, which merges translations/additions onto
+// an *existing* published form rather than reviewing a brand-new one.
+const approveAdHocSchema = z.object({ projectCode: z.string().trim().min(1) });
+
+formBuilderRouter.post(
+  "/:id/adhoc/approve",
+  validateBody(approveAdHocSchema),
+  asyncHandler(async (req, res) => {
+    const { projectCode } = req.body as z.infer<typeof approveAdHocSchema>;
+    const result = await approveAdHocForm(req.params.id, projectCode, req.auth!.sub);
+    if (result.outcome === "not_found") {
+      res.status(404).json({ error: "form not found" });
+      return;
+    }
+    if (result.outcome === "not_adhoc") {
+      res.status(409).json({ error: "This form was not created via My Forms" });
+      return;
+    }
+    if (result.outcome === "not_pending") {
+      res.status(409).json({ error: "This form isn't currently awaiting review" });
+      return;
+    }
+    if (result.outcome === "invalid") {
+      res.status(422).json({ error: "form is not valid", validation: result.validation });
+      return;
+    }
+    res.status(204).send();
+  }),
+);
+
+const rejectAdHocSchema = z.object({ reviewNote: z.string().trim().max(2000).optional() });
+
+formBuilderRouter.post(
+  "/:id/adhoc/reject",
+  validateBody(rejectAdHocSchema),
+  asyncHandler(async (req, res) => {
+    const { reviewNote } = req.body as z.infer<typeof rejectAdHocSchema>;
+    const outcome = await rejectAdHocForm(req.params.id, reviewNote);
+    if (outcome === "not_found") {
+      res.status(404).json({ error: "form not found" });
+      return;
+    }
+    if (outcome === "not_adhoc") {
+      res.status(409).json({ error: "This form was not created via My Forms" });
+      return;
+    }
+    if (outcome === "not_pending") {
+      res.status(409).json({ error: "This form isn't currently awaiting review" });
+      return;
+    }
+    res.status(204).send();
   }),
 );
 

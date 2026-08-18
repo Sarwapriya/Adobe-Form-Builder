@@ -80,6 +80,11 @@ CREATE TABLE Forms (
     subsidiaryId          NVARCHAR(50) NOT NULL,
     projectCode           NVARCHAR(100) NULL,
     status                NVARCHAR(20) NOT NULL DEFAULT 'draft',
+    origin                NVARCHAR(10) NOT NULL DEFAULT 'admin',
+    pendingReview         BIT NOT NULL DEFAULT 0,
+    submittedForReviewAt  DATETIMEOFFSET(7) NULL,
+    reviewedAt            DATETIMEOFFSET(7) NULL,
+    reviewNote            NVARCHAR(2000) NULL,
     currentDraftVersionId UNIQUEIDENTIFIER NULL,
     publishedVersionId    UNIQUEIDENTIFIER NULL,
     isDeleted             BIT NOT NULL DEFAULT 0,
@@ -257,6 +262,50 @@ CREATE TABLE QuestionMasterVersions (
 );
 CREATE UNIQUE INDEX UQ_QuestionMasterVersions_projectCode_version ON QuestionMasterVersions(projectCode, version);
 CREATE INDEX IX_QuestionMasterVersions_projectCode ON QuestionMasterVersions(projectCode);
+
+-- The admin-managed master list of which locale codes a subsidiary's users may
+-- pick from — read by admin's own Form Initiator (a convenience picker alongside
+-- free text) and, restricted with no free text, a subsidiary user's own ad-hoc
+-- form builder (see subsidiaryLocaleService.ts). Exactly one row per subsidiary
+-- should have isFallback = 1 (enforced in the service layer, not here).
+CREATE TABLE SubsidiaryLocales (
+    id             UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    subsidiaryName NVARCHAR(100) NOT NULL,
+    code           NVARCHAR(20) NOT NULL,
+    langSubtag     NVARCHAR(10) NOT NULL,
+    isRtl          BIT NOT NULL,
+    label          NVARCHAR(100) NOT NULL,
+    isFallback     BIT NOT NULL DEFAULT 0,
+    sortOrder      INT NOT NULL DEFAULT 0,
+    createdAt      DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+CREATE UNIQUE INDEX UQ_SubsidiaryLocales_pair ON SubsidiaryLocales(subsidiaryName, code);
+
+INSERT INTO SubsidiaryLocales (subsidiaryName, code, langSubtag, isRtl, label, isFallback, sortOrder) VALUES
+    ('SGE',   'en_AE', 'en', 0, 'English', 1, 0),
+    ('SGE',   'ar_AE', 'ar', 1, 'Arabic',  0, 1),
+
+    ('SETK',  'tr_TR', 'tr', 0, 'Turkish', 1, 0),
+
+    ('SEMAG', 'fr_MA', 'fr', 0, 'French',  1, 0),
+
+    ('IRAN',  'fa_IR', 'fa', 1, 'Persian', 1, 0),
+
+    ('SEEG',  'ar_EG', 'ar', 1, 'Arabic',  1, 0),
+    ('SEEG',  'en_EG', 'en', 0, 'English', 0, 1),
+
+    ('SEIL',  'he_IL', 'he', 1, 'Hebrew',  1, 0),
+    ('SEIL',  'ar_PS', 'ar', 1, 'Arabic',  0, 1),
+
+    ('SELV',  'en_JO', 'en', 0, 'English', 1, 0),
+    ('SELV',  'en_LB', 'en', 0, 'English', 0, 1),
+    ('SELV',  'ar_IQ', 'ar', 1, 'Arabic',  0, 2),
+    ('SELV',  'ku_IQ', 'ku', 1, 'Kurdish', 0, 3),
+
+    ('SEPAK', 'en_PK', 'en', 0, 'English', 1, 0),
+
+    ('SESAR', 'en_SA', 'en', 0, 'English', 1, 0),
+    ('SESAR', 'ar_SA', 'ar', 1, 'Arabic',  0, 1);
 
 -- Admin-configurable toggle read by the submit endpoint to decide whether
 -- submitting an upload locks that version's generated files against further

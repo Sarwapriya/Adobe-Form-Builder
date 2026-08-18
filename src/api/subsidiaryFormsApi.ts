@@ -1,4 +1,4 @@
-import type { ContributionContent, ValidationResult } from "@formbuilder/shared";
+import type { BuilderConfig, ContributionContent, FormDefinition, ValidationResult } from "@formbuilder/shared";
 import { apiClient, ApiError } from "./apiClient";
 import type { FormDetail, FormListItem } from "./formBuilderApi";
 
@@ -15,6 +15,33 @@ export function listMyForms(): Promise<FormListItem[]> {
 
 export function getMyFormDetail(formId: string): Promise<FormDetail> {
   return apiClient.get<FormDetail>(`/api/v1/forms/${formId}`);
+}
+
+/**
+ * A subsidiary user's own self-service "ad-hoc" forms — a brand-new form they
+ * build themselves (My Forms → New Ad-hoc Form), distinct from the read-only
+ * listMyForms/getMyFormDetail above (which only ever cover an existing
+ * *published* admin-authored form). The subsidiary is never sent in the request
+ * body — the server always forces it to the caller's own account.
+ */
+export function createAdHocForm(name: string): Promise<FormListItem> {
+  return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name });
+}
+
+export function listMyAdHocForms(): Promise<FormListItem[]> {
+  return apiClient.get<FormListItem[]>("/api/v1/forms/adhoc");
+}
+
+export function getMyAdHocFormDetail(formId: string): Promise<FormDetail> {
+  return apiClient.get<FormDetail>(`/api/v1/forms/adhoc/${formId}`);
+}
+
+export function updateMyAdHocFormDraft(formId: string, definition: FormDefinition, config: BuilderConfig): Promise<void> {
+  return apiClient.patch<void>(`/api/v1/forms/adhoc/${formId}/draft`, { definition, config });
+}
+
+export function submitAdHocFormForReview(formId: string): Promise<void> {
+  return apiClient.post<void>(`/api/v1/forms/adhoc/${formId}/submit-for-review`);
 }
 
 export type ContributionStatus = "pending" | "approved" | "rejected";

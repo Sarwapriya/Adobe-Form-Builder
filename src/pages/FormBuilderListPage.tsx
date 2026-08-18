@@ -5,12 +5,14 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Paper,
   Stack,
@@ -52,6 +54,7 @@ export function FormBuilderListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<FormStatus | "">("");
+  const [pendingReviewOnly, setPendingReviewOnly] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -67,7 +70,7 @@ export function FormBuilderListPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await listForms({ status: statusFilter || undefined });
+      const result = await listForms({ status: statusFilter || undefined, pendingReview: pendingReviewOnly || undefined });
       setForms(result.items);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load forms");
@@ -79,7 +82,7 @@ export function FormBuilderListPage() {
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+  }, [statusFilter, pendingReviewOnly]);
 
   useEffect(() => {
     if (!createOpen) return;
@@ -154,6 +157,10 @@ export function FormBuilderListPage() {
             </MenuItem>
           ))}
         </TextField>
+        <FormControlLabel
+          control={<Checkbox checked={pendingReviewOnly} onChange={(e) => setPendingReviewOnly(e.target.checked)} />}
+          label="Pending review only"
+        />
       </Paper>
 
       {error && (
@@ -190,6 +197,8 @@ export function FormBuilderListPage() {
               {form.publishedVersionNumber != null && (
                 <Chip label={`v${form.publishedVersionNumber}`} size="small" variant="outlined" />
               )}
+              {form.origin === "adhoc" && <Chip label="Ad-hoc" size="small" variant="outlined" />}
+              {form.pendingReview && <Chip label="Pending review" size="small" color="warning" />}
               <Chip label={form.status} color={STATUS_COLOR[form.status]} size="small" />
               <Button
                 size="small"

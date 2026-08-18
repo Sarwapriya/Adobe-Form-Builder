@@ -9,6 +9,7 @@ import { EmailLog } from "../entities/EmailLog";
 import { ProjectCode } from "../entities/ProjectCode";
 import { Subsidiary } from "../entities/Subsidiary";
 import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
+import { SubsidiaryLocale } from "../entities/SubsidiaryLocale";
 import { QaRun } from "../entities/QaRun";
 import { QaTestCaseResult } from "../entities/QaTestCaseResult";
 import { Form } from "../entities/Form";
@@ -37,6 +38,8 @@ import { AddUserNotificationEmail1880000000000 } from "../migrations/18800000000
 import { AddUserNotificationEmail21890000000000 } from "../migrations/1890000000000-AddUserNotificationEmail2";
 import { AddQuestionMasterVersions1900000000000 } from "../migrations/1900000000000-AddQuestionMasterVersions";
 import { AddProjectCodeIsLocked1910000000000 } from "../migrations/1910000000000-AddProjectCodeIsLocked";
+import { AddSubsidiaryLocales1920000000000 } from "../migrations/1920000000000-AddSubsidiaryLocales";
+import { AddFormOriginAndReview1930000000000 } from "../migrations/1930000000000-AddFormOriginAndReview";
 
 const entities = [
   Upload,
@@ -48,6 +51,7 @@ const entities = [
   ProjectCode,
   Subsidiary,
   SubsidiaryProjectBlock,
+  SubsidiaryLocale,
   QaRun,
   QaTestCaseResult,
   Form,
@@ -78,6 +82,8 @@ const migrations = [
   AddUserNotificationEmail21890000000000,
   AddQuestionMasterVersions1900000000000,
   AddProjectCodeIsLocked1910000000000,
+  AddSubsidiaryLocales1920000000000,
+  AddFormOriginAndReview1930000000000,
 ];
 
 /**
