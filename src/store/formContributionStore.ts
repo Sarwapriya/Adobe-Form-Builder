@@ -102,6 +102,19 @@ interface FormContributionState {
    * rejection, not on every refetch — otherwise it would keep clobbering
    * corrections the user has already started typing. */
   prefilledFromContributionId: string | null;
+  /** Per-question desired auto-populate enabled state, keyed by questionId — only
+   * ever holds entries for questions the base form marks autoPopulateEligible.
+   * Seeded from the base form's own autoPopulateEnabled in loadForm, and
+   * re-seeded from a pending/rejected contribution's own toggles in
+   * syncOwnContributions, same treatment as newQuestions/newConsents. */
+  autoPopulateToggles: Map<string, boolean>;
+  /** True when this form's own project code is currently locked by an admin — set
+   * from `loadForm`'s own response, purely for proactively disabling
+   * editing/submission with a clear message (see MyFormTranslatePage). The actual
+   * enforcement is server-side (submit() below surfaces the 409 either way), so this
+   * is UX only, never the source of truth. Independent of `locked` above (a pending
+   * own-contribution) — both can be true at once. */
+  projectLocked: boolean;
 
   loadForm: (formId: string) => Promise<void>;
   setLocale: (locale: string) => void;
@@ -110,6 +123,7 @@ interface FormContributionState {
   removeQuestion: (localId: string) => void;
   addConsent: (consent: ConsentDefinition) => void;
   removeConsent: (localId: string) => void;
+  setAutoPopulateToggle: (questionId: string, enabled: boolean) => void;
   setNote: (note: string) => void;
   submit: () => Promise<boolean>;
   /** Called whenever this user's own contributions for the current form are
@@ -126,7 +140,38 @@ function buildContent(state: FormContributionState): ContributionContent {
     translations: Array.from(state.translations.values()).filter((t) => t.value.trim() !== ""),
     newQuestions: state.newQuestions,
     newConsents: state.newConsents,
+    autoPopulateToggles: Array.from(state.autoPopulateToggles, ([questionId, enabled]) => ({ questionId, enabled })),
   };
+}
+
+/** Seeds the autoPopulateToggles map from a FormDefinition's own eligible questions
+ * — used both for the base form (loadForm) and for re-seeding from a previously
+ * submitted contribution's own content (syncOwnContributions). */
+function autoPopulateTogglesFromQuestions(questions: FormDefinition["questions"]): Map<string, boolean> {
+  const map = new Map<string, boolean>();
+  for (const q of questions) {
+    if (q.autoPopulateEligible) {
+      map.set(q.id, !!q.autoPopulateEnabled);
+    }
+  }
+  return map;
+}
+
+/** Overlays a previously-submitted contribution's own auto-populate toggles onto
+ * the current eligible-question seed map — same reasoning as
+ * contentTranslationsToMap: a pending/rejected contribution's own submitted state
+ * should be what's shown, not silently reset back to the base form's values. */
+function mergeAutoPopulateToggles(
+  base: Map<string, boolean>,
+  entries: ContributionSummary["content"]["autoPopulateToggles"],
+): Map<string, boolean> {
+  const next = new Map(base);
+  for (const entry of entries) {
+    if (next.has(entry.questionId)) {
+      next.set(entry.questionId, entry.enabled);
+    }
+  }
+  return next;
 }
 
 export const useFormContributionStore = create<FormContributionState>((set, get) => ({
@@ -148,6 +193,8 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
   locked: false,
   lockedContribution: null,
   prefilledFromContributionId: null,
+  projectLocked: false,
+  autoPopulateToggles: new Map(),
 
   async loadForm(formId) {
     set({ loading: true, error: null });
@@ -170,6 +217,8 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
         newConsents: [],
         note: "",
         loading: false,
+        projectLocked: detail.projectCodeLocked ?? false,
+        autoPopulateToggles: autoPopulateTogglesFromQuestions(detail.published.definition.questions),
       });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to load form", loading: false });
@@ -203,6 +252,14 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
 
   removeConsent(localId) {
     set((s) => ({ newConsents: s.newConsents.filter((c) => c.id !== localId) }));
+  },
+
+  setAutoPopulateToggle(questionId, enabled) {
+    set((s) => {
+      const next = new Map(s.autoPopulateToggles);
+      next.set(questionId, enabled);
+      return { autoPopulateToggles: next };
+    });
   },
 
   setNote(note) {
@@ -244,25 +301,27 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
     set({ ownContributions: contributions });
 
     if (latest?.status === "pending") {
-      set({
+      set((s) => ({
         locked: true,
         lockedContribution: latest,
         translations: contentTranslationsToMap(latest.content.translations),
         newQuestions: latest.content.newQuestions,
         newConsents: latest.content.newConsents,
-      });
+        autoPopulateToggles: mergeAutoPopulateToggles(s.autoPopulateToggles, latest.content.autoPopulateToggles),
+      }));
       return;
     }
 
     set({ locked: false, lockedContribution: null });
 
     if (latest?.status === "rejected" && get().prefilledFromContributionId !== latest.id) {
-      set({
+      set((s) => ({
         prefilledFromContributionId: latest.id,
         translations: contentTranslationsToMap(latest.content.translations),
         newQuestions: latest.content.newQuestions,
         newConsents: latest.content.newConsents,
-      });
+        autoPopulateToggles: mergeAutoPopulateToggles(s.autoPopulateToggles, latest.content.autoPopulateToggles),
+      }));
     }
   },
 
@@ -286,6 +345,8 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
       locked: false,
       lockedContribution: null,
       prefilledFromContributionId: null,
+      projectLocked: false,
+      autoPopulateToggles: new Map(),
     });
   },
 }));

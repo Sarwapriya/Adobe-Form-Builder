@@ -81,6 +81,11 @@ export interface FormListItem {
    * would apply) — null if they've never submitted one, undefined from the admin
    * listing so the two call sites stay distinguishable. */
   myContributionProgress?: ContributionProgress | null;
+  /** Whether this form's own project code is currently locked (see
+   * ProjectCode.isLocked) — same populated-by-formAccessService-only,
+   * undefined-from-admin-listing convention as myContributionProgress above (admins
+   * stay exempt from the lock, so their own listing has no need for this). */
+  projectCodeLocked?: boolean;
 }
 
 function toListItem(form: Form, publishedVersionNumber: number | null = null): FormListItem {

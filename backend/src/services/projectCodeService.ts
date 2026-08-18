@@ -11,9 +11,17 @@ export function listProjectCodes(): Promise<ProjectCode[]> {
 
 /** Only the open ones, code ascending — what the upload form's dropdown
  * offers to any authenticated user (a closed code shouldn't even appear as an
- * option, not just be rejected on submit). */
-export function listOpenProjectCodes(): Promise<ProjectCode[]> {
-  return AppDataSource.getRepository(ProjectCode).find({ where: { isOpen: true }, order: { code: "ASC" } });
+ * option, not just be rejected on submit). `excludeLocked` additionally drops
+ * locked codes — pass `true` for a non-admin caller (a locked code shouldn't
+ * even appear as an option for them either, same "don't just rely on the
+ * submit-time rejection" reasoning as isOpen); admins stay exempt from the
+ * lock (see ProjectCode.isLocked's own doc comment), so the route passes
+ * `false` for them and locked codes remain selectable. */
+export function listOpenProjectCodes(excludeLocked = false): Promise<ProjectCode[]> {
+  return AppDataSource.getRepository(ProjectCode).find({
+    where: excludeLocked ? { isOpen: true, isLocked: false } : { isOpen: true },
+    order: { code: "ASC" },
+  });
 }
 
 /**
@@ -22,11 +30,11 @@ export function listOpenProjectCodes(): Promise<ProjectCode[]> {
  * "Project Code" dropdown offers once a subsidiary is selected. A project
  * code closed globally never appears here regardless of subsidiary; one
  * that's only blocked for *this* subsidiary is filtered out here but would
- * still appear for any other.
+ * still appear for any other. `excludeLocked` — see listOpenProjectCodes.
  */
-export async function listOpenProjectCodesForSubsidiary(subsidiaryName: string): Promise<ProjectCode[]> {
+export async function listOpenProjectCodesForSubsidiary(subsidiaryName: string, excludeLocked = false): Promise<ProjectCode[]> {
   const [open, blocks] = await Promise.all([
-    listOpenProjectCodes(),
+    listOpenProjectCodes(excludeLocked),
     AppDataSource.getRepository(SubsidiaryProjectBlock).find({ where: { subsidiaryName } }),
   ]);
   const blockedCodes = new Set(blocks.map((b) => b.projectCode));

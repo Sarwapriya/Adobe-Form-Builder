@@ -1,7 +1,7 @@
 import { findCallingCodeEntry } from "../../form/callingCodes";
 import { resolveLocalizedText, type FormDefinition, type LocaleCode, type LocaleInfo, type PageCopy } from "../../form/formDefinition";
 import { COUNTRY_SUBSIDIARY, SUBSIDIARY_DETAIL, type SubsidiaryCountryEntry } from "../../form/subsidiaryData";
-import { answerDomKey } from "../domIds";
+import { answerDomKey, autoPopulateParamName } from "../domIds";
 import type { FileNames } from "../fileNames";
 import type { BuilderConfig, GeneratedFile } from "../types";
 import { safeJsonForScript } from "./escaping";
@@ -13,6 +13,10 @@ import { safeJsonForScript } from "./escaping";
  * `country_subsidiary`/`subsidiary_detail`) work against a builder's own configured
  * country list instead of the real Samsung tables, with zero reference-JS changes. */
 const BUILDER_SUBSIDIARY_KEY = "BUILDER";
+
+/** Question control types with discrete, selectable answers — the only kind a URL
+ * param can meaningfully auto-populate (see QuestionDefinition.autoPopulateEligible). */
+const AUTO_POPULATE_CONTROL_TYPES = new Set(["radio", "checkbox", "dropdown"]);
 
 /** Synthesizes one-off `country_subsidiary`/`subsidiary_detail` tables for a builder's
  * `fields.mobileNumber.countries` list, from the generic `CALLING_CODES` table (see
@@ -204,6 +208,16 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
     ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales)
     : null;
 
+  // paramName -> questionId, for the One-Click reference script's
+  // setAnswerDataFromParams() to read at runtime — see QuestionDefinition's
+  // autoPopulateEligible/autoPopulateEnabled and domIds.ts's autoPopulateParamName.
+  const autoPopulateParams: Record<string, string> = {};
+  for (const q of form.questions) {
+    if (q.autoPopulateEligible && q.autoPopulateEnabled && AUTO_POPULATE_CONTROL_TYPES.has(q.controlType)) {
+      autoPopulateParams[autoPopulateParamName(q.order)] = q.id;
+    }
+  }
+
   const parts = [
     ["page_error", pageError],
     ["fields", fields],
@@ -227,6 +241,7 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
         analytics: config.analytics ?? { enabled: false },
       },
     ],
+    ["auto_populate_params", autoPopulateParams],
   ] as const;
 
   const contents = parts.map(([name, value]) => `const ${name} = ${safeJsonForScript(value)};`).join("\n\n") + "\n";

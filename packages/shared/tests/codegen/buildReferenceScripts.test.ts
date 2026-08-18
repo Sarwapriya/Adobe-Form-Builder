@@ -332,8 +332,10 @@ describe("generated bundle (oc.html + data file + OC js) wired together", () => 
     }
   });
 
-  it("preselects Q1's answer from ?q01=, matching the reference OC script's behavior", async () => {
+  it("preselects Q1's answer from ?q01= when the question is marked eligible+enabled for auto-populate", async () => {
     const form = sampleFormDefinition();
+    form.questions[0].autoPopulateEligible = true;
+    form.questions[0].autoPopulateEnabled = true;
     const config = defaultBuilderConfig();
     const fileNames = resolveFileNames(form, config);
     const html = buildOcHtml(form, config, fileNames);
@@ -345,6 +347,24 @@ describe("generated bundle (oc.html + data file + OC js) wired together", () => 
     try {
       await runGeneratedBundle(html.contents, dataJs.contents, ocJs.contents);
       expect((document.getElementById("Q1A1") as HTMLInputElement)?.checked).toBe(true);
+    } finally {
+      window.history.pushState({}, "", originalLocation);
+    }
+  });
+
+  it("ignores ?q01= when the question isn't marked eligible/enabled for auto-populate", async () => {
+    const form = sampleFormDefinition(); // no autoPopulateEligible/Enabled set
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+    const html = buildOcHtml(form, config, fileNames);
+    const dataJs = buildDataJs(form, config, fileNames);
+    const ocJs = buildOcJs(fileNames);
+
+    const originalLocation = window.location.href;
+    window.history.pushState({}, "", "/oc.html?id=recipient-1&q01=A1");
+    try {
+      await runGeneratedBundle(html.contents, dataJs.contents, ocJs.contents);
+      expect((document.getElementById("Q1A1") as HTMLInputElement)?.checked).toBe(false);
     } finally {
       window.history.pushState({}, "", originalLocation);
     }

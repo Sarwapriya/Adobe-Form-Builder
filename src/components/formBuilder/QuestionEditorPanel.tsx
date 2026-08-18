@@ -7,7 +7,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import type { FormVariant } from "@formbuilder/shared";
 import { resolveLocalizedText } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
-import { CONTROL_TYPE_LABEL, createAnswer, questionVariants, renumberAnswers } from "./formBuilderHelpers";
+import { autoPopulateParamName, CONTROL_TYPE_LABEL, createAnswer, questionVariants, renumberAnswers } from "./formBuilderHelpers";
 
 const CHOICE_TYPES = new Set(["radio", "checkbox", "dropdown"]);
 
@@ -105,6 +105,20 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
         control={<Switch checked={question.required} onChange={(e) => patchQuestion({ required: e.target.checked })} />}
         label="Required"
       />
+
+      {isChoiceType && (
+        <FormControlLabel
+          control={
+            <Switch
+              checked={!!question.autoPopulateEligible}
+              onChange={(e) =>
+                patchQuestion(e.target.checked ? { autoPopulateEligible: true } : { autoPopulateEligible: false, autoPopulateEnabled: false })
+              }
+            />
+          }
+          label={`Eligible for URL-param auto-populate (One-Click) — reads "${autoPopulateParamName(question.order)}"`}
+        />
+      )}
 
       <Box>
         <Typography variant="body2" fontWeight={600} sx={{ mb: 0.25 }}>

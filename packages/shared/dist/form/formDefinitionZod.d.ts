@@ -57,6 +57,8 @@ export declare const questionDefinitionSchema: z.ZodObject<{
         ff: "ff";
         oc: "oc";
     }>>>;
+    autoPopulateEligible: z.ZodOptional<z.ZodBoolean>;
+    autoPopulateEnabled: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>;
 export declare const consentDefinitionSchema: z.ZodObject<{
     id: z.ZodString;
@@ -210,6 +212,8 @@ export declare const formDefinitionSchema: z.ZodObject<{
             ff: "ff";
             oc: "oc";
         }>>>;
+        autoPopulateEligible: z.ZodOptional<z.ZodBoolean>;
+        autoPopulateEnabled: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strip>>;
     fields: z.ZodObject<{
         email: z.ZodOptional<z.ZodObject<{

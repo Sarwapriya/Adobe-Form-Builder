@@ -44,6 +44,11 @@ export interface ContributionContent {
   newQuestions: QuestionDefinition[];
   /** Appended after the form's existing additionalConsents — same reassignment. */
   newConsents: ConsentDefinition[];
+  /** Per-question opt-in/out for URL-param auto-populate (see QuestionDefinition's
+   * autoPopulateEligible/autoPopulateEnabled) — only meaningful for questions the
+   * admin has already marked autoPopulateEligible on the base form; a toggle
+   * targeting any other question id is rejected by validateContribution. */
+  autoPopulateToggles: { questionId: string; enabled: boolean }[];
 }
 
 function renumberAnswers(answers: AnswerDefinition[]): AnswerDefinition[] {
@@ -183,6 +188,12 @@ export function applyContribution(base: FormDefinition, content: ContributionCon
     next.fields.additionalConsents = renumberConsents([...(next.fields.additionalConsents ?? []), ...content.newConsents]);
   }
 
+  for (const toggle of content.autoPopulateToggles) {
+    const question = next.questions.find((q) => q.id === toggle.questionId);
+    if (!question || !question.autoPopulateEligible) continue;
+    question.autoPopulateEnabled = toggle.enabled;
+  }
+
   return next;
 }
 
@@ -232,6 +243,15 @@ export function validateContribution(base: FormDefinition, content: Contribution
   for (const c of content.newConsents) {
     if (!resolveLocalizedText(c.textByLocale, base.meta.defaultLocale, base.meta.defaultLocale)) {
       warnings.push(warn(`A new consent has no text for "${base.meta.defaultLocale}".`));
+    }
+  }
+
+  for (const toggle of content.autoPopulateToggles) {
+    const question = base.questions.find((q) => q.id === toggle.questionId);
+    if (!question || !question.autoPopulateEligible) {
+      errors.push(
+        err(`Question "${toggle.questionId}" isn't eligible for URL-param auto-populate — it may have been changed since you started.`),
+      );
     }
   }
 

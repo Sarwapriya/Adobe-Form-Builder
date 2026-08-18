@@ -3,6 +3,7 @@ import { AppDataSource } from "../config/data-source";
 import { Form } from "../entities/Form";
 import { FormContribution } from "../entities/FormContribution";
 import { FormVersion } from "../entities/FormVersion";
+import { ProjectCode } from "../entities/ProjectCode";
 import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
 import { getFormDetail, type ContributionProgress, type FormDetail, type FormListItem } from "./formBuilderService";
 
@@ -17,7 +18,11 @@ import { getFormDetail, type ContributionProgress, type FormDetail, type FormLis
  * instead of asserted, mirroring "who has access for that project code."
  */
 
-async function toListItem(form: Form, myContributionProgress: ContributionProgress | null = null): Promise<FormListItem> {
+async function toListItem(
+  form: Form,
+  myContributionProgress: ContributionProgress | null = null,
+  projectCodeLocked = false,
+): Promise<FormListItem> {
   const publishedVersion = form.publishedVersionId
     ? await AppDataSource.getRepository(FormVersion).findOne({ where: { id: form.publishedVersionId } })
     : null;
@@ -32,7 +37,17 @@ async function toListItem(form: Form, myContributionProgress: ContributionProgre
     updatedAt: form.updatedAt,
     publishedVersionNumber: publishedVersion?.versionNumber ?? null,
     myContributionProgress,
+    projectCodeLocked,
   };
+}
+
+/** Locked status for every distinct project code among `forms`, in one query — avoids
+ * an N+1 lookup when building a whole list (see `listAccessibleForms`). */
+async function lockedByProjectCode(forms: Form[]): Promise<Map<string, boolean>> {
+  const codes = [...new Set(forms.map((f) => f.projectCode).filter((c): c is string => !!c))];
+  if (codes.length === 0) return new Map();
+  const rows = await AppDataSource.getRepository(ProjectCode).find({ where: { code: In(codes) } });
+  return new Map(rows.map((pc) => [pc.code, pc.isLocked]));
 }
 
 /** This user's own latest contribution per form, keyed by formId — "latest" by
@@ -69,15 +84,25 @@ export async function listAccessibleForms(subsidiaryId: string, userId: string):
   const blockedProjectCodes = new Set(blocks.map((b) => b.projectCode));
   const visible = forms.filter((f) => !f.projectCode || !blockedProjectCodes.has(f.projectCode));
 
-  const progressByForm = await latestOwnContributionProgressByForm(visible.map((f) => f.id), userId);
-  return Promise.all(visible.map((f) => toListItem(f, progressByForm.get(f.id) ?? null)));
+  const [progressByForm, lockedByCode] = await Promise.all([
+    latestOwnContributionProgressByForm(visible.map((f) => f.id), userId),
+    lockedByProjectCode(visible),
+  ]);
+  return Promise.all(
+    visible.map((f) =>
+      toListItem(f, progressByForm.get(f.id) ?? null, f.projectCode ? (lockedByCode.get(f.projectCode) ?? false) : false),
+    ),
+  );
 }
 
 /** Same visibility rule as `listAccessibleForms`, for a single form — returns `null`
  * identically whether the form doesn't exist, isn't published, belongs to a
  * different subsidiary, or is blocked, so nothing about *why* leaks to the caller
  * (same "null means not found or not yours" convention as uploadService's
- * findOwnedUpload). */
+ * findOwnedUpload). The returned detail's `projectCodeLocked` is purely informational
+ * for the frontend to proactively disable editing/submission with a clear message —
+ * the actual enforcement is formContributionService.submitContribution's own
+ * independent lock check, never this. */
 export async function getAccessibleFormDetail(formId: string, subsidiaryId: string): Promise<FormDetail | null> {
   const form = await AppDataSource.getRepository(Form).findOne({ where: { id: formId, subsidiaryId, status: "published", isDeleted: false } });
   if (!form) return null;
@@ -89,5 +114,12 @@ export async function getAccessibleFormDetail(formId: string, subsidiaryId: stri
     if (blocked) return null;
   }
 
-  return getFormDetail(formId);
+  const detail = await getFormDetail(formId);
+  if (!detail) return null;
+
+  if (form.projectCode) {
+    const projectCodeRow = await AppDataSource.getRepository(ProjectCode).findOne({ where: { code: form.projectCode } });
+    detail.projectCodeLocked = projectCodeRow?.isLocked ?? false;
+  }
+  return detail;
 }

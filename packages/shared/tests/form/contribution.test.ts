@@ -34,7 +34,7 @@ function baseForm(overrides: Partial<FormDefinition> = {}): FormDefinition {
   };
 }
 
-const emptyContent: ContributionContent = { translations: [], newQuestions: [], newConsents: [] };
+const emptyContent: ContributionContent = { translations: [], newQuestions: [], newConsents: [], autoPopulateToggles: [] };
 
 describe("applyContribution", () => {
   it("adds a non-default-locale translation without touching the default locale's text", () => {
@@ -114,6 +114,28 @@ describe("applyContribution", () => {
     expect(next.fields.additionalConsents?.[1].id).toBe("consentExtra2");
     expect(next.fields.additionalConsents?.[1].textByLocale.en_GB).toBe("Another consent");
   });
+
+  it("turns auto-populate on for a question the admin already marked eligible", () => {
+    const form = baseForm();
+    form.questions[0].autoPopulateEligible = true;
+    const content: ContributionContent = { ...emptyContent, autoPopulateToggles: [{ questionId: "Q1", enabled: true }] };
+    const next = applyContribution(form, content);
+    expect(next.questions[0].autoPopulateEnabled).toBe(true);
+    expect(form.questions[0].autoPopulateEnabled).toBeUndefined(); // base untouched
+  });
+
+  it("silently skips an auto-populate toggle for a question that isn't eligible", () => {
+    const form = baseForm(); // Q1 has no autoPopulateEligible flag set
+    const content: ContributionContent = { ...emptyContent, autoPopulateToggles: [{ questionId: "Q1", enabled: true }] };
+    const next = applyContribution(form, content);
+    expect(next.questions[0].autoPopulateEnabled).toBeUndefined();
+  });
+
+  it("silently skips an auto-populate toggle targeting a question id that no longer exists", () => {
+    const form = baseForm();
+    const content: ContributionContent = { ...emptyContent, autoPopulateToggles: [{ questionId: "Q99", enabled: true }] };
+    expect(() => applyContribution(form, content)).not.toThrow();
+  });
 });
 
 describe("validateContribution", () => {
@@ -178,5 +200,26 @@ describe("validateContribution", () => {
       translations: [{ target: { kind: "profileLabel", field: "firstName" }, locale: "en_GB", value: "Changed" }],
     };
     expect(validateContribution(form, content).errors).toEqual([]);
+  });
+
+  it("passes an auto-populate toggle targeting a question the admin marked eligible", () => {
+    const form = baseForm();
+    form.questions[0].autoPopulateEligible = true;
+    const content: ContributionContent = { ...emptyContent, autoPopulateToggles: [{ questionId: "Q1", enabled: true }] };
+    expect(validateContribution(form, content).errors).toEqual([]);
+  });
+
+  it("errors when an auto-populate toggle targets a question that isn't eligible", () => {
+    const form = baseForm(); // Q1 has no autoPopulateEligible flag set
+    const content: ContributionContent = { ...emptyContent, autoPopulateToggles: [{ questionId: "Q1", enabled: true }] };
+    const result = validateContribution(form, content);
+    expect(result.errors.some((e) => /isn't eligible/.test(e.message))).toBe(true);
+  });
+
+  it("errors when an auto-populate toggle targets a nonexistent question id", () => {
+    const form = baseForm();
+    const content: ContributionContent = { ...emptyContent, autoPopulateToggles: [{ questionId: "Q99", enabled: true }] };
+    const result = validateContribution(form, content);
+    expect(result.errors.some((e) => /isn't eligible/.test(e.message))).toBe(true);
   });
 });

@@ -57,6 +57,14 @@ export interface ContributionContent {
     newQuestions: QuestionDefinition[];
     /** Appended after the form's existing additionalConsents — same reassignment. */
     newConsents: ConsentDefinition[];
+    /** Per-question opt-in/out for URL-param auto-populate (see QuestionDefinition's
+     * autoPopulateEligible/autoPopulateEnabled) — only meaningful for questions the
+     * admin has already marked autoPopulateEligible on the base form; a toggle
+     * targeting any other question id is rejected by validateContribution. */
+    autoPopulateToggles: {
+        questionId: string;
+        enabled: boolean;
+    }[];
 }
 /** Merges a contribution onto a baseline `FormDefinition`. Pure — returns a new
  * object, never mutates `base`. Translation targets that no longer exist on `base`

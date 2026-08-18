@@ -61,6 +61,13 @@ export function renumberAnswers(answers: AnswerDefinition[]): AnswerDefinition[]
   return answers.map((a, i) => ({ ...a, id: `A${i + 1}`, order: i + 1 }));
 }
 
+/** Matches domIds.ts's autoPopulateParamName() convention — the URL query param
+ * that auto-populates this question's answer in the One-Click variant, e.g.
+ * order 1 -> "q01". */
+export function autoPopulateParamName(questionOrder: number): string {
+  return `q${String(questionOrder).padStart(2, "0")}`;
+}
+
 export const CONTROL_TYPE_LABEL: Record<ControlType, string> = {
   text: "Textarea",
   shortText: "Text",

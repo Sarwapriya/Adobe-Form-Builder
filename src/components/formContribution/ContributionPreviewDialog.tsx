@@ -21,6 +21,7 @@ export function ContributionPreviewDialog({ open, onClose }: { open: boolean; on
   const translations = useFormContributionStore((s) => s.translations);
   const newQuestions = useFormContributionStore((s) => s.newQuestions);
   const newConsents = useFormContributionStore((s) => s.newConsents);
+  const autoPopulateToggles = useFormContributionStore((s) => s.autoPopulateToggles);
   const workingLocale = useFormContributionStore((s) => s.locale);
 
   const [variant, setVariant] = useState<FormVariant>("ff");
@@ -35,9 +36,10 @@ export function ContributionPreviewDialog({ open, onClose }: { open: boolean; on
       translations: Array.from(translations.values()).filter((t) => t.value.trim() !== ""),
       newQuestions,
       newConsents,
+      autoPopulateToggles: Array.from(autoPopulateToggles, ([questionId, enabled]) => ({ questionId, enabled })),
     };
     return applyContribution(baseDefinition, content);
-  }, [baseDefinition, translations, newQuestions, newConsents]);
+  }, [baseDefinition, translations, newQuestions, newConsents, autoPopulateToggles]);
 
   // Default to a locale that actually has one of this session's in-progress
   // translations whenever the dialog opens — preferring the "Translating into"

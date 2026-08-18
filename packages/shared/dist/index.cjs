@@ -640,6 +640,9 @@ function answerDomKey(order) {
 function questionInputId(questionId, answerOrder) {
   return `${questionId}${answerDomKey(answerOrder)}`;
 }
+function autoPopulateParamName(questionOrder) {
+  return `q${String(questionOrder).padStart(2, "0")}`;
+}
 
 // src/form/formDefinition.ts
 function resolveLocalizedText(map, locale, defaultLocale) {
@@ -928,7 +931,9 @@ var questionDefinitionSchema = import_zod.z.object({
   subheadingByLocale: localeTextMap,
   required: import_zod.z.boolean(),
   answers: import_zod.z.array(answerDefinitionSchema),
-  visibleInVariants: import_zod.z.array(import_zod.z.enum(["ff", "oc"])).optional()
+  visibleInVariants: import_zod.z.array(import_zod.z.enum(["ff", "oc"])).optional(),
+  autoPopulateEligible: import_zod.z.boolean().optional(),
+  autoPopulateEnabled: import_zod.z.boolean().optional()
 });
 var localizedFieldMetaSchema = import_zod.z.object({
   labelByLocale: localeTextMap,
@@ -1391,6 +1396,11 @@ function applyContribution(base, content) {
   if (content.newConsents.length > 0) {
     next.fields.additionalConsents = renumberConsents([...next.fields.additionalConsents ?? [], ...content.newConsents]);
   }
+  for (const toggle of content.autoPopulateToggles) {
+    const question = next.questions.find((q) => q.id === toggle.questionId);
+    if (!question || !question.autoPopulateEligible) continue;
+    question.autoPopulateEnabled = toggle.enabled;
+  }
   return next;
 }
 var LABEL2 = "Form Contribution";
@@ -1428,6 +1438,14 @@ function validateContribution(base, content) {
       warnings.push(warn2(`A new consent has no text for "${base.meta.defaultLocale}".`));
     }
   }
+  for (const toggle of content.autoPopulateToggles) {
+    const question = base.questions.find((q) => q.id === toggle.questionId);
+    if (!question || !question.autoPopulateEligible) {
+      errors.push(
+        err2(`Question "${toggle.questionId}" isn't eligible for URL-param auto-populate \u2014 it may have been changed since you started.`)
+      );
+    }
+  }
   return { errors, warnings };
 }
 
@@ -1450,10 +1468,15 @@ var translationEntrySchema = import_zod2.z.object({
   locale: import_zod2.z.string(),
   value: import_zod2.z.string()
 });
+var autoPopulateToggleSchema = import_zod2.z.object({
+  questionId: import_zod2.z.string(),
+  enabled: import_zod2.z.boolean()
+});
 var contributionContentSchema = import_zod2.z.object({
   translations: import_zod2.z.array(translationEntrySchema),
   newQuestions: import_zod2.z.array(questionDefinitionSchema),
-  newConsents: import_zod2.z.array(consentDefinitionSchema)
+  newConsents: import_zod2.z.array(consentDefinitionSchema),
+  autoPopulateToggles: import_zod2.z.array(autoPopulateToggleSchema)
 });
 
 // src/codegen/css/referenceCssContent.ts
@@ -4580,6 +4603,7 @@ var SUBSIDIARY_CODES = Object.keys(SUBSIDIARY_DETAIL).sort();
 
 // src/codegen/js/buildDataJs.ts
 var BUILDER_SUBSIDIARY_KEY = "BUILDER";
+var AUTO_POPULATE_CONTROL_TYPES = /* @__PURE__ */ new Set(["radio", "checkbox", "dropdown"]);
 function buildBuilderSubsidiaryTables(countries, locales) {
   const countrySubsidiary = {};
   const entries = [];
@@ -4713,6 +4737,12 @@ function buildDataJs(form, config, fileNames) {
     validationMessages[locale] = { ...DEFAULT_VALIDATION_MESSAGES, ...wbMessages };
   }
   const builderSubsidiaryTables = form.fields.mobileNumber ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales) : null;
+  const autoPopulateParams = {};
+  for (const q of form.questions) {
+    if (q.autoPopulateEligible && q.autoPopulateEnabled && AUTO_POPULATE_CONTROL_TYPES.has(q.controlType)) {
+      autoPopulateParams[autoPopulateParamName(q.order)] = q.id;
+    }
+  }
   const parts = [
     ["page_error", pageError],
     ["fields", fields],
@@ -4735,7 +4765,8 @@ function buildDataJs(form, config, fileNames) {
         voucherRequired: config.voucherRequired ?? "N",
         analytics: config.analytics ?? { enabled: false }
       }
-    ]
+    ],
+    ["auto_populate_params", autoPopulateParams]
   ];
   const contents = parts.map(([name, value]) => `const ${name} = ${safeJsonForScript(value)};`).join("\n\n") + "\n";
   return { path: fileNames.dataJs, contents };
@@ -5977,10 +6008,28 @@ $(document).ready(function ()\r
         });\r
     }\r
 	\r
-	function setAnswerDataFromparam(q01)\r
+	function setAnswerDataFromParams()\r
 	{\r
-		//isSubmitClicked = true;\r
-		$("#Q1"+q01).prop('checked', true);\r
+		$.each(auto_populate_params, function(param, questionId)\r
+		{\r
+			var val = frameUrlParam.get(param);\r
+\r
+			if(!val)\r
+			{\r
+				return;\r
+			}\r
+\r
+			var target = $("#" + questionId);\r
+\r
+			if(target.is("select"))\r
+			{\r
+				target.val(val).trigger("change");\r
+			}\r
+			else\r
+			{\r
+				$("#" + questionId + val).prop('checked', true);\r
+			}\r
+		});\r
 	}\r
 \r
     // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message\r
@@ -6699,8 +6748,6 @@ $(document).ready(function ()\r
 \r
         userResponse["channel_detail"] = chd;\r
 \r
-        //userResponse["Q1"] = q01 === "" ? userResponse["Q1"]: q01;\r
-\r
         // Call function to map API Parameter with User Response & send data to server\r
         mapParam(userResponse, isSubmitClicked);\r
     }\r
@@ -6722,9 +6769,6 @@ $(document).ready(function ()\r
 \r
         var countryCode = language.substring(language.indexOf("_") + 1);\r
 \r
-		//Coomment-CEJ-q01 \r
-        var q01 = frameUrlParam.get("q01") || "";	\r
-		\r
 		var ch = frameUrlParam.get("ch") || "";\r
 			\r
 		var chd = frameUrlParam.get("chd") || "";\r
@@ -6744,13 +6788,9 @@ $(document).ready(function ()\r
         populateCallingCodeDropdown();\r
 \r
         attachEvent();\r
-		\r
-		//Coomment-CEJ-q01 \r
-		if(q01 !== "")\r
-		{\r
-			setAnswerDataFromparam(q01);\r
-		}\r
-		\r
+\r
+		setAnswerDataFromParams();\r
+\r
 		enableDisableSubmit();\r
 \r
         // Load and display submit modal when form is submitted, or none of answers are selected\r

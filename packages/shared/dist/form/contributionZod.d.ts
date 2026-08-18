@@ -76,6 +76,10 @@ export declare const translationEntrySchema: z.ZodObject<{
     locale: z.ZodString;
     value: z.ZodString;
 }, z.core.$strip>;
+export declare const autoPopulateToggleSchema: z.ZodObject<{
+    questionId: z.ZodString;
+    enabled: z.ZodBoolean;
+}, z.core.$strip>;
 export declare const contributionContentSchema: z.ZodObject<{
     translations: z.ZodArray<z.ZodObject<{
         target: z.ZodDiscriminatedUnion<[z.ZodObject<{
@@ -141,6 +145,8 @@ export declare const contributionContentSchema: z.ZodObject<{
             ff: "ff";
             oc: "oc";
         }>>>;
+        autoPopulateEligible: z.ZodOptional<z.ZodBoolean>;
+        autoPopulateEnabled: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strip>>;
     newConsents: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
@@ -152,5 +158,9 @@ export declare const contributionContentSchema: z.ZodObject<{
             ff: "ff";
             oc: "oc";
         }>>>;
+    }, z.core.$strip>>;
+    autoPopulateToggles: z.ZodArray<z.ZodObject<{
+        questionId: z.ZodString;
+        enabled: z.ZodBoolean;
     }, z.core.$strip>>;
 }, z.core.$strip>;

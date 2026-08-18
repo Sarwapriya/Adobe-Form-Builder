@@ -28,6 +28,10 @@ export interface FormListItem {
   /** Only populated by the subsidiary-user "My Forms" listing (`/api/v1/forms`) —
    * null if they've never submitted one. Always undefined from the admin listing. */
   myContributionProgress?: ContributionProgress | null;
+  /** Whether this form's own project code is currently locked — same
+   * subsidiary-listing-only, undefined-from-admin convention as
+   * myContributionProgress above (admins stay exempt from the lock). */
+  projectCodeLocked?: boolean;
 }
 
 export interface FormVersionContent {

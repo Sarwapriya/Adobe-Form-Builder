@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert, Box, Chip, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import TranslateIcon from "@mui/icons-material/Translate";
+import EditOffIcon from "@mui/icons-material/EditOff";
 import { ApiError } from "../api/apiClient";
 import { listMyForms } from "../api/subsidiaryFormsApi";
 import type { FormListItem } from "../api/formBuilderApi";
@@ -77,6 +78,9 @@ export function MyFormsListPage() {
                     {form.projectCode ? ` · ${form.projectCode}` : ""} · Updated {new Date(form.updatedAt).toLocaleString()}
                   </Typography>
                 </Box>
+                {form.projectCodeLocked && (
+                  <Chip icon={<EditOffIcon />} label="Locked" size="small" color="warning" />
+                )}
                 {form.publishedVersionNumber != null && <Chip label={`v${form.publishedVersionNumber}`} size="small" variant="outlined" />}
               </Stack>
               {form.myContributionProgress && (

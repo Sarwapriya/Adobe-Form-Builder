@@ -7,10 +7,12 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  FormControlLabel,
   IconButton,
   MenuItem,
   Paper,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from "@mui/material";
@@ -26,7 +28,7 @@ import { TranslatableField } from "../components/formContribution/TranslatableFi
 import { AddQuestionDialog } from "../components/formContribution/AddQuestionDialog";
 import { AddConsentDialog } from "../components/formContribution/AddConsentDialog";
 import { ContributionPreviewDialog } from "../components/formContribution/ContributionPreviewDialog";
-import { CONTROL_TYPE_LABEL } from "../components/formBuilder/formBuilderHelpers";
+import { autoPopulateParamName, CONTROL_TYPE_LABEL } from "../components/formBuilder/formBuilderHelpers";
 
 const STATUS_COLOR: Record<ContributionStatus, "default" | "success" | "error"> = {
   pending: "default",
@@ -64,6 +66,8 @@ export function MyFormTranslatePage() {
   const removeQuestion = useFormContributionStore((s) => s.removeQuestion);
   const newConsents = useFormContributionStore((s) => s.newConsents);
   const removeConsent = useFormContributionStore((s) => s.removeConsent);
+  const autoPopulateToggles = useFormContributionStore((s) => s.autoPopulateToggles);
+  const setAutoPopulateToggle = useFormContributionStore((s) => s.setAutoPopulateToggle);
   const note = useFormContributionStore((s) => s.note);
   const setNote = useFormContributionStore((s) => s.setNote);
   const validation = useFormContributionStore((s) => s.validation);
@@ -75,6 +79,7 @@ export function MyFormTranslatePage() {
   const syncOwnContributions = useFormContributionStore((s) => s.syncOwnContributions);
   const locked = useFormContributionStore((s) => s.locked);
   const lockedContribution = useFormContributionStore((s) => s.lockedContribution);
+  const projectLocked = useFormContributionStore((s) => s.projectLocked);
 
   const [addQuestionOpen, setAddQuestionOpen] = useState(false);
   const [addConsentOpen, setAddConsentOpen] = useState(false);
@@ -149,6 +154,13 @@ export function MyFormTranslatePage() {
         </Button>
       </Stack>
 
+      {projectLocked && (
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+          This project has been locked by an admin — no further translations, questions, or consents can be
+          submitted for it. You can still browse the form below.
+        </Alert>
+      )}
+
       {locked && (
         <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
           You have a submission pending admin review{lockedContribution ? ` (submitted ${new Date(lockedContribution.submittedAt).toLocaleString()})` : ""}.
@@ -173,7 +185,7 @@ export function MyFormTranslatePage() {
         )}
       </Paper>
 
-      <Box component="fieldset" disabled={locked} sx={{ border: 0, m: 0, p: 0, opacity: locked ? 0.65 : 1 }}>
+      <Box component="fieldset" disabled={locked || projectLocked} sx={{ border: 0, m: 0, p: 0, opacity: locked || projectLocked ? 0.65 : 1 }}>
       {locale && (
         <>
           <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
@@ -287,6 +299,19 @@ export function MyFormTranslatePage() {
                     target={{ kind: "questionSubheading", questionId: q.id }}
                     existingValue={resolveLocalizedText(q.subheadingByLocale, locale, defaultLocale)}
                   />
+                  {q.autoPopulateEligible && (
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={autoPopulateToggles.get(q.id) ?? false}
+                          disabled={locked || projectLocked}
+                          onChange={(e) => setAutoPopulateToggle(q.id, e.target.checked)}
+                        />
+                      }
+                      label={`Auto-populate from URL parameter "${autoPopulateParamName(q.order)}" (One-Click)`}
+                    />
+                  )}
                   {q.answers.map((a) => (
                     <TranslatableField
                       key={a.id}
@@ -392,7 +417,7 @@ export function MyFormTranslatePage() {
           onChange={(e) => setNote(e.target.value)}
           sx={{ mb: 2 }}
         />
-        <Button variant="contained" disabled={submitting || locked} onClick={handleSubmit}>
+        <Button variant="contained" disabled={submitting || locked || projectLocked} onClick={handleSubmit}>
           {submitting ? "Submitting..." : "Submit for review"}
         </Button>
         {error && (

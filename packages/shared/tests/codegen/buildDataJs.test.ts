@@ -17,7 +17,7 @@ function buildFile(config: BuilderConfig = defaultBuilderConfig()) {
 function evalData(contents: string) {
   // eslint-disable-next-line no-new-func
   return new Function(
-    `${contents}\nreturn { page_error, fields, questions, answers, validation_messages, country_subsidiary, subsidiary_detail, param };`,
+    `${contents}\nreturn { page_error, fields, questions, answers, validation_messages, country_subsidiary, subsidiary_detail, param, auto_populate_params };`,
   )();
 }
 
@@ -117,5 +117,32 @@ describe("buildDataJs", () => {
     expect(data.param.channelDetail).toEqual({ fullForm: "COMD", oneClick: "EMAILD" });
     expect(data.param.source).toEqual({ fullForm: "full_form", oneClick: "one_click" });
     expect(data.param.voucherRequired).toBe("Y");
+  });
+
+  it("emits auto_populate_params only for questions marked both eligible and enabled", () => {
+    const emptyFile = buildFile();
+    expect(evalData(emptyFile.contents).auto_populate_params).toEqual({});
+
+    const form = sampleFormDefinition();
+    // Q1 (radio, order 1): eligible + enabled -> included as "q01".
+    form.questions[0].autoPopulateEligible = true;
+    form.questions[0].autoPopulateEnabled = true;
+    // Q2 (checkbox, order 2): eligible but not enabled -> excluded.
+    form.questions[1].autoPopulateEligible = true;
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+    expect(data.auto_populate_params).toEqual({ q01: "Q1" });
+  });
+
+  it("excludes a text-type question even if both flags are set (no discrete answer to auto-select)", () => {
+    const form = sampleFormDefinition();
+    // Q3 (controlType "text", order 3).
+    form.questions[2].autoPopulateEligible = true;
+    form.questions[2].autoPopulateEnabled = true;
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+    expect(data.auto_populate_params).toEqual({});
   });
 });

@@ -35,7 +35,11 @@ function describeTarget(target: TranslationTarget): string {
  * approving/rejecting without opening the merge preview dialog first.
  */
 export function ContributionDetails({ content }: { content: ContributionContent }) {
-  const hasAnything = content.translations.length > 0 || content.newQuestions.length > 0 || content.newConsents.length > 0;
+  const hasAnything =
+    content.translations.length > 0 ||
+    content.newQuestions.length > 0 ||
+    content.newConsents.length > 0 ||
+    content.autoPopulateToggles.length > 0;
   if (!hasAnything) {
     return (
       <Typography variant="caption" color="text.secondary">
@@ -110,6 +114,21 @@ export function ContributionDetails({ content }: { content: ContributionContent 
                     </Typography>
                   ))}
               </Box>
+            ))}
+          </Stack>
+        </Box>
+      )}
+
+      {content.autoPopulateToggles.length > 0 && (
+        <Box>
+          <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: "block" }}>
+            Auto-populate (One-Click)
+          </Typography>
+          <Stack spacing={0.25}>
+            {content.autoPopulateToggles.map((t, i) => (
+              <Typography key={i} variant="caption" sx={{ display: "block" }}>
+                {t.questionId}: {t.enabled ? "enabled" : "disabled"}
+              </Typography>
             ))}
           </Stack>
         </Box>

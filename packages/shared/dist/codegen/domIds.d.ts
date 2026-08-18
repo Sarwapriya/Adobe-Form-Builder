@@ -15,3 +15,11 @@ export declare function questionInputId(questionId: string, answerOrder: number)
  * submission payload's `additionalConsents`, so this prefix must stay in sync
  * with that script if ever renamed. */
 export declare function consentExtraId(order: number): string;
+/** URL query-param name that auto-populates this question's answer in the
+ * One-Click variant (see buildDataJs.ts's auto_populate_params and the reference
+ * OC.js's setAnswerDataFromParams), e.g. order 1 -> "q01". Mechanically derived
+ * from the question's own order — which is kept in sync with its "Q<order>" id by
+ * every question-list mutation (formBuilderHelpers.renumberQuestions,
+ * contribution.ts's own renumberQuestions) — so it can never drift out of sync
+ * with a renumbered question. */
+export declare function autoPopulateParamName(questionOrder: number): string;

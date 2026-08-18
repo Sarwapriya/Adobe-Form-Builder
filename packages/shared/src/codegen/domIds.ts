@@ -24,3 +24,14 @@ export function questionInputId(questionId: string, answerOrder: number): string
 export function consentExtraId(order: number): string {
   return `consentExtra${order}`;
 }
+
+/** URL query-param name that auto-populates this question's answer in the
+ * One-Click variant (see buildDataJs.ts's auto_populate_params and the reference
+ * OC.js's setAnswerDataFromParams), e.g. order 1 -> "q01". Mechanically derived
+ * from the question's own order — which is kept in sync with its "Q<order>" id by
+ * every question-list mutation (formBuilderHelpers.renumberQuestions,
+ * contribution.ts's own renumberQuestions) — so it can never drift out of sync
+ * with a renumbered question. */
+export function autoPopulateParamName(questionOrder: number): string {
+  return `q${String(questionOrder).padStart(2, "0")}`;
+}

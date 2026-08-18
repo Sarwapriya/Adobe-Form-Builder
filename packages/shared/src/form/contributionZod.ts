@@ -25,8 +25,14 @@ export const translationEntrySchema = z.object({
   value: z.string(),
 });
 
+export const autoPopulateToggleSchema = z.object({
+  questionId: z.string(),
+  enabled: z.boolean(),
+});
+
 export const contributionContentSchema = z.object({
   translations: z.array(translationEntrySchema),
   newQuestions: z.array(questionDefinitionSchema),
   newConsents: z.array(consentDefinitionSchema),
+  autoPopulateToggles: z.array(autoPopulateToggleSchema),
 });

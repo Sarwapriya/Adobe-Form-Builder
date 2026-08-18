@@ -32,6 +32,8 @@ export const questionDefinitionSchema = z.object({
   required: z.boolean(),
   answers: z.array(answerDefinitionSchema),
   visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
+  autoPopulateEligible: z.boolean().optional(),
+  autoPopulateEnabled: z.boolean().optional(),
 });
 
 const localizedFieldMetaSchema = z.object({

@@ -55,6 +55,18 @@ export interface QuestionDefinition {
    * (mapper.ts has no such concept), so `undefined`/absent means "every
    * variant" everywhere this is read — a builder-only, additive concept. */
   visibleInVariants?: Array<"ff" | "oc">;
+  /** Admin-configured (Form Builder): whether this question is eligible for
+   * URL-param auto-populate in the One-Click variant. Only meaningful for
+   * choice-type questions (radio/checkbox/dropdown) — a free-text question has no
+   * discrete answer to auto-select. The URL param name isn't stored — it's derived
+   * from the question's own order (see codegen/domIds.ts's autoPopulateParamName),
+   * so it can't drift out of sync with a renumbered question. */
+  autoPopulateEligible?: boolean;
+  /** Subsidiary-configured, via a contribution (see form/contribution.ts's
+   * autoPopulateToggles): whether this subsidiary's own form actually turns
+   * auto-populate on for this question. Only takes effect when
+   * autoPopulateEligible is also true. */
+  autoPopulateEnabled?: boolean;
 }
 
 export interface LocalizedFieldMeta {

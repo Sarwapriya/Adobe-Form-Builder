@@ -206,10 +206,28 @@ $(document).ready(function ()
         });
     }
 	
-	function setAnswerDataFromparam(q01)
+	function setAnswerDataFromParams()
 	{
-		//isSubmitClicked = true;
-		$("#Q1"+q01).prop('checked', true);
+		$.each(auto_populate_params, function(param, questionId)
+		{
+			var val = frameUrlParam.get(param);
+
+			if(!val)
+			{
+				return;
+			}
+
+			var target = $("#" + questionId);
+
+			if(target.is("select"))
+			{
+				target.val(val).trigger("change");
+			}
+			else
+			{
+				$("#" + questionId + val).prop('checked', true);
+			}
+		});
 	}
 
     // Function to get value for passed key from validation_messages JSON constant variable (present in Translation JS) based on Language AND set it as respective (Parsley) Validation Message
@@ -928,8 +946,6 @@ $(document).ready(function ()
 
         userResponse["channel_detail"] = chd;
 
-        //userResponse["Q1"] = q01 === "" ? userResponse["Q1"]: q01;
-
         // Call function to map API Parameter with User Response & send data to server
         mapParam(userResponse, isSubmitClicked);
     }
@@ -951,9 +967,6 @@ $(document).ready(function ()
 
         var countryCode = language.substring(language.indexOf("_") + 1);
 
-		//Coomment-CEJ-q01 
-        var q01 = frameUrlParam.get("q01") || "";	
-		
 		var ch = frameUrlParam.get("ch") || "";
 			
 		var chd = frameUrlParam.get("chd") || "";
@@ -973,13 +986,9 @@ $(document).ready(function ()
         populateCallingCodeDropdown();
 
         attachEvent();
-		
-		//Coomment-CEJ-q01 
-		if(q01 !== "")
-		{
-			setAnswerDataFromparam(q01);
-		}
-		
+
+		setAnswerDataFromParams();
+
 		enableDisableSubmit();
 
         // Load and display submit modal when form is submitted, or none of answers are selected
