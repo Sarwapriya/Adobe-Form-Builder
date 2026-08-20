@@ -331,3 +331,37 @@ export function addSubsidiaryLocale(input: CreateSubsidiaryLocaleInput): Promise
 export function deleteSubsidiaryLocale(id: string): Promise<void> {
   return apiClient.delete(`/api/v1/admin/subsidiary-locales/${id}`);
 }
+
+/** DB-stored SMTP connection settings for outgoing notification email (see
+ * backend's smtpSettingsService.ts) — `hasPassword` reflects whether one is
+ * currently saved; the real password is never sent to the browser. */
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string | null;
+  from: string | null;
+  hasPassword: boolean;
+}
+
+export interface SaveSmtpSettingsInput {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string | null;
+  /** Omit or leave blank to keep whatever password is already saved. */
+  password?: string;
+  from: string | null;
+}
+
+export function getSmtpSettings(): Promise<SmtpSettings> {
+  return apiClient.get<SmtpSettings>("/api/v1/admin/smtp-settings");
+}
+
+export function saveSmtpSettings(input: SaveSmtpSettingsInput): Promise<SmtpSettings> {
+  return apiClient.patch<SmtpSettings>("/api/v1/admin/smtp-settings", input);
+}
+
+export function sendSmtpTestEmail(): Promise<{ ok: true; sentTo: string }> {
+  return apiClient.post<{ ok: true; sentTo: string }>("/api/v1/admin/smtp-settings/test");
+}

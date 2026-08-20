@@ -4,6 +4,7 @@ import { CALLING_CODES, resolveCountryName, subsidiaryCountryCodes } from "@form
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { ConsentVisibilityControls } from "./ConsentVisibilityControls";
 import { consentVariants } from "./formBuilderHelpers";
+import { localeDir } from "../../utils/localeDir";
 
 export type ProfileFieldKey =
   | "firstName"
@@ -59,6 +60,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   // resolveLocalizedText calls — this only affects what the builder itself
   // displays while editing.)
   const localeText = (map: Record<string, string> | undefined) => map?.[activeLocale] ?? "";
+  const dir = localeDir(activeLocale);
 
   const localeHint = activeLocale !== defaultLocale && (
     <Typography variant="caption" color="text.secondary">
@@ -80,6 +82,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           size="small"
           fullWidth
           value={label}
+          inputProps={{ dir }}
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -121,6 +124,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           multiline
           minRows={2}
           value={text}
+          inputProps={{ dir }}
           helperText={'Shown next to the checkbox, e.g. "I agree to the"'}
           onChange={(e) =>
             updateDefinition((d) => ({
@@ -137,6 +141,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           size="small"
           fullWidth
           value={linkText}
+          inputProps={{ dir }}
           helperText={'The link\'s own clickable text, e.g. "Samsung Privacy Policy" — separate from the consent text above.'}
           onChange={(e) =>
             updateDefinition((d) => ({
@@ -206,6 +211,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           multiline
           minRows={2}
           value={text}
+          inputProps={{ dir }}
           helperText='e.g. "* Terms and conditions apply."'
           onChange={(e) =>
             updateDefinition((d) => ({
@@ -267,6 +273,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           size="small"
           fullWidth
           value={label}
+          inputProps={{ dir }}
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -312,7 +319,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
         {FIELD_LABEL[fieldKey]}
       </Typography>
       {localeHint}
-      <TextField label="Label" size="small" fullWidth value={label} onChange={(e) => patchLabel(e.target.value)} />
+      <TextField label="Label" size="small" fullWidth value={label} inputProps={{ dir }} onChange={(e) => patchLabel(e.target.value)} />
 
       {fieldKey === "mobileNumber" && definition?.fields.mobileNumber && (
         <Autocomplete

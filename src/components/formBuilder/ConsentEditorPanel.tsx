@@ -4,6 +4,7 @@ import type { FormVariant } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { ConsentVisibilityControls } from "./ConsentVisibilityControls";
 import { consentVariants, renumberConsents } from "./formBuilderHelpers";
+import { localeDir } from "../../utils/localeDir";
 
 /** Config drawer content for one admin-added consent checkbox beyond the fixed
  * Privacy Policy / Marketing Opt-in slots — same text+optional-link shape as
@@ -17,6 +18,7 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
   const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
   const localeText = (map: Record<string, string> | undefined) => map?.[activeLocale] ?? "";
   const consent = definition?.fields.additionalConsents?.find((c) => c.id === consentId);
+  const dir = localeDir(activeLocale);
 
   if (!consent) return null;
 
@@ -69,6 +71,7 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
         multiline
         minRows={2}
         value={text}
+        inputProps={{ dir }}
         onChange={(e) => patchConsent({ textByLocale: { ...consent.textByLocale, [activeLocale]: e.target.value } })}
       />
       <FormControlLabel

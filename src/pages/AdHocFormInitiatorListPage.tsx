@@ -106,6 +106,7 @@ export function AdHocFormInitiatorListPage() {
           sx={{ minWidth: 180 }}
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as FormStatus | "")}
+          InputLabelProps={{ shrink: true }}
         >
           {STATUS_OPTIONS.map((option) => (
             <MenuItem key={option.value} value={option.value}>

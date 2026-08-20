@@ -1,13 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { CssBaseline, ThemeProvider } from "@mui/material";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { theme } from "./app/theme.ts";
+import { createAppTheme } from "./app/theme.ts";
 import { ErrorBoundary } from "./app/ErrorBoundary.tsx";
 import { AppLayout } from "./app/AppLayout.tsx";
 import { AppShell } from "./components/AppShell.tsx";
 import { AdminRoute } from "./auth/AdminRoute.tsx";
 import { ProtectedRoute } from "./auth/ProtectedRoute.tsx";
-import { useAuthStore } from "./auth/authStore.ts";
+import { isAdminRole, useAuthStore } from "./auth/authStore.ts";
 import { AdminDashboardPage } from "./pages/AdminDashboardPage.tsx";
 import { AdminHistoryPage } from "./pages/AdminHistoryPage.tsx";
 import { ConfigurationPage } from "./pages/ConfigurationPage.tsx";
@@ -27,12 +27,21 @@ import { QuestionMasterPage } from "./pages/QuestionMasterPage.tsx";
 
 export default function App() {
   const silentRefresh = useAuthStore((s) => s.silentRefresh);
+  const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     void silentRefresh();
     // Runs exactly once at app startup — the Zustand action reference is
     // stable across renders, so this effect never re-fires afterward.
   }, [silentRefresh]);
+
+  // Matches AppLayout.tsx's sidebar accent: red/maroon once we know the
+  // signed-in user is an admin, brand blue for a subsidiary user or before
+  // login, so the whole app — not just the sidebar — reads as one theme.
+  const theme = useMemo(
+    () => createAppTheme(!user ? "default" : isAdminRole(user.role) ? "admin" : "subsidiary"),
+    [user],
+  );
 
   return (
     <ThemeProvider theme={theme}>

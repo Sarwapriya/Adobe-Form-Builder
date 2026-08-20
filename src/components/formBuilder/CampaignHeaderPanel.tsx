@@ -1,5 +1,6 @@
 import { Paper, Stack, TextField, Typography } from "@mui/material";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { localeDir } from "../../utils/localeDir";
 
 /** Campaign heading/subheading + submit button label — the page-level copy
  * rendered above the form's fields (see pageTemplate.ts's `<h2>`/`.top_subheading`
@@ -29,6 +30,7 @@ export function CampaignHeaderPanel() {
   const heading = localeText(definition.fields.headingBeforeBreakByLocale);
   const subheading = localeText(definition.fields.campaignSubheadingByLocale);
   const submitLabel = localeText(definition.fields.submitButton.labelByLocale);
+  const dir = localeDir(activeLocale);
 
   return (
     <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
@@ -46,6 +48,7 @@ export function CampaignHeaderPanel() {
           size="small"
           fullWidth
           value={heading}
+          inputProps={{ dir }}
           helperText="Shown as the main title above the form."
           onChange={(e) =>
             updateDefinition((d) => ({
@@ -59,6 +62,7 @@ export function CampaignHeaderPanel() {
           size="small"
           fullWidth
           value={subheading}
+          inputProps={{ dir }}
           helperText="Optional supporting line under the heading."
           onChange={(e) =>
             updateDefinition((d) => ({
@@ -72,6 +76,7 @@ export function CampaignHeaderPanel() {
           size="small"
           fullWidth
           value={submitLabel}
+          inputProps={{ dir }}
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,

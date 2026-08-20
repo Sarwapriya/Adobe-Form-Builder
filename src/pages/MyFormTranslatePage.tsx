@@ -226,6 +226,7 @@ export function MyFormTranslatePage() {
                     label="Privacy Policy link URL"
                     target={{ kind: "privacyPolicyLink" }}
                     existingValue={resolveLocalizedText(baseDefinition.fields.privacyPolicy.linkUrlByLocale, locale, defaultLocale)}
+                    isUrl
                   />
                 </Stack>
               )}
@@ -248,6 +249,7 @@ export function MyFormTranslatePage() {
                     label="Terms and Conditions link URL"
                     target={{ kind: "termsAndConditionsUrl" }}
                     existingValue={resolveLocalizedText(baseDefinition.fields.termsAndConditions.urlByLocale, locale, defaultLocale)}
+                    isUrl
                   />
                 </Stack>
               )}
@@ -264,6 +266,7 @@ export function MyFormTranslatePage() {
                       label={`Consent (${consent.id}) link URL`}
                       target={{ kind: "consentLink", consentId: consent.id }}
                       existingValue={resolveLocalizedText(consent.linkUrlByLocale, locale, defaultLocale)}
+                      isUrl
                     />
                   )}
                 </Stack>

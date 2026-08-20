@@ -46,7 +46,13 @@ const VARIANT_LABEL: Record<FormVariant, string> = { ff: "Full Form", oc: "One-C
 /** Clickable "Full Form" / "One-Click" tags shared by question rows and consent
  * rows alike — a tag is disabled (not hidden) when the form itself doesn't have
  * that variant enabled (see VariantConfigPanel), so there's always a visible
- * reason a tag can't be toggled rather than it silently disappearing. */
+ * reason a tag can't be toggled rather than it silently disappearing. Renders
+ * nothing at all when the form only has one variant to begin with (every ad-hoc
+ * form, always Full Form only — see MyAdHocFormEditorPage/FormBuilderEditorPage,
+ * neither of which ever renders VariantConfigPanel for an ad-hoc form) — with
+ * nothing to pick between, a permanently-disabled "One-Click" tag is clutter, not
+ * a real choice (same reasoning as ConsentVisibilityControls's own "Shown in"
+ * section). */
 function VariantChips({
   shownIn,
   formVariants,
@@ -56,6 +62,7 @@ function VariantChips({
   formVariants: FormVariant[];
   onToggle: (variant: FormVariant, checked: boolean) => void;
 }) {
+  if (formVariants.length <= 1) return null;
   return (
     <Stack direction="row" spacing={0.5} onClick={(e) => e.stopPropagation()}>
       {(["ff", "oc"] as FormVariant[]).map((variant) => {
@@ -262,9 +269,11 @@ export function BuilderCanvas({
         </Typography>
       ) : (
         <>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
-            Click a question's "Full Form" / "One-Click" tag to control which variant(s) it appears in.
-          </Typography>
+          {formVariants.length > 1 && (
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
+              Click a question's "Full Form" / "One-Click" tag to control which variant(s) it appears in.
+            </Typography>
+          )}
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={questions.map((q) => q.id)} strategy={verticalListSortingStrategy}>
               <Stack spacing={1}>
@@ -506,7 +515,8 @@ export function PredefinedFieldToggles({
         Consent
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
-        Shown just before the Submit button. Click a "Full Form" / "One-Click" tag to control which variant(s) show it.
+        Shown just before the Submit button.
+        {formVariants.length > 1 && ' Click a "Full Form" / "One-Click" tag to control which variant(s) show it.'}
       </Typography>
       <Stack spacing={0.5}>{consentToggleItems.map(renderConsentToggleItem)}</Stack>
 

@@ -1,20 +1,35 @@
-import { createTheme } from "@mui/material/styles";
+import { alpha, createTheme } from "@mui/material/styles";
+
+/** Which side of the app is rendering: drives the accent color so admin's
+ * red/maroon sidebar (see AppLayout.tsx's `sidebarGradient`) is matched by
+ * the rest of the UI (buttons, links, focus rings, hover shadows) instead of
+ * clashing with a blue theme everywhere else. "default" is used before a
+ * role is known (login screen, /local's public wizard). */
+export type ThemeVariant = "admin" | "subsidiary" | "default";
+
+const PALETTES: Record<ThemeVariant, { main: string; light: string; dark: string; secondary: string }> = {
+  admin: { main: "#7a1428", light: "#a5495c", dark: "#4a0f1a", secondary: "#c58a2e" },
+  subsidiary: { main: "#1428a0", light: "#3f52c4", dark: "#0d1c73", secondary: "#00a9b5" },
+  default: { main: "#1428a0", light: "#3f52c4", dark: "#0d1c73", secondary: "#00a9b5" },
+};
 
 /** Baseline MUI theme for the authenticated app (login/history/admin) — the
  * existing client-only wizard at /local keeps its own hand-rolled CSS
- * (index.css) untouched, though both share the same brand blue so the two
- * surfaces read as one product rather than two different apps. */
-export const theme = createTheme({
+ * (index.css) untouched, though both share the same brand blue by default so
+ * the two surfaces read as one product rather than two different apps. */
+export function createAppTheme(variant: ThemeVariant = "default") {
+  const accent = PALETTES[variant];
+  return createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#1428a0",
-      light: "#3f52c4",
-      dark: "#0d1c73",
+      main: accent.main,
+      light: accent.light,
+      dark: accent.dark,
       contrastText: "#ffffff",
     },
     secondary: {
-      main: "#00a9b5",
+      main: accent.secondary,
     },
     background: {
       default: "#f5f6fa",
@@ -98,7 +113,7 @@ export const theme = createTheme({
         },
         contained: {
           boxShadow: "none",
-          "&:hover": { boxShadow: "0 4px 12px rgba(20, 40, 160, 0.25)" },
+          "&:hover": { boxShadow: `0 4px 12px ${alpha(accent.main, 0.25)}` },
         },
       },
     },
@@ -137,4 +152,8 @@ export const theme = createTheme({
       },
     },
   },
-});
+  });
+}
+
+/** Convenience default export for surfaces where no role is known yet. */
+export const theme = createAppTheme("default");

@@ -49,6 +49,8 @@ import {
   removeSubsidiaryLocale,
 } from "../services/subsidiaryLocaleService";
 import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
+import { sendTestEmail } from "../services/emailService";
+import { getSmtpSettingsForDisplay, saveSmtpSettings } from "../services/smtpSettingsService";
 import {
   generateQuestionMaster,
   generateQuestionMasterFromUploads,
@@ -825,5 +827,65 @@ adminRouter.get(
     res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.set("Content-Disposition", `attachment; filename="${result.fileName}"`);
     res.send(result.buffer);
+  })
+);
+
+// --- SMTP settings (Configuration page) -----------------------------------
+// DB-stored SMTP connection config, admin-managed — see smtpSettingsService.ts
+// for the AdminSettings keys used and emailService.ts's resolveSmtpConfig for
+// how this takes precedence over the original SMTP_* env vars. The real
+// password is write-only from the browser's perspective: GET never returns
+// it, only whether one is set (hasPassword).
+const smtpSettingsSchema = z.object({
+  host: z.string().trim().min(1),
+  port: z.number().int().min(1).max(65535),
+  secure: z.boolean(),
+  user: z.string().trim().nullable().optional(),
+  password: z.string().optional(),
+  from: z.string().trim().nullable().optional(),
+});
+
+adminRouter.get(
+  "/smtp-settings",
+  asyncHandler(async (_req, res) => {
+    res.json(await getSmtpSettingsForDisplay());
+  })
+);
+
+adminRouter.patch(
+  "/smtp-settings",
+  validateBody(smtpSettingsSchema),
+  asyncHandler(async (req, res) => {
+    const input = req.body as z.infer<typeof smtpSettingsSchema>;
+    await saveSmtpSettings({
+      host: input.host,
+      port: input.port,
+      secure: input.secure,
+      user: input.user?.trim() || null,
+      password: input.password,
+      from: input.from?.trim() || null,
+    });
+    res.json(await getSmtpSettingsForDisplay());
+  })
+);
+
+// Sends a real test email, to the calling admin's own account, using
+// whatever SMTP settings are currently saved — immediate confirmation that a
+// newly-entered credential actually works instead of digging through server
+// logs after the fact.
+adminRouter.post(
+  "/smtp-settings/test",
+  asyncHandler(async (req, res) => {
+    const user = await findUserById(req.auth!.sub);
+    if (!user) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+    const result = await sendTestEmail(user.email);
+    if (!result.ok) {
+      res.status(502).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, sentTo: user.email });
   })
 );

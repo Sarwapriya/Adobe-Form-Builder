@@ -395,6 +395,10 @@ export function AdminHistoryPage() {
             sx={{ minWidth: 160 }}
             value={projectCodeFilter}
             onChange={(e) => setProjectCodeFilter(e.target.value)}
+            // Keeps the label shrunk even at the empty-string "All" value —
+            // otherwise MUI treats "" as not-filled and the label drops back
+            // down over the selected text, reading as blank.
+            InputLabelProps={{ shrink: true }}
           >
             <MenuItem value="">All project codes</MenuItem>
             {projectCodes.map((pc) => (
@@ -418,6 +422,7 @@ export function AdminHistoryPage() {
             sx={{ minWidth: 160 }}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as UploadStatus | "")}
+            InputLabelProps={{ shrink: true }}
           >
             {STATUS_OPTIONS.map((option) => (
               <MenuItem key={option.value} value={option.value}>

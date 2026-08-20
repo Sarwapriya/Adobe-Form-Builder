@@ -252,8 +252,15 @@ export function UserManagementPage() {
                 ? "Required for a standard user"
                 : "Locks this user's uploads to one subsidiary"
             }
+            InputLabelProps={{ shrink: true }}
           >
-            {!subsidiaryRequired && <MenuItem value="">No subsidiary</MenuItem>}
+            {/* Always rendered (just disabled when required) rather than
+                omitted — switching Role to "standard" while this was still
+                on "" used to remove its only matching MenuItem, leaving the
+                Select with no matching child to render and reading blank. */}
+            <MenuItem value="" disabled={subsidiaryRequired}>
+              {subsidiaryRequired ? "Select a subsidiary" : "No subsidiary"}
+            </MenuItem>
             {subsidiaries.map((s) => (
               <MenuItem key={s.id} value={s.name}>
                 {s.name}
@@ -472,8 +479,11 @@ function EditUserDialog({
             required={subsidiaryRequired}
             error={subsidiaryRequired && !subsidiaryId}
             helperText={subsidiaryRequired && !subsidiaryId ? "Required for a standard user" : undefined}
+            InputLabelProps={{ shrink: true }}
           >
-            {!subsidiaryRequired && <MenuItem value="">No subsidiary</MenuItem>}
+            <MenuItem value="" disabled={subsidiaryRequired}>
+              {subsidiaryRequired ? "Select a subsidiary" : "No subsidiary"}
+            </MenuItem>
             {subsidiaries.map((s) => (
               <MenuItem key={s.id} value={s.name}>
                 {s.name}

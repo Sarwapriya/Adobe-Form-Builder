@@ -258,6 +258,12 @@ export function AdminDashboardPage() {
             sx={{ minWidth: 160 }}
             value={projectCodeFilter}
             onChange={(e) => setProjectCodeFilter(e.target.value)}
+            // Otherwise the label falls back to the un-shrunk position
+            // whenever the value is "" (MUI treats an empty Select value as
+            // "not filled") — re-picking "All project codes" after a real
+            // one then renders the label overlapping the selected text
+            // instead of a clean floated label above it.
+            InputLabelProps={{ shrink: true }}
           >
             <MenuItem value="">All project codes</MenuItem>
             {projectCodes.map((pc) => (

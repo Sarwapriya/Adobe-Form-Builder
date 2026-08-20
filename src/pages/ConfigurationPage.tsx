@@ -6,6 +6,7 @@ import { SubsidiaryManager } from "../components/admin/SubsidiaryManager";
 import { SubsidiaryProjectBlockManager } from "../components/admin/SubsidiaryProjectBlockManager";
 import { SubsidiaryProjectBulkBlockManager } from "../components/admin/SubsidiaryProjectBulkBlockManager";
 import { SubsidiaryLocaleManager } from "../components/admin/SubsidiaryLocaleManager";
+import { SmtpSettingsManager } from "../components/admin/SmtpSettingsManager";
 import { PageHeader } from "../components/common/PageHeader";
 
 /**
@@ -47,6 +48,7 @@ export function ConfigurationPage() {
         onChange={bumpRestrictionsRefresh}
       />
       <SubsidiaryLocaleManager />
+      <SmtpSettingsManager />
     </Box>
   );
 }

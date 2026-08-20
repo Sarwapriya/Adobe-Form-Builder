@@ -1,7 +1,11 @@
 import { AppDataSource } from "../config/data-source";
+import { Form } from "../entities/Form";
 import { ProjectCode } from "../entities/ProjectCode";
 import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
+import { Upload } from "../entities/Upload";
 import { ConflictError, NotFoundError, ProjectCodeClosedError, ProjectCodeLockedError } from "../utils/errors";
+import { sendProjectLockedNotification } from "./emailService";
+import { resolveSubsidiaryRecipients } from "./subsidiaryRecipients";
 
 /** Every project code, newest first — the admin management view (shows both
  * open and closed). */
@@ -124,16 +128,47 @@ export async function setProjectCodeOpen(id: string, isOpen: boolean): Promise<P
   return repo.save(existing);
 }
 
+/** Every distinct subsidiary with a Form (draft or published, undeleted) or an
+ * Upload under the given project code — the recipient set for the
+ * project-locked notification below, mirroring cutoffReminderService's own
+ * "group Forms by subsidiaryId" shape. */
+async function listSubsidiariesUnderProjectCode(code: string): Promise<string[]> {
+  const [forms, uploads] = await Promise.all([
+    AppDataSource.getRepository(Form).find({ where: { projectCode: code, isDeleted: false } }),
+    AppDataSource.getRepository(Upload).find({ where: { projectCode: code } }),
+  ]);
+  const subsidiaryIds = new Set<string>();
+  for (const form of forms) subsidiaryIds.add(form.subsidiaryId);
+  for (const upload of uploads) subsidiaryIds.add(upload.subsidiaryId);
+  return Array.from(subsidiaryIds);
+}
+
 /** Toggles a project code locked/unlocked — see ProjectCode.isLocked's own doc
  * comment for what locking actually blocks (subsidiary uploads/contributions) and how
- * it differs from isOpen. Returns null if the id doesn't exist. */
+ * it differs from isOpen. Returns null if the id doesn't exist. Locking it (not
+ * unlocking) best-effort notifies every subsidiary that has a form or upload
+ * under this code — see emailService.sendProjectLockedNotification — so nobody
+ * is surprised their next upload/contribution gets rejected. */
 export async function setProjectCodeLocked(id: string, isLocked: boolean): Promise<ProjectCode | null> {
   const repo = AppDataSource.getRepository(ProjectCode);
   const existing = await repo.findOne({ where: { id } });
   if (!existing) return null;
 
+  const wasLocked = existing.isLocked;
   existing.isLocked = isLocked;
-  return repo.save(existing);
+  const saved = await repo.save(existing);
+
+  if (isLocked && !wasLocked) {
+    void (async () => {
+      const subsidiaryIds = await listSubsidiariesUnderProjectCode(saved.code);
+      for (const subsidiaryId of subsidiaryIds) {
+        const recipients = await resolveSubsidiaryRecipients(subsidiaryId);
+        await sendProjectLockedNotification(recipients, { projectCode: saved.code, cutoffDate: saved.cutoffDate });
+      }
+    })();
+  }
+
+  return saved;
 }
 
 /** Updates a project code's campaign date range. Each field is applied only

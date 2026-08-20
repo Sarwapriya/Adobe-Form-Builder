@@ -79,8 +79,26 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const isAdmin = isAdminRole(user?.role);
+  const panelLabel = isAdmin ? "Admin Panel" : "Subsidiary Panel";
+  /** Deep red/maroon for the admin panel vs. the original Samsung blue for the
+   * subsidiary panel — a strong, unmissable color cue so which side of the app
+   * you're in is obvious at a glance, not just from the nav item labels. */
+  const sidebarGradient = isAdmin
+    ? "linear-gradient(180deg, #7a1428 0%, #3d0a14 100%)"
+    : "linear-gradient(180deg, #1428a0 0%, #16227a 100%)";
+
+  useEffect(() => {
+    document.title = `Form Builder · ${panelLabel}`;
+  }, [panelLabel]);
+
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true");
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+  /** Section-header accordion state (distinct from the sidebar-rail `collapsed`
+   * above). "Excel Upload" always starts closed for every user — the section's
+   * items only appear once the user clicks the header to expand it. Every other
+   * section defaults open (see the `?? true` fallback below). */
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ "Excel Upload": false });
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
@@ -91,58 +109,22 @@ export function AppLayout() {
     navigate("/login", { replace: true });
   }
 
-  const navItems: NavItem[] = [
-    { to: "/", label: "Upload History", icon: <UploadFileIcon />, exact: true },
-    ...(user?.subsidiaryId
-      ? [
-          {
-            to: "/my-forms",
-            label: "My Forms",
-            icon: <TranslateIcon />,
-            exact: false,
-            children: [
-              {
-                to: "/my-forms/adhoc",
-                label: "Ad-hoc Forms",
-                isActive: (p: string) => p.startsWith("/my-forms/adhoc"),
-              },
-              {
-                to: "/my-forms/hr",
-                label: "HR Forms",
-                isActive: (p: string) => p.startsWith("/my-forms") && !p.startsWith("/my-forms/adhoc"),
-              },
-            ],
-          },
-          { to: "/my-submissions", label: "My Submissions", icon: <HistoryIcon />, exact: true },
-          { to: "/my-subsidiary", label: "My Subsidiary", icon: <DomainIcon />, exact: true },
-        ]
-      : []),
-  ];
-
-  /** Admin Dashboard/All History aren't specific to the Excel-upload workflow
-   * or the form-builder one — they're the general submitted/generated-output
-   * overview an admin checks regardless of which flow produced it — so they
-   * stay ungrouped (no section caption) rather than living under either
-   * labeled group below. "Upload History" above already stands in as the
-   * Excel-upload entry point (it's shared with subsidiary users, who upload
-   * workbooks from that same page), so there's no separate "Excel Upload"
-   * group left to house on the admin side. */
-  const adminCommonItems: NavItem[] = isAdminRole(user?.role)
+  /** Every nav item lives inside a labeled section — admin and subsidiary users
+   * each get their own set, mirroring the same three-part shape: an "Excel
+   * Upload" group for the workbook-upload lifecycle, a "Form Configuration"
+   * group for the form-builder side, and a general "Configuration"/
+   * "Administration" group for everything else. Admins never have
+   * subsidiaryId set, so exactly one branch below applies to a given user. */
+  const sections: NavSection[] = isAdminRole(user?.role)
     ? [
-        { to: "/admin", label: "Admin Dashboard", icon: <AdminPanelSettingsIcon />, exact: true },
-        { to: "/admin/history", label: "All History", icon: <HistoryIcon />, exact: true },
-      ]
-    : [];
-
-  /** Admin-only items, grouped into the form-builder side (Form Initiator/
-   * Question Master) and general back-office administration (master data +
-   * accounts) that isn't specific to either flow — Configuration and User
-   * Management govern both Excel uploads and form-builder forms equally, so
-   * neither belongs under a single-flow group. Mirrors the split the
-   * subsidiary side's own "My Forms" submenu already draws between ad-hoc/HR
-   * forms and everything else. */
-  const adminSections: NavSection[] = isAdminRole(user?.role)
-    ? [
+        {
+          label: "Excel Upload",
+          items: [
+            { to: "/", label: "Upload History", icon: <UploadFileIcon />, exact: true },
+            { to: "/admin", label: "Admin Dashboard", icon: <AdminPanelSettingsIcon />, exact: true },
+            { to: "/admin/history", label: "All History", icon: <HistoryIcon />, exact: true },
+          ],
+        },
         {
           label: "Form Configuration",
           items: [
@@ -164,8 +146,11 @@ export function AppLayout() {
                 },
               ],
             },
-            { to: "/admin/question-master", label: "Question Master", icon: <ListAltIcon />, exact: false },
           ],
+        },
+        {
+          label: "Question Master",
+          items: [{ to: "/admin/question-master", label: "Question Master", icon: <ListAltIcon />, exact: false }],
         },
         {
           label: "Administration",
@@ -175,7 +160,44 @@ export function AppLayout() {
           ],
         },
       ]
-    : [];
+    : [
+        {
+          label: "Excel Upload",
+          items: [{ to: "/", label: "Upload History", icon: <UploadFileIcon />, exact: true }],
+        },
+        ...(user?.subsidiaryId
+          ? [
+              {
+                label: "Form Configuration",
+                items: [
+                  {
+                    to: "/my-forms",
+                    label: "My Forms",
+                    icon: <TranslateIcon />,
+                    exact: false,
+                    children: [
+                      {
+                        to: "/my-forms/adhoc",
+                        label: "Ad-hoc Forms",
+                        isActive: (p: string) => p.startsWith("/my-forms/adhoc"),
+                      },
+                      {
+                        to: "/my-forms/hr",
+                        label: "HR Forms",
+                        isActive: (p: string) => p.startsWith("/my-forms") && !p.startsWith("/my-forms/adhoc"),
+                      },
+                    ],
+                  },
+                  { to: "/my-submissions", label: "My Submissions", icon: <HistoryIcon />, exact: true },
+                ],
+              },
+              {
+                label: "Configuration",
+                items: [{ to: "/my-subsidiary", label: "My Subsidiary", icon: <DomainIcon />, exact: true }],
+              },
+            ]
+          : []),
+      ];
 
   const drawerWidth = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
 
@@ -280,62 +302,104 @@ export function AppLayout() {
             overflowX: "hidden",
             boxSizing: "border-box",
             border: "none",
-            backgroundImage: "linear-gradient(180deg, #1428a0 0%, #16227a 100%)",
+            backgroundImage: sidebarGradient,
             color: "#fff",
             transition: (t) => t.transitions.create("width", { duration: t.transitions.duration.shortest }),
           },
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, py: 2.5, minHeight: 72 }}>
-          <Box
-            sx={{
-              width: 36,
-              height: 36,
-              borderRadius: 2,
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              bgcolor: "rgba(255,255,255,0.14)",
-            }}
-          >
-            <DescriptionIcon fontSize="small" />
-          </Box>
+          <Tooltip title={collapsed ? panelLabel : ""} placement="right">
+            <Box
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: 2,
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                bgcolor: "rgba(255,255,255,0.14)",
+              }}
+            >
+              <DescriptionIcon fontSize="small" />
+            </Box>
+          </Tooltip>
           {!collapsed && (
-            <Typography variant="h6" fontWeight={700} noWrap sx={{ flexGrow: 1 }}>
-              Form Builder
-            </Typography>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography variant="h6" fontWeight={700} noWrap>
+                Form Builder
+              </Typography>
+              <Chip
+                label={panelLabel}
+                size="small"
+                sx={{
+                  height: 18,
+                  mt: 0.25,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  color: "#fff",
+                  bgcolor: isAdmin ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.16)",
+                  "& .MuiChip-label": { px: 0.75 },
+                }}
+              />
+            </Box>
           )}
         </Box>
 
         <Divider sx={{ borderColor: "rgba(255,255,255,0.12)" }} />
 
         <List sx={{ px: 1.25, py: 1.5, flexGrow: 1 }}>
-          {navItems.map((item) => renderNavItem(item))}
-          {adminCommonItems.map((item) => renderNavItem(item))}
-          {adminSections.map((section) => (
-            <Box key={section.label} sx={{ mt: 1.5 }}>
-              {!collapsed ? (
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    px: 1.5,
-                    py: 0.5,
-                    color: "rgba(255,255,255,0.5)",
-                    fontWeight: 700,
-                    letterSpacing: 0.6,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {section.label}
-                </Typography>
-              ) : (
-                <Divider sx={{ borderColor: "rgba(255,255,255,0.12)", my: 1 }} />
-              )}
-              {section.items.map((item) => renderNavItem(item))}
-            </Box>
-          ))}
+          {sections.map((section, i) => {
+            const sectionOpen = openSections[section.label] ?? true;
+            return (
+              <Box key={section.label} sx={{ mt: i > 0 ? 1.5 : 0 }}>
+                {!collapsed ? (
+                  <Box
+                    onClick={() => setOpenSections((s) => ({ ...s, [section.label]: !sectionOpen }))}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      px: 1.5,
+                      py: 0.5,
+                      cursor: "pointer",
+                      borderRadius: 1,
+                      "&:hover": { bgcolor: "rgba(255,255,255,0.06)" },
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "rgba(255,255,255,0.5)",
+                        fontWeight: 700,
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {section.label}
+                    </Typography>
+                    {sectionOpen ? (
+                      <ExpandLessIcon sx={{ fontSize: 16, color: "rgba(255,255,255,0.5)" }} />
+                    ) : (
+                      <ExpandMoreIcon sx={{ fontSize: 16, color: "rgba(255,255,255,0.5)" }} />
+                    )}
+                  </Box>
+                ) : (
+                  i > 0 && <Divider sx={{ borderColor: "rgba(255,255,255,0.12)", my: 1 }} />
+                )}
+                {collapsed ? (
+                  section.items.map((item) => renderNavItem(item))
+                ) : (
+                  <Collapse in={sectionOpen} timeout="auto" unmountOnExit>
+                    {section.items.map((item) => renderNavItem(item))}
+                  </Collapse>
+                )}
+              </Box>
+            );
+          })}
         </List>
 
         <Divider sx={{ borderColor: "rgba(255,255,255,0.12)" }} />

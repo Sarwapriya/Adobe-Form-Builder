@@ -12,8 +12,10 @@ import { Form } from "../entities/Form";
 import { FormVersion } from "../entities/FormVersion";
 import { FormContribution, type ContributionStatus } from "../entities/FormContribution";
 import { ProjectCode } from "../entities/ProjectCode";
+import { User } from "../entities/User";
 import { getAccessibleFormDetail } from "./formAccessService";
 import { updateDraft } from "./formBuilderService";
+import { sendContributionSubmittedNotification } from "./emailService";
 
 export interface ContributionSummary {
   id: string;
@@ -100,6 +102,20 @@ export async function submitContribution(
       note: note ?? null,
     }),
   );
+
+  const [form, submitter] = await Promise.all([
+    AppDataSource.getRepository(Form).findOne({ where: { id: formId } }),
+    AppDataSource.getRepository(User).findOne({ where: { id: userId } }),
+  ]);
+  if (form && submitter) {
+    void sendContributionSubmittedNotification({
+      formName: form.name,
+      subsidiaryId: subsidiaryId,
+      submittedByUserName: submitter.username,
+      submittedByUserEmail: submitter.email,
+      note: note ?? null,
+    });
+  }
 
   return { outcome: "ok", contribution: toSummary(row), validation };
 }

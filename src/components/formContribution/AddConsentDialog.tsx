@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import type { ConsentDefinition, LocaleCode } from "@formbuilder/shared";
 import { useFormContributionStore } from "../../store/formContributionStore";
+import { localeDir } from "../../utils/localeDir";
 
 /** A brand-new consent checkbox this subsidiary user is proposing — same
  * per-locale text convention as AddQuestionDialog (this is genuinely new content,
@@ -63,6 +64,8 @@ export function AddConsentDialog({
     handleClose();
   }
 
+  const dir = localeDir(locale);
+
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle>Add a consent</DialogTitle>
@@ -85,6 +88,7 @@ export function AddConsentDialog({
             multiline
             minRows={2}
             value={textByLocale[locale] ?? ""}
+            inputProps={{ dir }}
             onChange={(e) => setTextByLocale((prev) => ({ ...prev, [locale]: e.target.value }))}
             autoFocus
           />

@@ -12,12 +12,14 @@ import {
 } from "@formbuilder/shared";
 import { AppDataSource } from "../config/data-source";
 import { Form, type FormOrigin, type FormStatus } from "../entities/Form";
+import { FormContribution } from "../entities/FormContribution";
 import { FormVersion, type FormVersionStatus } from "../entities/FormVersion";
 import { GeneratedFile as GeneratedFileEntity, type GeneratedFileType } from "../entities/GeneratedFile";
 import { resolvePaging, type PagedResult } from "../utils/queryParsing";
 import { absoluteFilePath, saveFormVersionGeneratedFiles } from "./fileService";
 import { classifyFileType } from "./generationService";
 import { buildZip, type ZipEntry } from "./zipService";
+import { sendAdHocReviewSubmittedNotification } from "./emailService";
 
 /**
  * Builder-authored counterpart to generationService.generateFromWorkbook, minus the
@@ -292,6 +294,16 @@ export async function getFormDetail(formId: string): Promise<FormDetail | null> 
   };
 }
 
+/** Ad-hoc forms are Full Form only (see `defaultConfig` above) — enforced here too,
+ * server-side, rather than trusted purely from the client's own omission of
+ * VariantConfigPanel on both ad-hoc editor pages. Forces `variants` back to `["ff"]`
+ * on every save/publish for an adhoc-origin form regardless of what's stored/passed,
+ * so it's never possible (a stale client, a pre-this-feature row, a future bug) for
+ * an ad-hoc form to end up generating One-Click output. */
+function enforceVariantsForOrigin(origin: FormOrigin, config: BuilderConfig): BuilderConfig {
+  return origin === "adhoc" ? { ...config, variants: ["ff"] } : config;
+}
+
 export type UpdateDraftOutcome = "ok" | "not_found";
 
 /** Saves the draft FormVersion's content in place ("Save Draft") — no validation gate
@@ -307,7 +319,7 @@ export async function updateDraft(
 
   await AppDataSource.getRepository(FormVersion).update(form.currentDraftVersionId, {
     definition: JSON.stringify(definition),
-    config: JSON.stringify(config),
+    config: JSON.stringify(enforceVariantsForOrigin(form.origin, config)),
   });
   await AppDataSource.getRepository(Form).update(formId, { updatedAt: new Date() });
   return "ok";
@@ -337,7 +349,7 @@ export async function publishForm(formId: string, userId: string): Promise<Publi
   if (!draftVersion) return { outcome: "not_found" };
 
   const definition = JSON.parse(draftVersion.definition) as FormDefinition;
-  const config = JSON.parse(draftVersion.config) as BuilderConfig;
+  const config = enforceVariantsForOrigin(form.origin, JSON.parse(draftVersion.config) as BuilderConfig);
   const generation = generateFromFormDefinition(definition, config);
   if (generation.validation.errors.length > 0) {
     return { outcome: "invalid", validation: generation.validation };
@@ -366,6 +378,10 @@ export async function publishForm(formId: string, userId: string): Promise<Publi
       status: "published" as FormVersionStatus,
       versionNumber: nextVersion,
       publishedAt,
+      // Persist the enforced config (not the raw draft's), so a legacy ad-hoc row's
+      // published record matches what was actually generated rather than silently
+      // disagreeing with it.
+      config: JSON.stringify(config),
     });
     await manager.getRepository(Form).update(formId, {
       status: "published" as FormStatus,
@@ -391,7 +407,7 @@ export async function publishForm(formId: string, userId: string): Promise<Publi
       formId,
       versionNumber: null,
       definition: draftVersion.definition,
-      config: draftVersion.config,
+      config: JSON.stringify(config),
       status: "draft",
       createdByUserId: userId,
     }),
@@ -437,11 +453,13 @@ export async function submitAdHocFormForReview(formId: string, subsidiaryId: str
   if (!form) return "not_found";
   if (form.pendingReview) return "already_pending";
 
+  const submittedAt = new Date();
   await AppDataSource.getRepository(Form).update(formId, {
     pendingReview: true,
-    submittedForReviewAt: new Date(),
+    submittedForReviewAt: submittedAt,
     reviewNote: null,
   });
+  void sendAdHocReviewSubmittedNotification({ formName: form.name, subsidiaryId, submittedAt });
   return "ok";
 }
 
@@ -522,14 +540,30 @@ export async function deleteAdHocForm(formId: string, subsidiaryId: string): Pro
 export type DeleteFormOutcome = "ok" | "not_found";
 
 /** Hard-deletes a form that's never been published (nothing downstream references it
- * yet — no GeneratedFiles rows can exist for it); soft-deletes (Form.isDeleted) one
- * that has, mirroring Upload.isDeleted's own audit-trail convention. */
+ * yet — no GeneratedFiles rows can exist for it, since those are only ever written by
+ * publishForm); soft-deletes (Form.isDeleted) one that has, mirroring Upload.isDeleted's
+ * own audit-trail convention. Works identically for every form regardless of `origin`
+ * (admin-authored or ad-hoc) or `pendingReview` — neither is a delete precondition.
+ *
+ * The hard-delete path has to break two self/cross-referencing foreign keys before the
+ * rows they point at can go away, or SQL Server rejects the whole transaction with a
+ * REFERENCE constraint violation (surfaced to the client as a bare 500): `Forms.
+ * currentDraftVersionId`/`publishedVersionId` both point *at* this form's own
+ * FormVersions rows, so those columns must be nulled out first; and any
+ * FormContributions row for this form (formId, and baseVersionId pointing at one of its
+ * versions) must be deleted before the FormVersions/Forms rows it references can be —
+ * normally there are none for a never-published form (contributions only ever target an
+ * already-published one), but deleting them unconditionally here keeps this correct
+ * even for an edge-case/pre-existing row rather than relying on that always holding. */
 export async function deleteForm(formId: string): Promise<DeleteFormOutcome> {
   const form = await AppDataSource.getRepository(Form).findOne({ where: { id: formId, isDeleted: false } });
   if (!form) return "not_found";
 
   if (form.publishedVersionId === null) {
     await AppDataSource.transaction(async (manager) => {
+      await manager.getRepository(FormContribution).delete({ formId });
+      await manager.getRepository(Form).update(formId, { currentDraftVersionId: null, publishedVersionId: null });
+      await manager.query(`DELETE FROM GeneratedFiles WHERE formVersionId IN (SELECT id FROM FormVersions WHERE formId = @0)`, [formId]);
       await manager.getRepository(FormVersion).delete({ formId });
       await manager.getRepository(Form).delete(formId);
     });

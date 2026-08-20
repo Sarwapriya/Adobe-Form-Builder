@@ -26,6 +26,7 @@ import {
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import DownloadIcon from "@mui/icons-material/Download";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { ApiError } from "../api/apiClient";
 import { listAllProjectCodes, type ProjectCode } from "../api/adminApi";
 import {
@@ -79,11 +80,25 @@ export function QuestionMasterPage() {
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  // Shown once, right when an admin picks a project code that isn't locked yet —
+  // the inline "isn't locked" Alerts further down stay as a persistent reminder
+  // while this panel is open, but a popup at the moment of selection makes sure
+  // it isn't missed.
+  const [notLockedNoticeOpen, setNotLockedNoticeOpen] = useState(false);
+
   useEffect(() => {
     listAllProjectCodes()
       .then(setProjectCodes)
       .catch(() => undefined);
   }, []);
+
+  function handleProjectCodeChange(code: string) {
+    setProjectCode(code);
+    const selected = projectCodes.find((pc) => pc.code === code);
+    if (code && selected && !selected.isLocked) {
+      setNotLockedNoticeOpen(true);
+    }
+  }
 
   function refresh(code: string) {
     setLoading(true);
@@ -175,7 +190,8 @@ export function QuestionMasterPage() {
           size="small"
           sx={{ minWidth: 240 }}
           value={projectCode}
-          onChange={(e) => setProjectCode(e.target.value)}
+          onChange={(e) => handleProjectCodeChange(e.target.value)}
+          InputLabelProps={{ shrink: true }}
         >
           <MenuItem value="">
             <em>Select a project code</em>
@@ -475,6 +491,26 @@ export function QuestionMasterPage() {
           </Button>
           <Button variant="contained" onClick={handleGenerateFromUploads} disabled={generatingFromUploads}>
             {generatingFromUploads ? "Generating…" : "Generate"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={notLockedNoticeOpen} onClose={() => setNotLockedNoticeOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <WarningAmberIcon color="warning" />
+          Still not locked this project
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            "{projectCode}" hasn't been locked yet, so forms and Excel uploads under it can still change. You can still
+            browse readiness and past versions here, but generating a new Question Master is blocked until you lock it
+            in Configuration → Campaign - Project Code — that guarantees the export reflects a final, stable snapshot
+            instead of one something could still change out from under.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => setNotLockedNoticeOpen(false)}>
+            Got it
           </Button>
         </DialogActions>
       </Dialog>

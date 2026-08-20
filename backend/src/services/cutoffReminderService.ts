@@ -3,11 +3,10 @@ import { AppDataSource } from "../config/data-source";
 import { Form } from "../entities/Form";
 import { FormVersion } from "../entities/FormVersion";
 import { ProjectCode } from "../entities/ProjectCode";
-import { Subsidiary } from "../entities/Subsidiary";
-import { User } from "../entities/User";
 import { getAdminSetting } from "./adminSettingsService";
 import { listAdminNotificationEmails } from "./authService";
 import { listContributionsForForm } from "./formContributionService";
+import { resolveSubsidiaryRecipients } from "./subsidiaryRecipients";
 import { sendAdminPendingItemsSummary, sendCutoffReminder, type AdminPendingItem } from "./emailService";
 
 const DEFAULT_REMINDER_DAYS_BEFORE = 7;
@@ -49,21 +48,6 @@ async function hasTermsAndConditionsGap(form: Form): Promise<boolean> {
   return definition.locales.some(
     (l) => !termsAndConditions.textByLocale?.[l.code] || !termsAndConditions.urlByLocale?.[l.code],
   );
-}
-
-/** This subsidiary's own active standard users' emails, plus its two extra
- * notification addresses if set (see Subsidiary.notificationEmail1/2's own
- * doc comment) — deduplicated, since a user's email could coincidentally
- * match one of the extra addresses. */
-async function resolveRecipients(subsidiaryName: string): Promise<string[]> {
-  const [users, subsidiary] = await Promise.all([
-    AppDataSource.getRepository(User).find({ where: { subsidiaryId: subsidiaryName, isActive: true } }),
-    AppDataSource.getRepository(Subsidiary).findOne({ where: { name: subsidiaryName } }),
-  ]);
-  const emails = new Set(users.map((u) => u.email));
-  if (subsidiary?.notificationEmail1) emails.add(subsidiary.notificationEmail1);
-  if (subsidiary?.notificationEmail2) emails.add(subsidiary.notificationEmail2);
-  return Array.from(emails);
 }
 
 /**
@@ -124,7 +108,7 @@ export async function runCutoffReminders(): Promise<void> {
 
       allPendingItems.push(...pendingForSubsidiary);
 
-      const recipients = await resolveRecipients(subsidiaryId);
+      const recipients = await resolveSubsidiaryRecipients(subsidiaryId);
       if (recipients.length > 0) {
         await sendCutoffReminder(recipients, {
           subsidiaryId,

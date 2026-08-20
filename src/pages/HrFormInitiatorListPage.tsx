@@ -149,6 +149,7 @@ export function HrFormInitiatorListPage() {
           sx={{ minWidth: 180 }}
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as FormStatus | "")}
+          InputLabelProps={{ shrink: true }}
         >
           {STATUS_OPTIONS.map((option) => (
             <MenuItem key={option.value} value={option.value}>
@@ -253,6 +254,7 @@ export function HrFormInitiatorListPage() {
                 size="small"
                 value={newProjectCode}
                 onChange={(e) => setNewProjectCode(e.target.value)}
+                InputLabelProps={{ shrink: true }}
               >
                 <MenuItem value="">None</MenuItem>
                 {projectCodes.map((pc) => (

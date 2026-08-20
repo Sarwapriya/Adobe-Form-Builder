@@ -7,6 +7,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import type { FormVariant } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { autoPopulateParamName, CONTROL_TYPE_LABEL, createAnswer, questionVariants, renumberAnswers } from "./formBuilderHelpers";
+import { localeDir } from "../../utils/localeDir";
 
 const CHOICE_TYPES = new Set(["radio", "checkbox", "dropdown"]);
 
@@ -29,6 +30,7 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
   const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
   const localeText = (map: Record<string, string> | undefined) => map?.[activeLocale] ?? "";
   const question = definition?.questions.find((q) => q.id === questionId);
+  const dir = localeDir(activeLocale);
 
   if (!question) return null;
 
@@ -105,6 +107,7 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
         size="small"
         fullWidth
         value={heading}
+        inputProps={{ dir }}
         onChange={(e) => patchQuestion({ headingByLocale: { ...question.headingByLocale, [activeLocale]: e.target.value } })}
       />
       <TextField
@@ -112,6 +115,7 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
         size="small"
         fullWidth
         value={subheading}
+        inputProps={{ dir }}
         onChange={(e) => patchQuestion({ subheadingByLocale: { ...question.subheadingByLocale, [activeLocale]: e.target.value } })}
       />
       <FormControlLabel
@@ -179,6 +183,7 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
                   size="small"
                   fullWidth
                   value={localeText(a.textByLocale)}
+                  inputProps={{ dir }}
                   onChange={(e) => patchAnswerText(a.id, e.target.value)}
                 />
                 <IconButton size="small" disabled={i === 0} onClick={() => moveOption(i, -1)} aria-label="Move option up">

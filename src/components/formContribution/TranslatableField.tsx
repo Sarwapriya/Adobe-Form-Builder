@@ -1,6 +1,7 @@
 import { TextField } from "@mui/material";
 import type { TranslationTarget } from "@formbuilder/shared";
 import { resolveTranslationValue, useFormContributionStore } from "../../store/formContributionStore";
+import { localeDir } from "../../utils/localeDir";
 
 /** One text field bound to a single TranslationTarget in the currently-selected
  * locale — pre-filled with whatever text already exists on the base (published)
@@ -11,11 +12,14 @@ export function TranslatableField({
   target,
   existingValue,
   multiline,
+  isUrl,
 }: {
   label: string;
   target: TranslationTarget;
   existingValue: string;
   multiline?: boolean;
+  /** Link URL fields stay LTR regardless of the locale being translated into. */
+  isUrl?: boolean;
 }) {
   const locale = useFormContributionStore((s) => s.locale);
   const translations = useFormContributionStore((s) => s.translations);
@@ -31,6 +35,7 @@ export function TranslatableField({
       multiline={multiline}
       minRows={multiline ? 2 : undefined}
       value={value}
+      inputProps={{ dir: isUrl ? "ltr" : localeDir(locale) }}
       onChange={(e) => setTranslation(target, e.target.value)}
     />
   );

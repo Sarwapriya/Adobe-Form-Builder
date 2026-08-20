@@ -3,6 +3,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, St
 import type { AnswerDefinition, ControlType, LocaleCode, QuestionDefinition } from "@formbuilder/shared";
 import { CONTROL_TYPE_LABEL } from "../formBuilder/formBuilderHelpers";
 import { useFormContributionStore } from "../../store/formContributionStore";
+import { localeDir } from "../../utils/localeDir";
 
 const ADD_QUESTION_TYPES: ControlType[] = ["shortText", "text", "dropdown", "radio", "checkbox"];
 const CHOICE_TYPES: ControlType[] = ["radio", "checkbox", "dropdown"];
@@ -105,6 +106,7 @@ export function AddQuestionDialog({
   const isChoiceType = CHOICE_TYPES.includes(controlType);
   const canAdd = (headingByLocale[defaultLocale] ?? "").trim() !== "" && (!isChoiceType || (optionsByLocale[defaultLocale] ?? []).some((o) => o.trim() !== ""));
   const options = currentOptions(locale);
+  const dir = localeDir(locale);
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
@@ -135,13 +137,22 @@ export function AddQuestionDialog({
             size="small"
             fullWidth
             value={headingByLocale[locale] ?? ""}
+            inputProps={{ dir }}
             onChange={(e) => setHeadingByLocale((prev) => ({ ...prev, [locale]: e.target.value }))}
             autoFocus
           />
           {isChoiceType && (
             <Stack spacing={1}>
               {options.map((option, i) => (
-                <TextField key={i} label={`Option ${i + 1} (${locale})`} size="small" fullWidth value={option} onChange={(e) => setOption(i, e.target.value)} />
+                <TextField
+                  key={i}
+                  label={`Option ${i + 1} (${locale})`}
+                  size="small"
+                  fullWidth
+                  value={option}
+                  inputProps={{ dir }}
+                  onChange={(e) => setOption(i, e.target.value)}
+                />
               ))}
               <Button size="small" onClick={() => setOptionCount((n) => n + 1)}>
                 Add another option
