@@ -5,7 +5,6 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { FormVariant } from "@formbuilder/shared";
-import { resolveLocalizedText } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { autoPopulateParamName, CONTROL_TYPE_LABEL, createAnswer, questionVariants, renumberAnswers } from "./formBuilderHelpers";
 
@@ -20,12 +19,21 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
   const formVariants = useFormBuilderStore((s) => s.config?.variants ?? ["ff", "oc"]);
   const defaultLocale = definition?.meta.defaultLocale ?? "en_GB";
+  // Text fields below read/write whichever locale is currently active (see
+  // MyAdHocFormEditorPage's locale-editing tabs). No fallback to another locale
+  // for display — an untranslated field shows blank rather than defaultLocale's
+  // text, so editing it can't be mistaken for already having a translation (see
+  // ProfileFieldEditorPanel's own localeText for the full reasoning). Structural
+  // bits (required, options add/remove/reorder, variant visibility) are never
+  // per-locale, so they stay untouched by this.
+  const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
+  const localeText = (map: Record<string, string> | undefined) => map?.[activeLocale] ?? "";
   const question = definition?.questions.find((q) => q.id === questionId);
 
   if (!question) return null;
 
-  const heading = resolveLocalizedText(question.headingByLocale, defaultLocale, defaultLocale);
-  const subheading = resolveLocalizedText(question.subheadingByLocale, defaultLocale, defaultLocale);
+  const heading = localeText(question.headingByLocale);
+  const subheading = localeText(question.subheadingByLocale);
   const isChoiceType = CHOICE_TYPES.has(question.controlType);
   const shownIn = questionVariants(question);
 
@@ -49,7 +57,7 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
           ? q
           : {
               ...q,
-              answers: q.answers.map((a) => (a.id === answerId ? { ...a, textByLocale: { ...a.textByLocale, [defaultLocale]: text } } : a)),
+              answers: q.answers.map((a) => (a.id === answerId ? { ...a, textByLocale: { ...a.textByLocale, [activeLocale]: text } } : a)),
             },
       ),
     }));
@@ -87,19 +95,24 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
         {question.id} · {CONTROL_TYPE_LABEL[question.controlType]}
       </Typography>
 
+      {activeLocale !== defaultLocale && (
+        <Typography variant="caption" color="text.secondary">
+          Editing text for <strong>{activeLocale}</strong> — other settings below always apply to every locale.
+        </Typography>
+      )}
       <TextField
         label="Heading"
         size="small"
         fullWidth
         value={heading}
-        onChange={(e) => patchQuestion({ headingByLocale: { ...question.headingByLocale, [defaultLocale]: e.target.value } })}
+        onChange={(e) => patchQuestion({ headingByLocale: { ...question.headingByLocale, [activeLocale]: e.target.value } })}
       />
       <TextField
         label="Subheading"
         size="small"
         fullWidth
         value={subheading}
-        onChange={(e) => patchQuestion({ subheadingByLocale: { ...question.subheadingByLocale, [defaultLocale]: e.target.value } })}
+        onChange={(e) => patchQuestion({ subheadingByLocale: { ...question.subheadingByLocale, [activeLocale]: e.target.value } })}
       />
       <FormControlLabel
         control={<Switch checked={question.required} onChange={(e) => patchQuestion({ required: e.target.checked })} />}
@@ -165,7 +178,7 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
                 <TextField
                   size="small"
                   fullWidth
-                  value={resolveLocalizedText(a.textByLocale, defaultLocale, defaultLocale)}
+                  value={localeText(a.textByLocale)}
                   onChange={(e) => patchAnswerText(a.id, e.target.value)}
                 />
                 <IconButton size="small" disabled={i === 0} onClick={() => moveOption(i, -1)} aria-label="Move option up">

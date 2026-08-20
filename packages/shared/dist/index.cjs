@@ -47,9 +47,11 @@ __export(index_exports, {
   mapWorkbook: () => mapWorkbook,
   migrateDefaultLocale: () => migrateDefaultLocale,
   parseWorkbook: () => parseWorkbook,
+  resolveCountryName: () => resolveCountryName,
   resolveFileNames: () => resolveFileNames,
   resolveLocales: () => resolveLocales,
   resolveLocalizedText: () => resolveLocalizedText,
+  subsidiaryCountryCodes: () => subsidiaryCountryCodes,
   translationEntrySchema: () => translationEntrySchema,
   translationTargetSchema: () => translationTargetSchema,
   validateContribution: () => validateContribution,
@@ -949,6 +951,7 @@ var mobileNumberFieldMetaSchema = localizedFieldMetaSchema.extend({
 var privacyPolicyMetaSchema = import_zod.z.object({
   textByLocale: localeTextMap,
   linkUrlByLocale: localeTextMap,
+  linkTextByLocale: localeTextMap.optional(),
   required: import_zod.z.boolean().optional(),
   visibleInVariants: import_zod.z.array(import_zod.z.enum(["ff", "oc"])).optional()
 });
@@ -1074,6 +1077,7 @@ function migrateDefaultLocale(form, newDefaultLocale, options = {}) {
   if (f.privacyPolicy) {
     f.privacyPolicy.textByLocale = text(f.privacyPolicy.textByLocale);
     f.privacyPolicy.linkUrlByLocale = text(f.privacyPolicy.linkUrlByLocale);
+    if (f.privacyPolicy.linkTextByLocale) f.privacyPolicy.linkTextByLocale = text(f.privacyPolicy.linkTextByLocale);
   }
   if (f.marketingOptin) f.marketingOptin.labelByLocale = text(f.marketingOptin.labelByLocale);
   if (f.additionalConsents) {
@@ -1182,6 +1186,9 @@ function validateFormDefinition(form) {
     }
     if (!form.fields.privacyPolicy.textByLocale?.[form.meta.defaultLocale]) {
       warnings.push(warn("The Privacy Policy field has no consent text for the default locale."));
+    }
+    if (!form.fields.privacyPolicy.linkTextByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Privacy Policy field has no link text for the default locale \u2014 the link will render empty."));
     }
     if (form.fields.privacyPolicy.visibleInVariants && form.fields.privacyPolicy.visibleInVariants.length === 0) {
       warnings.push(warn("The Privacy Policy field isn't shown in Full Form or One-Click \u2014 it won't appear anywhere until you enable at least one."));
@@ -1478,6 +1485,776 @@ var contributionContentSchema = import_zod2.z.object({
   newConsents: import_zod2.z.array(consentDefinitionSchema),
   autoPopulateToggles: import_zod2.z.array(autoPopulateToggleSchema)
 });
+
+// src/form/subsidiaryData.ts
+var COUNTRY_SUBSIDIARY = {
+  "AB": "SIEL",
+  "AC": "SCA",
+  "AD": "SEIB",
+  "AE": "SGE",
+  "AF": "SEPAK",
+  "AG": "SELA",
+  "AI": "SELA",
+  "AL": "SEAD",
+  "AM": "SERC",
+  "AN": "SEDA",
+  "AO": "SSA",
+  "AQ": "SSA",
+  "AR": "SEASA",
+  "AS": "SENZ",
+  "AT": "SEAS",
+  "AU": "SEAU",
+  "AW": "SELA",
+  "AX": "SENA",
+  "AZ": "SERC",
+  "BA": "SEAD",
+  "BB": "SELA",
+  "BD": "BANGLADESH",
+  "BE": "SEBN",
+  "BF": "SCA",
+  "BG": "SEROM",
+  "BH": "SGE",
+  "BI": "SEEA",
+  "BJ": "SCA",
+  "BL": "SELA",
+  "BM": "SELA",
+  "BN": "SESP",
+  "BO": "SECH",
+  "BQ": "SELA",
+  "BR": "SEDA",
+  "BS": "SELA",
+  "BT": "SIEL",
+  "BV": "SEASA",
+  "BW": "SSA",
+  "BY": "SERC",
+  "BZ": "SELA",
+  "CA": "SECA",
+  "CC": "SIEL",
+  "CD": "SEEA",
+  "CF": "SCA",
+  "CG": "SCA",
+  "CH": "SEAS",
+  "CI": "SCA",
+  "CK": "SENZ",
+  "CL": "SECH",
+  "CM": "SCA",
+  "CO": "SAMCOL",
+  "CR": "SELA",
+  "CU": "SELA",
+  "CV": "SCA",
+  "CW": "SELA",
+  "CX": "SIEL",
+  "CY": "SEGR",
+  "CZ": "SECZ",
+  "DE": "SEG",
+  "DG": "SIEL",
+  "DJ": "SEEA",
+  "DK": "SENA",
+  "DM": "SELA",
+  "DO": "SELA",
+  "DZ": "SEMAG",
+  "EC": "SELA",
+  "EE": "SEB",
+  "EG": "SEEG",
+  "EH": "SESAR",
+  "ER": "SEEA",
+  "ES": "SEIB",
+  "ET": "SEEA",
+  "FD": "SEF",
+  "FI": "SENA",
+  "FJ": "SENZ",
+  "FK": "SEUK",
+  "FM": "SENZ",
+  "FO": "SENA",
+  "FR": "SEF",
+  "GA": "SCA",
+  "GB": "SEUK",
+  "GD": "SELA",
+  "GE": "SERC",
+  "GF": "SEF",
+  "GG": "SEUK",
+  "GH": "SCA",
+  "GI": "SEIB",
+  "GL": "SENA",
+  "GM": "SCA",
+  "GN": "SCA",
+  "GP": "SELA",
+  "GQ": "SCA",
+  "GR": "SEGR",
+  "GS": "SEDA",
+  "GT": "SELA",
+  "GU": "SEAU",
+  "GW": "SCA",
+  "GY": "SELA",
+  "HK": "SEHK",
+  "HM": "SEAU",
+  "HN": "SELA",
+  "HR": "SEAD",
+  "HT": "SELA",
+  "HU": "SEH",
+  "ID": "SEIN",
+  "IE": "SEUK",
+  "IL": "SEIL",
+  "IM": "SEUK",
+  "IN": "SIEL",
+  "IO": "SIEL",
+  "IQ": "SELV",
+  "IR": "IRAN",
+  "IS": "SENA",
+  "IT": "SEI",
+  "JE": "SEUK",
+  "JM": "SELA",
+  "JO": "SELV",
+  "JP": "SEJ",
+  "KE": "SEEA",
+  "KG": "SECE",
+  "KH": "TSE",
+  "KI": "SENZ",
+  "KM": "SSA",
+  "KN": "SELA",
+  "KW": "SGE",
+  "KY": "SELA",
+  "KZ": "SECE",
+  "LA": "TSE",
+  "LB": "SELV",
+  "LC": "SELA",
+  "LI": "SEAS",
+  "LK": "SRI LANKA",
+  "LR": "SCA",
+  "LS": "SSA",
+  "LT": "SEB",
+  "LU": "SEBN",
+  "LV": "SEB",
+  "LY": "SEMAG",
+  "MA": "SEMAG",
+  "MC": "SEF",
+  "MD": "SEUC",
+  "ME": "SEAD",
+  "MF": "SELA",
+  "MG": "SSA",
+  "MH": "SENZ",
+  "MK": "SEAD",
+  "ML": "SCA",
+  "MM": "TSE",
+  "MN": "SECE",
+  "MO": "SEHK",
+  "MP": "SEAU",
+  "MQ": "SELA",
+  "MR": "SCA",
+  "MS": "SELA",
+  "MT": "SEI",
+  "MU": "SSA",
+  "MV": "SRI LANKA",
+  "MW": "SSA",
+  "MX": "SEM",
+  "MY": "SME",
+  "MZ": "SSA",
+  "NA": "SSA",
+  "NC": "SENZ",
+  "NE": "SCA",
+  "NF": "SEAU",
+  "NG": "SCA",
+  "NI": "SELA",
+  "NL": "SEBN",
+  "NO": "SENA",
+  "NP": "NEPAL",
+  "NR": "SEAU",
+  "NU": "SENZ",
+  "NZ": "SENZ",
+  "OM": "SGE",
+  "PA": "SELA",
+  "PE": "SEPR",
+  "PF": "SENZ",
+  "PG": "SENZ",
+  "PH": "SEPCO",
+  "PK": "SEPAK",
+  "PL": "SEPOL",
+  "PM": "SEF",
+  "PN": "SEAU",
+  "PR": "SELA",
+  "PS": "SEIL",
+  "PT": "SEIB",
+  "PW": "SEPCO",
+  "PY": "SELA",
+  "QA": "SGE",
+  "RE": "SSA",
+  "RO": "SEROM",
+  "RS": "SEAD",
+  "RU": "SERC",
+  "RW": "SEEA",
+  "SA": "SESAR",
+  "SB": "SENZ",
+  "SC": "SEEA",
+  "SD": "SEEA",
+  "SE": "SENA",
+  "SG": "SESP",
+  "SH": "SEUK",
+  "SI": "SEAD",
+  "SJ": "SENA",
+  "SK": "SECZ",
+  "SL": "SCA",
+  "SM": "SEI",
+  "SN": "SCA",
+  "SO": "SEEA",
+  "SR": "SELA",
+  "SS": "SEEA",
+  "ST": "SCA",
+  "SV": "SELA",
+  "SX": "SELA",
+  "SY": "SELV",
+  "SZ": "SSA",
+  "TC": "SELA",
+  "TD": "SCA",
+  "TF": "SEAU",
+  "TG": "SCA",
+  "TH": "TSE",
+  "TJ": "SECE",
+  "TK": "SEAU",
+  "TL": "SEIN",
+  "TM": "SECE",
+  "TN": "SEMAG",
+  "TO": "SENZ",
+  "TR": "SETK",
+  "TT": "SELA",
+  "TV": "SENZ",
+  "TW": "SET",
+  "TZ": "SEEA",
+  "UA": "SEUC",
+  "UG": "SEEA",
+  "UK": "SEUK",
+  "UY": "SELA",
+  "UZ": "SEUZ",
+  "VA": "SEI",
+  "VE": "SELA",
+  "VG": "SELA",
+  "VI": "SEDA",
+  "VN": "SAVINA",
+  "VU": "SENZ",
+  "WF": "SEAU",
+  "WS": "SENZ",
+  "YE": "SGE",
+  "YT": "SSA",
+  "YU": "SEAD",
+  "ZA": "SSA",
+  "ZM": "SSA",
+  "ZW": "SSA"
+};
+var REFERENCE_SUBSIDIARY_DETAIL = {
+  "IRAN": [
+    {
+      "callingCode": "98",
+      "countryCode": "IR",
+      "countryName": {
+        "fa_IR": "Iran"
+      }
+    }
+  ],
+  "SCA": [
+    {
+      "callingCode": "247",
+      "countryCode": "AC",
+      "countryName": {
+        "en_GB": "Ascension Island",
+        "fr_FR": "\xCEle de l'Ascension"
+      }
+    },
+    {
+      "callingCode": "229",
+      "countryCode": "BJ",
+      "countryName": {
+        "en_GB": "Benin",
+        "fr_FR": "B\xE9nin"
+      }
+    },
+    {
+      "callingCode": "226",
+      "countryCode": "BF",
+      "countryName": {
+        "en_GB": "Burkina Faso",
+        "fr_FR": "Burkina Faso"
+      }
+    },
+    {
+      "callingCode": "237",
+      "countryCode": "CM",
+      "countryName": {
+        "en_GB": "Cameroon",
+        "fr_FR": "Cameroun"
+      }
+    },
+    {
+      "callingCode": "238",
+      "countryCode": "CV",
+      "countryName": {
+        "en_GB": "Cape Verde",
+        "fr_FR": "Cap-Vert"
+      }
+    },
+    {
+      "callingCode": "236",
+      "countryCode": "CF",
+      "countryName": {
+        "en_GB": "Central African Republic",
+        "fr_FR": "R\xE9publique centrafricaine"
+      }
+    },
+    {
+      "callingCode": "235",
+      "countryCode": "TD",
+      "countryName": {
+        "en_GB": "Chad",
+        "fr_FR": "Tchad"
+      }
+    },
+    {
+      "callingCode": "225",
+      "countryCode": "CI",
+      "countryName": {
+        "en_GB": "C\xF4te d'Ivoire",
+        "fr_FR": "C\xF4te d'Ivoire"
+      }
+    },
+    {
+      "callingCode": "240",
+      "countryCode": "GQ",
+      "countryName": {
+        "en_GB": "Equatorial Guin",
+        "fr_FR": "Guin\xE9e \xE9quatoriale"
+      }
+    },
+    {
+      "callingCode": "241",
+      "countryCode": "GA",
+      "countryName": {
+        "en_GB": "Gabon",
+        "fr_FR": "Gabon"
+      }
+    },
+    {
+      "callingCode": "220",
+      "countryCode": "GM",
+      "countryName": {
+        "en_GB": "Gambia",
+        "fr_FR": "Gambie"
+      }
+    },
+    {
+      "callingCode": "233",
+      "countryCode": "GH",
+      "countryName": {
+        "en_GB": "Ghana",
+        "fr_FR": "Ghana"
+      }
+    },
+    {
+      "callingCode": "224",
+      "countryCode": "GN",
+      "countryName": {
+        "en_GB": "Guinea",
+        "fr_FR": "Guin\xE9e"
+      }
+    },
+    {
+      "callingCode": "245",
+      "countryCode": "GW",
+      "countryName": {
+        "en_GB": "Guinea-Bissau",
+        "fr_FR": "Guin\xE9e-Bissau"
+      }
+    },
+    {
+      "callingCode": "231",
+      "countryCode": "LR",
+      "countryName": {
+        "en_GB": "Liberia",
+        "fr_FR": "Lib\xE9ria"
+      }
+    },
+    {
+      "callingCode": "223",
+      "countryCode": "ML",
+      "countryName": {
+        "en_GB": "Mali",
+        "fr_FR": "Mali"
+      }
+    },
+    {
+      "callingCode": "222",
+      "countryCode": "MR",
+      "countryName": {
+        "en_GB": "Mauretania",
+        "fr_FR": "Mauritanie"
+      }
+    },
+    {
+      "callingCode": "227",
+      "countryCode": "NE",
+      "countryName": {
+        "en_GB": "Niger",
+        "fr_FR": "Niger"
+      }
+    },
+    {
+      "callingCode": "234",
+      "countryCode": "NG",
+      "countryName": {
+        "en_GB": "Nigeria",
+        "fr_FR": "Nig\xE9ria"
+      }
+    },
+    {
+      "callingCode": "242",
+      "countryCode": "CG",
+      "countryName": {
+        "en_GB": "Republic of Congo",
+        "fr_FR": "R\xE9publique du Congo"
+      }
+    },
+    {
+      "callingCode": "239",
+      "countryCode": "ST",
+      "countryName": {
+        "en_GB": "S\xE3o Tom\xE9 and Pr\xEDncipe",
+        "fr_FR": "S\xE3o Tom\xE9-et-Principe"
+      }
+    },
+    {
+      "callingCode": "221",
+      "countryCode": "SN",
+      "countryName": {
+        "en_GB": "Senegal",
+        "fr_FR": "S\xE9n\xE9gal"
+      }
+    },
+    {
+      "callingCode": "232",
+      "countryCode": "SL",
+      "countryName": {
+        "en_GB": "Sierra Leone",
+        "fr_FR": "Sierra Leone"
+      }
+    },
+    {
+      "callingCode": "228",
+      "countryCode": "TG",
+      "countryName": {
+        "en_GB": "Togo",
+        "fr_FR": "Togo"
+      }
+    }
+  ],
+  "SEEG": [
+    {
+      "callingCode": "20",
+      "countryCode": "EG",
+      "countryName": {
+        "en_EG": "Egypt",
+        "ar_EG": "\u0645\u0635\u0631"
+      }
+    }
+  ],
+  "SEIL": [
+    {
+      "callingCode": "972",
+      "countryCode": "IL",
+      "countryName": {
+        "en_GB": "Israel",
+        "he_IL": "\u05D9\u05B4\u05E9\u05B0\u05C2\u05E8\u05B8\u05D0\u05B5\u05DC"
+      }
+    },
+    {
+      "callingCode": "970",
+      "countryCode": "PS",
+      "countryName": {
+        "en_GB": "Palestine",
+        "ar_PS": "\u0641\u0644\u0633\u0637\u064A\u0646"
+      }
+    }
+  ],
+  "SELV": [
+    {
+      "callingCode": "964",
+      "countryCode": "IQ",
+      "countryName": {
+        "ar_IQ": "\u0627\u0644\u0639\u0631\u0627\u0642",
+        "ku_IQ": "\u0639\u06CE\u0631\u0627\u0642"
+      }
+    },
+    {
+      "callingCode": "962",
+      "countryCode": "JO",
+      "countryName": {
+        "en_JO": "Jordan"
+      }
+    },
+    {
+      "callingCode": "961",
+      "countryCode": "LB",
+      "countryName": {
+        "en_LB": "Lebanon"
+      }
+    },
+    {
+      "callingCode": "963",
+      "countryCode": "SY",
+      "countryName": {
+        "en_GB": "Syria",
+        "fr_FR": "Syrie"
+      }
+    }
+  ],
+  "SEMAG": [
+    {
+      "callingCode": "213",
+      "countryCode": "DZ",
+      "countryName": {
+        "fr_MA": "Alg\xE9rie"
+      }
+    },
+    {
+      "callingCode": "218",
+      "countryCode": "LY",
+      "countryName": {
+        "fr_MA": "Libye"
+      }
+    },
+    {
+      "callingCode": "212",
+      "countryCode": "MA",
+      "countryName": {
+        "fr_MA": "Maroc"
+      }
+    },
+    {
+      "callingCode": "216",
+      "countryCode": "TN",
+      "countryName": {
+        "fr_MA": "Tunisie"
+      }
+    }
+  ],
+  "SEPAK": [
+    {
+      "callingCode": "93",
+      "countryCode": "AF",
+      "countryName": {
+        "en_PK": "Afghanistan"
+      }
+    },
+    {
+      "callingCode": "92",
+      "countryCode": "PK",
+      "countryName": {
+        "en_PK": "Pakistan"
+      }
+    }
+  ],
+  "SESAR": [
+    {
+      "callingCode": "966",
+      "countryCode": "SA",
+      "countryName": {
+        "en_SA": "Saudi Arabia",
+        "ar_SA": "\u0627\u0644\u0645\u0645\u0644\u0643\u0629 \u0627\u0644\u0639\u0631\u0628\u064A\u0629 \u0627\u0644\u0633\u0639\u0648\u062F\u064A\u0629"
+      }
+    },
+    {
+      "callingCode": "212",
+      "countryCode": "EH",
+      "countryName": {
+        "en_GB": "Western Sahara",
+        "fr_FR": "Sahara occidental"
+      }
+    }
+  ],
+  "SETK": [
+    {
+      "callingCode": "90",
+      "countryCode": "TR",
+      "countryName": {
+        "tr_TR": "T\xFCrkiye"
+      }
+    }
+  ],
+  "SGE": [
+    {
+      "callingCode": "971",
+      "countryCode": "AE",
+      "countryName": {
+        "ar_BH": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
+        "en_BH": "United Arab Emirates",
+        "ar_KW": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
+        "en_KW": "United Arab Emirates",
+        "ar_OM": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
+        "en_OM": "United Arab Emirates",
+        "ar_QA": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
+        "en_QA": "United Arab Emirates",
+        "ar_AE": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
+        "en_AE": "United Arab Emirates"
+      }
+    },
+    {
+      "callingCode": "973",
+      "countryCode": "BH",
+      "countryName": {
+        "ar_AE": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
+        "en_AE": "Bahrain",
+        "ar_BH": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
+        "en_BH": "Bahrain",
+        "ar_KW": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
+        "en_KW": "Bahrain",
+        "ar_OM": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
+        "en_OM": "Bahrain",
+        "ar_QA": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
+        "en_QA": "Bahrain"
+      }
+    },
+    {
+      "callingCode": "965",
+      "countryCode": "KW",
+      "countryName": {
+        "ar_BH": "\u0627\u0644\u0643\u0648\u064A\u062A",
+        "en_BH": "Kuwait",
+        "ar_KW": "\u0627\u0644\u0643\u0648\u064A\u062A",
+        "en_KW": "Kuwait",
+        "ar_OM": "\u0627\u0644\u0643\u0648\u064A\u062A",
+        "en_OM": "Kuwait",
+        "ar_QA": "\u0627\u0644\u0643\u0648\u064A\u062A",
+        "en_QA": "Kuwait",
+        "ar_AE": "\u0627\u0644\u0643\u0648\u064A\u062A",
+        "en_AE": "Kuwait"
+      }
+    },
+    {
+      "callingCode": "968",
+      "countryCode": "OM",
+      "countryName": {
+        "ar_BH": "\u0639\u064F\u0645\u0627\u0646",
+        "en_BH": "Oman",
+        "ar_KW": "\u0639\u064F\u0645\u0627\u0646",
+        "en_KW": "Oman",
+        "ar_OM": "\u0639\u064F\u0645\u0627\u0646",
+        "en_OM": "Oman",
+        "ar_QA": "\u0639\u064F\u0645\u0627\u0646",
+        "en_QA": "Oman",
+        "ar_AE": "\u0639\u064F\u0645\u0627\u0646",
+        "en_AE": "Oman"
+      }
+    },
+    {
+      "callingCode": "974",
+      "countryCode": "QA",
+      "countryName": {
+        "ar_BH": "\u0642\u0637\u0631",
+        "en_BH": "Qatar",
+        "ar_KW": "\u0642\u0637\u0631",
+        "en_KW": "Qatar",
+        "ar_OM": "\u0642\u0637\u0631",
+        "en_OM": "Qatar",
+        "ar_QA": "\u0642\u0637\u0631",
+        "en_QA": "Qatar",
+        "ar_AE": "\u0642\u0637\u0631",
+        "en_AE": "Qatar"
+      }
+    }
+  ],
+  "SIEL": [
+    {
+      "callingCode": "",
+      "countryCode": "AB",
+      "countryName": {
+        "en_GB": "Abkhazia",
+        "fr_FR": "Abkhazie"
+      }
+    },
+    {
+      "callingCode": "975",
+      "countryCode": "BT",
+      "countryName": {
+        "en_GB": "Bhutan",
+        "fr_FR": "Bhoutan"
+      }
+    },
+    {
+      "callingCode": "246",
+      "countryCode": "IO",
+      "countryName": {
+        "en_GB": "British Indian Ocean Territory",
+        "fr_FR": "Territoire britannique de l'oc\xE9an Indien"
+      }
+    },
+    {
+      "callingCode": "61",
+      "countryCode": "CX",
+      "countryName": {
+        "en_GB": "Christmas Island",
+        "fr_FR": "\xCEle Christmas"
+      }
+    },
+    {
+      "callingCode": "61",
+      "countryCode": "CC",
+      "countryName": {
+        "en_GB": "Cocos Islands",
+        "fr_FR": "\xCEles Cocos"
+      }
+    },
+    {
+      "callingCode": "246",
+      "countryCode": "DG",
+      "countryName": {
+        "en_GB": "Diego Garcia",
+        "fr_FR": "Diego Garc\xEDa"
+      }
+    },
+    {
+      "callingCode": "91",
+      "countryCode": "IN",
+      "countryName": {
+        "en_GB": "India",
+        "fr_FR": "Inde"
+      }
+    }
+  ]
+};
+var STUB_SUBSIDIARY_DETAIL = Object.fromEntries(
+  [...new Set(Object.values(COUNTRY_SUBSIDIARY))].filter((code) => !(code in REFERENCE_SUBSIDIARY_DETAIL)).map((code) => [code, []])
+);
+var SUBSIDIARY_DETAIL = {
+  ...REFERENCE_SUBSIDIARY_DETAIL,
+  ...STUB_SUBSIDIARY_DETAIL
+};
+var SUBSIDIARY_CODES = Object.keys(SUBSIDIARY_DETAIL).sort();
+function resolveSubsidiaryCountryName(countryName, locale, defaultLocale) {
+  if (countryName[locale]) return countryName[locale];
+  const langSubtag = locale.split("_")[0];
+  const sameLanguageKey = Object.keys(countryName).find((k) => k.split("_")[0] === langSubtag);
+  if (sameLanguageKey) return countryName[sameLanguageKey];
+  if (countryName[defaultLocale]) return countryName[defaultLocale];
+  const englishKey = Object.keys(countryName).find((k) => k.startsWith("en_") || k === "en_GB");
+  if (englishKey) return countryName[englishKey];
+  const firstKey = Object.keys(countryName)[0];
+  return firstKey ? countryName[firstKey] : "";
+}
+function findCountryTranslations(countryCode) {
+  let merged;
+  for (const entries of Object.values(SUBSIDIARY_DETAIL)) {
+    for (const entry of entries) {
+      if (entry.countryCode === countryCode) {
+        merged = { ...merged, ...entry.countryName };
+      }
+    }
+  }
+  return merged;
+}
+function resolveCountryName(countryCode, locale, defaultLocale) {
+  const translations = findCountryTranslations(countryCode);
+  if (translations) return resolveSubsidiaryCountryName(translations, locale, defaultLocale);
+  return findCallingCodeEntry(countryCode)?.countryName ?? countryCode;
+}
+function subsidiaryCountryCodes(subsidiaryCode) {
+  return (SUBSIDIARY_DETAIL[subsidiaryCode] ?? []).map((e) => e.countryCode);
+}
 
 // src/codegen/css/referenceCssContent.ts
 var REFERENCE_CSS = `a,
@@ -3653,8 +4430,30 @@ function resolvePrefix(form, config) {
   const subsidiary = form.meta.subsidiary.trim();
   return sanitize(subsidiary ? `${subsidiary}-${lang}` : lang);
 }
+function resolveLocaleVariantPrefix(form, basePrefix, locale, usedPrefixes) {
+  const subsidiary = form.meta.subsidiary.trim();
+  const lang = locale.langSubtag.toUpperCase();
+  let candidate = sanitize(subsidiary ? `${subsidiary}-${lang}` : lang);
+  if (candidate === basePrefix || usedPrefixes.has(candidate)) {
+    candidate = sanitize(subsidiary ? `${subsidiary}-${locale.code}` : locale.code);
+  }
+  usedPrefixes.add(candidate);
+  return candidate;
+}
 function resolveFileNames(form, config) {
   const prefix = resolvePrefix(form, config);
+  const usedPrefixes = /* @__PURE__ */ new Set([prefix]);
+  const localeVariants = form.locales.filter((l) => l.code !== form.meta.defaultLocale).map((l) => {
+    const variantPrefix = resolveLocaleVariantPrefix(form, prefix, l, usedPrefixes);
+    return {
+      locale: l.code,
+      prefix: variantPrefix,
+      ffJs: `${variantPrefix}_FF.js`,
+      ocJs: `${variantPrefix}_OC.js`,
+      ffHtml: `${variantPrefix}_FF.html`,
+      ocHtml: `${variantPrefix}_OC.html`
+    };
+  });
   return {
     prefix,
     css: `${prefix}.css`,
@@ -3664,7 +4463,8 @@ function resolveFileNames(form, config) {
     ffJs: `${prefix}_FF.js`,
     ocJs: `${prefix}_OC.js`,
     ffHtml: `${prefix}_FF.html`,
-    ocHtml: `${prefix}_OC.html`
+    ocHtml: `${prefix}_OC.html`,
+    localeVariants
   };
 }
 
@@ -3747,12 +4547,12 @@ var FAVICON_TAG = '<link rel="shortcut icon" href="https://res6.mena2p.crm.samsu
 var FONTS_TAG = '<link rel="stylesheet" href="samsungSS_fonts_2026.css">';
 var ADOBE_LAUNCH_SCRIPT = '<script src="https://assets.adobedtm.com/72afb75f5516/dd6b57adea42/launch-b679a712f5a6.min.js" async></script>';
 var termsLink = (form, extraClass) => form.fields.termsAndConditions ? `<a${extraClass ? ` class="${extraClass}"` : ""} style="text-align:center" href="#" target="_blank" id="termsAndConditionsLink"><span></span><img class="form_bottom_img" src="blue_arr.png"></a>` : "";
-function renderPage(form, config, variant, fileNames) {
+function renderPage(form, config, variant, fileNames, targetLocale) {
   const isOc = variant === "oc";
   const analyticsScript = config.analytics?.enabled ? ADOBE_LAUNCH_SCRIPT : "";
-  const defaultLocaleInfo = form.locales.find((l) => l.code === form.meta.defaultLocale);
-  const langSubtag = defaultLocaleInfo?.langSubtag ?? "en";
-  const dir = defaultLocaleInfo?.isRtl ? "rtl" : "ltr";
+  const localeInfo = targetLocale ?? form.locales.find((l) => l.code === form.meta.defaultLocale);
+  const langSubtag = localeInfo?.langSubtag ?? "en";
+  const dir = localeInfo?.isRtl ? "rtl" : "ltr";
   const profileFields = renderProfileFields(
     isOc ? {
       callingCode: form.fields.callingCode,
@@ -3842,769 +4642,19 @@ ${analyticsScript}
 }
 
 // src/codegen/html/buildFfHtml.ts
-function buildFfHtml(form, config, fileNames) {
-  return { path: fileNames.ffHtml, contents: renderPage(form, config, "ff", fileNames) };
+function buildFfHtml(form, config, fileNames, targetLocale) {
+  return { path: fileNames.ffHtml, contents: renderPage(form, config, "ff", fileNames, targetLocale) };
 }
 
 // src/codegen/html/buildOcHtml.ts
-function buildOcHtml(form, config, fileNames) {
-  return { path: fileNames.ocHtml, contents: renderPage(form, config, "oc", fileNames) };
+function buildOcHtml(form, config, fileNames, targetLocale) {
+  return { path: fileNames.ocHtml, contents: renderPage(form, config, "oc", fileNames, targetLocale) };
 }
-
-// src/form/subsidiaryData.ts
-var COUNTRY_SUBSIDIARY = {
-  "AB": "SIEL",
-  "AC": "SCA",
-  "AD": "SEIB",
-  "AE": "SGE",
-  "AF": "SEPAK",
-  "AG": "SELA",
-  "AI": "SELA",
-  "AL": "SEAD",
-  "AM": "SERC",
-  "AN": "SEDA",
-  "AO": "SSA",
-  "AQ": "SSA",
-  "AR": "SEASA",
-  "AS": "SENZ",
-  "AT": "SEAS",
-  "AU": "SEAU",
-  "AW": "SELA",
-  "AX": "SENA",
-  "AZ": "SERC",
-  "BA": "SEAD",
-  "BB": "SELA",
-  "BD": "BANGLADESH",
-  "BE": "SEBN",
-  "BF": "SCA",
-  "BG": "SEROM",
-  "BH": "SGE",
-  "BI": "SEEA",
-  "BJ": "SCA",
-  "BL": "SELA",
-  "BM": "SELA",
-  "BN": "SESP",
-  "BO": "SECH",
-  "BQ": "SELA",
-  "BR": "SEDA",
-  "BS": "SELA",
-  "BT": "SIEL",
-  "BV": "SEASA",
-  "BW": "SSA",
-  "BY": "SERC",
-  "BZ": "SELA",
-  "CA": "SECA",
-  "CC": "SIEL",
-  "CD": "SEEA",
-  "CF": "SCA",
-  "CG": "SCA",
-  "CH": "SEAS",
-  "CI": "SCA",
-  "CK": "SENZ",
-  "CL": "SECH",
-  "CM": "SCA",
-  "CO": "SAMCOL",
-  "CR": "SELA",
-  "CU": "SELA",
-  "CV": "SCA",
-  "CW": "SELA",
-  "CX": "SIEL",
-  "CY": "SEGR",
-  "CZ": "SECZ",
-  "DE": "SEG",
-  "DG": "SIEL",
-  "DJ": "SEEA",
-  "DK": "SENA",
-  "DM": "SELA",
-  "DO": "SELA",
-  "DZ": "SEMAG",
-  "EC": "SELA",
-  "EE": "SEB",
-  "EG": "SEEG",
-  "EH": "SESAR",
-  "ER": "SEEA",
-  "ES": "SEIB",
-  "ET": "SEEA",
-  "FD": "SEF",
-  "FI": "SENA",
-  "FJ": "SENZ",
-  "FK": "SEUK",
-  "FM": "SENZ",
-  "FO": "SENA",
-  "FR": "SEF",
-  "GA": "SCA",
-  "GB": "SEUK",
-  "GD": "SELA",
-  "GE": "SERC",
-  "GF": "SEF",
-  "GG": "SEUK",
-  "GH": "SCA",
-  "GI": "SEIB",
-  "GL": "SENA",
-  "GM": "SCA",
-  "GN": "SCA",
-  "GP": "SELA",
-  "GQ": "SCA",
-  "GR": "SEGR",
-  "GS": "SEDA",
-  "GT": "SELA",
-  "GU": "SEAU",
-  "GW": "SCA",
-  "GY": "SELA",
-  "HK": "SEHK",
-  "HM": "SEAU",
-  "HN": "SELA",
-  "HR": "SEAD",
-  "HT": "SELA",
-  "HU": "SEH",
-  "ID": "SEIN",
-  "IE": "SEUK",
-  "IL": "SEIL",
-  "IM": "SEUK",
-  "IN": "SIEL",
-  "IO": "SIEL",
-  "IQ": "SELV",
-  "IR": "IRAN",
-  "IS": "SENA",
-  "IT": "SEI",
-  "JE": "SEUK",
-  "JM": "SELA",
-  "JO": "SELV",
-  "JP": "SEJ",
-  "KE": "SEEA",
-  "KG": "SECE",
-  "KH": "TSE",
-  "KI": "SENZ",
-  "KM": "SSA",
-  "KN": "SELA",
-  "KW": "SGE",
-  "KY": "SELA",
-  "KZ": "SECE",
-  "LA": "TSE",
-  "LB": "SELV",
-  "LC": "SELA",
-  "LI": "SEAS",
-  "LK": "SRI LANKA",
-  "LR": "SCA",
-  "LS": "SSA",
-  "LT": "SEB",
-  "LU": "SEBN",
-  "LV": "SEB",
-  "LY": "SEMAG",
-  "MA": "SEMAG",
-  "MC": "SEF",
-  "MD": "SEUC",
-  "ME": "SEAD",
-  "MF": "SELA",
-  "MG": "SSA",
-  "MH": "SENZ",
-  "MK": "SEAD",
-  "ML": "SCA",
-  "MM": "TSE",
-  "MN": "SECE",
-  "MO": "SEHK",
-  "MP": "SEAU",
-  "MQ": "SELA",
-  "MR": "SCA",
-  "MS": "SELA",
-  "MT": "SEI",
-  "MU": "SSA",
-  "MV": "SRI LANKA",
-  "MW": "SSA",
-  "MX": "SEM",
-  "MY": "SME",
-  "MZ": "SSA",
-  "NA": "SSA",
-  "NC": "SENZ",
-  "NE": "SCA",
-  "NF": "SEAU",
-  "NG": "SCA",
-  "NI": "SELA",
-  "NL": "SEBN",
-  "NO": "SENA",
-  "NP": "NEPAL",
-  "NR": "SEAU",
-  "NU": "SENZ",
-  "NZ": "SENZ",
-  "OM": "SGE",
-  "PA": "SELA",
-  "PE": "SEPR",
-  "PF": "SENZ",
-  "PG": "SENZ",
-  "PH": "SEPCO",
-  "PK": "SEPAK",
-  "PL": "SEPOL",
-  "PM": "SEF",
-  "PN": "SEAU",
-  "PR": "SELA",
-  "PS": "SEIL",
-  "PT": "SEIB",
-  "PW": "SEPCO",
-  "PY": "SELA",
-  "QA": "SGE",
-  "RE": "SSA",
-  "RO": "SEROM",
-  "RS": "SEAD",
-  "RU": "SERC",
-  "RW": "SEEA",
-  "SA": "SESAR",
-  "SB": "SENZ",
-  "SC": "SEEA",
-  "SD": "SEEA",
-  "SE": "SENA",
-  "SG": "SESP",
-  "SH": "SEUK",
-  "SI": "SEAD",
-  "SJ": "SENA",
-  "SK": "SECZ",
-  "SL": "SCA",
-  "SM": "SEI",
-  "SN": "SCA",
-  "SO": "SEEA",
-  "SR": "SELA",
-  "SS": "SEEA",
-  "ST": "SCA",
-  "SV": "SELA",
-  "SX": "SELA",
-  "SY": "SELV",
-  "SZ": "SSA",
-  "TC": "SELA",
-  "TD": "SCA",
-  "TF": "SEAU",
-  "TG": "SCA",
-  "TH": "TSE",
-  "TJ": "SECE",
-  "TK": "SEAU",
-  "TL": "SEIN",
-  "TM": "SECE",
-  "TN": "SEMAG",
-  "TO": "SENZ",
-  "TR": "SETK",
-  "TT": "SELA",
-  "TV": "SENZ",
-  "TW": "SET",
-  "TZ": "SEEA",
-  "UA": "SEUC",
-  "UG": "SEEA",
-  "UK": "SEUK",
-  "UY": "SELA",
-  "UZ": "SEUZ",
-  "VA": "SEI",
-  "VE": "SELA",
-  "VG": "SELA",
-  "VI": "SEDA",
-  "VN": "SAVINA",
-  "VU": "SENZ",
-  "WF": "SEAU",
-  "WS": "SENZ",
-  "YE": "SGE",
-  "YT": "SSA",
-  "YU": "SEAD",
-  "ZA": "SSA",
-  "ZM": "SSA",
-  "ZW": "SSA"
-};
-var REFERENCE_SUBSIDIARY_DETAIL = {
-  "IRAN": [
-    {
-      "callingCode": "98",
-      "countryCode": "IR",
-      "countryName": {
-        "en_GB": "Iran",
-        "fr_FR": "Iran"
-      }
-    }
-  ],
-  "SCA": [
-    {
-      "callingCode": "247",
-      "countryCode": "AC",
-      "countryName": {
-        "en_GB": "Ascension Island",
-        "fr_FR": "\xCEle de l'Ascension"
-      }
-    },
-    {
-      "callingCode": "229",
-      "countryCode": "BJ",
-      "countryName": {
-        "en_GB": "Benin",
-        "fr_FR": "B\xE9nin"
-      }
-    },
-    {
-      "callingCode": "226",
-      "countryCode": "BF",
-      "countryName": {
-        "en_GB": "Burkina Faso",
-        "fr_FR": "Burkina Faso"
-      }
-    },
-    {
-      "callingCode": "237",
-      "countryCode": "CM",
-      "countryName": {
-        "en_GB": "Cameroon",
-        "fr_FR": "Cameroun"
-      }
-    },
-    {
-      "callingCode": "238",
-      "countryCode": "CV",
-      "countryName": {
-        "en_GB": "Cape Verde",
-        "fr_FR": "Cap-Vert"
-      }
-    },
-    {
-      "callingCode": "236",
-      "countryCode": "CF",
-      "countryName": {
-        "en_GB": "Central African Republic",
-        "fr_FR": "R\xE9publique centrafricaine"
-      }
-    },
-    {
-      "callingCode": "235",
-      "countryCode": "TD",
-      "countryName": {
-        "en_GB": "Chad",
-        "fr_FR": "Tchad"
-      }
-    },
-    {
-      "callingCode": "225",
-      "countryCode": "CI",
-      "countryName": {
-        "en_GB": "C\xF4te d'Ivoire",
-        "fr_FR": "C\xF4te d'Ivoire"
-      }
-    },
-    {
-      "callingCode": "240",
-      "countryCode": "GQ",
-      "countryName": {
-        "en_GB": "Equatorial Guin",
-        "fr_FR": "Guin\xE9e \xE9quatoriale"
-      }
-    },
-    {
-      "callingCode": "241",
-      "countryCode": "GA",
-      "countryName": {
-        "en_GB": "Gabon",
-        "fr_FR": "Gabon"
-      }
-    },
-    {
-      "callingCode": "220",
-      "countryCode": "GM",
-      "countryName": {
-        "en_GB": "Gambia",
-        "fr_FR": "Gambie"
-      }
-    },
-    {
-      "callingCode": "233",
-      "countryCode": "GH",
-      "countryName": {
-        "en_GB": "Ghana",
-        "fr_FR": "Ghana"
-      }
-    },
-    {
-      "callingCode": "224",
-      "countryCode": "GN",
-      "countryName": {
-        "en_GB": "Guinea",
-        "fr_FR": "Guin\xE9e"
-      }
-    },
-    {
-      "callingCode": "245",
-      "countryCode": "GW",
-      "countryName": {
-        "en_GB": "Guinea-Bissau",
-        "fr_FR": "Guin\xE9e-Bissau"
-      }
-    },
-    {
-      "callingCode": "231",
-      "countryCode": "LR",
-      "countryName": {
-        "en_GB": "Liberia",
-        "fr_FR": "Lib\xE9ria"
-      }
-    },
-    {
-      "callingCode": "223",
-      "countryCode": "ML",
-      "countryName": {
-        "en_GB": "Mali",
-        "fr_FR": "Mali"
-      }
-    },
-    {
-      "callingCode": "222",
-      "countryCode": "MR",
-      "countryName": {
-        "en_GB": "Mauretania",
-        "fr_FR": "Mauritanie"
-      }
-    },
-    {
-      "callingCode": "227",
-      "countryCode": "NE",
-      "countryName": {
-        "en_GB": "Niger",
-        "fr_FR": "Niger"
-      }
-    },
-    {
-      "callingCode": "234",
-      "countryCode": "NG",
-      "countryName": {
-        "en_GB": "Nigeria",
-        "fr_FR": "Nig\xE9ria"
-      }
-    },
-    {
-      "callingCode": "242",
-      "countryCode": "CG",
-      "countryName": {
-        "en_GB": "Republic of Congo",
-        "fr_FR": "R\xE9publique du Congo"
-      }
-    },
-    {
-      "callingCode": "239",
-      "countryCode": "ST",
-      "countryName": {
-        "en_GB": "S\xE3o Tom\xE9 and Pr\xEDncipe",
-        "fr_FR": "S\xE3o Tom\xE9-et-Principe"
-      }
-    },
-    {
-      "callingCode": "221",
-      "countryCode": "SN",
-      "countryName": {
-        "en_GB": "Senegal",
-        "fr_FR": "S\xE9n\xE9gal"
-      }
-    },
-    {
-      "callingCode": "232",
-      "countryCode": "SL",
-      "countryName": {
-        "en_GB": "Sierra Leone",
-        "fr_FR": "Sierra Leone"
-      }
-    },
-    {
-      "callingCode": "228",
-      "countryCode": "TG",
-      "countryName": {
-        "en_GB": "Togo",
-        "fr_FR": "Togo"
-      }
-    }
-  ],
-  "SEEG": [
-    {
-      "callingCode": "20",
-      "countryCode": "EG",
-      "countryName": {
-        "en_GB": "Egypt",
-        "fr_FR": "Egypte"
-      }
-    }
-  ],
-  "SEIL": [
-    {
-      "callingCode": "972",
-      "countryCode": "IL",
-      "countryName": {
-        "en_GB": "Israel",
-        "fr_FR": "Isra\xEBl"
-      }
-    },
-    {
-      "callingCode": "970",
-      "countryCode": "PS",
-      "countryName": {
-        "en_GB": "Palestine",
-        "fr_FR": "Palestine"
-      }
-    }
-  ],
-  "SELV": [
-    {
-      "callingCode": "964",
-      "countryCode": "IQ",
-      "countryName": {
-        "en_GB": "Iraq",
-        "fr_FR": "Irak"
-      }
-    },
-    {
-      "callingCode": "962",
-      "countryCode": "JO",
-      "countryName": {
-        "en_GB": "Jordan",
-        "fr_FR": "Jordanie"
-      }
-    },
-    {
-      "callingCode": "961",
-      "countryCode": "LB",
-      "countryName": {
-        "en_GB": "Lebanon",
-        "fr_FR": "Liban"
-      }
-    },
-    {
-      "callingCode": "963",
-      "countryCode": "SY",
-      "countryName": {
-        "en_GB": "Syria",
-        "fr_FR": "Syrie"
-      }
-    }
-  ],
-  "SEMAG": [
-    {
-      "callingCode": "213",
-      "countryCode": "DZ",
-      "countryName": {
-        "en_GB": "Algeria",
-        "fr_FR": "Alg\xE9rie"
-      }
-    },
-    {
-      "callingCode": "218",
-      "countryCode": "LY",
-      "countryName": {
-        "en_GB": "Libya",
-        "fr_FR": "Libye"
-      }
-    },
-    {
-      "callingCode": "212",
-      "countryCode": "MA",
-      "countryName": {
-        "en_GB": "Morocco",
-        "fr_FR": "Maroc"
-      }
-    },
-    {
-      "callingCode": "216",
-      "countryCode": "TN",
-      "countryName": {
-        "en_GB": "Tunisia",
-        "fr_FR": "Tunisie"
-      }
-    }
-  ],
-  "SEPAK": [
-    {
-      "callingCode": "93",
-      "countryCode": "AF",
-      "countryName": {
-        "en_GB": "Afghanistan",
-        "fr_FR": "Afghanistan"
-      }
-    },
-    {
-      "callingCode": "92",
-      "countryCode": "PK",
-      "countryName": {
-        "en_GB": "Pakistan",
-        "fr_FR": "Pakistan"
-      }
-    }
-  ],
-  "SESAR": [
-    {
-      "callingCode": "966",
-      "countryCode": "SA",
-      "countryName": {
-        "en_GB": "Saudi Arabia",
-        "fr_FR": "Arabie saoudite"
-      }
-    },
-    {
-      "callingCode": "212",
-      "countryCode": "EH",
-      "countryName": {
-        "en_GB": "Western Sahara",
-        "fr_FR": "Sahara occidental"
-      }
-    }
-  ],
-  "SETK": [
-    {
-      "callingCode": "90",
-      "countryCode": "TR",
-      "countryName": {
-        "en_GB": "T\xFCrkiye",
-        "fr_FR": "Turquie"
-      }
-    }
-  ],
-  "SGE": [
-    {
-      "callingCode": "971",
-      "countryCode": "AE",
-      "countryName": {
-        "ar_BH": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
-        "en_BH": "United Arab Emirates",
-        "ar_KW": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
-        "en_KW": "United Arab Emirates",
-        "ar_OM": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
-        "en_OM": "United Arab Emirates",
-        "ar_QA": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
-        "en_QA": "United Arab Emirates",
-        "ar_AE": "\u0627\u0644\u0625\u0645\u064E\u0627\u0631\u064E\u0627\u062A",
-        "en_AE": "United Arab Emirates"
-      }
-    },
-    {
-      "callingCode": "973",
-      "countryCode": "BH",
-      "countryName": {
-        "ar_AE": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
-        "en_AE": "Bahrain",
-        "ar_BH": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
-        "en_BH": "Bahrain",
-        "ar_KW": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
-        "en_KW": "Bahrain",
-        "ar_OM": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
-        "en_OM": "Bahrain",
-        "ar_QA": "\u0627\u0644\u0628\u062D\u0631\u064A\u0646",
-        "en_QA": "Bahrain"
-      }
-    },
-    {
-      "callingCode": "965",
-      "countryCode": "KW",
-      "countryName": {
-        "ar_BH": "\u0627\u0644\u0643\u0648\u064A\u062A",
-        "en_BH": "Kuwait",
-        "ar_KW": "\u0627\u0644\u0643\u0648\u064A\u062A",
-        "en_KW": "Kuwait",
-        "ar_OM": "\u0627\u0644\u0643\u0648\u064A\u062A",
-        "en_OM": "Kuwait",
-        "ar_QA": "\u0627\u0644\u0643\u0648\u064A\u062A",
-        "en_QA": "Kuwait",
-        "ar_AE": "\u0627\u0644\u0643\u0648\u064A\u062A",
-        "en_AE": "Kuwait"
-      }
-    },
-    {
-      "callingCode": "968",
-      "countryCode": "OM",
-      "countryName": {
-        "ar_BH": "\u0639\u064F\u0645\u0627\u0646",
-        "en_BH": "Oman",
-        "ar_KW": "\u0639\u064F\u0645\u0627\u0646",
-        "en_KW": "Oman",
-        "ar_OM": "\u0639\u064F\u0645\u0627\u0646",
-        "en_OM": "Oman",
-        "ar_QA": "\u0639\u064F\u0645\u0627\u0646",
-        "en_QA": "Oman",
-        "ar_AE": "\u0639\u064F\u0645\u0627\u0646",
-        "en_AE": "Oman"
-      }
-    },
-    {
-      "callingCode": "974",
-      "countryCode": "QA",
-      "countryName": {
-        "ar_BH": "\u0642\u0637\u0631",
-        "en_BH": "Qatar",
-        "ar_KW": "\u0642\u0637\u0631",
-        "en_KW": "Qatar",
-        "ar_OM": "\u0642\u0637\u0631",
-        "en_OM": "Qatar",
-        "ar_QA": "\u0642\u0637\u0631",
-        "en_QA": "Qatar",
-        "ar_AE": "\u0642\u0637\u0631",
-        "en_AE": "Qatar"
-      }
-    }
-  ],
-  "SIEL": [
-    {
-      "callingCode": "",
-      "countryCode": "AB",
-      "countryName": {
-        "en_GB": "Abkhazia",
-        "fr_FR": "Abkhazie"
-      }
-    },
-    {
-      "callingCode": "975",
-      "countryCode": "BT",
-      "countryName": {
-        "en_GB": "Bhutan",
-        "fr_FR": "Bhoutan"
-      }
-    },
-    {
-      "callingCode": "246",
-      "countryCode": "IO",
-      "countryName": {
-        "en_GB": "British Indian Ocean Territory",
-        "fr_FR": "Territoire britannique de l'oc\xE9an Indien"
-      }
-    },
-    {
-      "callingCode": "61",
-      "countryCode": "CX",
-      "countryName": {
-        "en_GB": "Christmas Island",
-        "fr_FR": "\xCEle Christmas"
-      }
-    },
-    {
-      "callingCode": "61",
-      "countryCode": "CC",
-      "countryName": {
-        "en_GB": "Cocos Islands",
-        "fr_FR": "\xCEles Cocos"
-      }
-    },
-    {
-      "callingCode": "246",
-      "countryCode": "DG",
-      "countryName": {
-        "en_GB": "Diego Garcia",
-        "fr_FR": "Diego Garc\xEDa"
-      }
-    },
-    {
-      "callingCode": "91",
-      "countryCode": "IN",
-      "countryName": {
-        "en_GB": "India",
-        "fr_FR": "Inde"
-      }
-    }
-  ]
-};
-var STUB_SUBSIDIARY_DETAIL = Object.fromEntries(
-  [...new Set(Object.values(COUNTRY_SUBSIDIARY))].filter((code) => !(code in REFERENCE_SUBSIDIARY_DETAIL)).map((code) => [code, []])
-);
-var SUBSIDIARY_DETAIL = {
-  ...REFERENCE_SUBSIDIARY_DETAIL,
-  ...STUB_SUBSIDIARY_DETAIL
-};
-var SUBSIDIARY_CODES = Object.keys(SUBSIDIARY_DETAIL).sort();
 
 // src/codegen/js/buildDataJs.ts
 var BUILDER_SUBSIDIARY_KEY = "BUILDER";
 var AUTO_POPULATE_CONTROL_TYPES = /* @__PURE__ */ new Set(["radio", "checkbox", "dropdown"]);
-function buildBuilderSubsidiaryTables(countries, locales) {
+function buildBuilderSubsidiaryTables(countries, locales, defaultLocale) {
   const countrySubsidiary = {};
   const entries = [];
   for (const code of countries) {
@@ -4614,7 +4664,7 @@ function buildBuilderSubsidiaryTables(countries, locales) {
     entries.push({
       callingCode: entry.callingCode,
       countryCode: entry.countryCode,
-      countryName: Object.fromEntries(locales.map((l) => [l.code, entry.countryName]))
+      countryName: Object.fromEntries(locales.map((l) => [l.code, resolveCountryName(entry.countryCode, l.code, defaultLocale)]))
     });
   }
   for (const locale of locales) {
@@ -4687,7 +4737,7 @@ function buildDataJs(form, config, fileNames) {
       callingCodeDropdownFirstEntry: callingCodeField ? resolveLocalizedText(callingCodeField.dropdownFirstEntryByLocale, locale, defaultLocale) : "",
       privacyPolicy: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.textByLocale, locale, defaultLocale) : "",
       privacyPolicyLink: {
-        label: "",
+        label: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkTextByLocale, locale, defaultLocale) : "",
         image: "",
         imageAlt: "",
         url: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkUrlByLocale, locale, defaultLocale) : ""
@@ -4736,7 +4786,7 @@ function buildDataJs(form, config, fileNames) {
     const wbMessages = form.validationMessages[locale] ?? {};
     validationMessages[locale] = { ...DEFAULT_VALIDATION_MESSAGES, ...wbMessages };
   }
-  const builderSubsidiaryTables = form.fields.mobileNumber ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales) : null;
+  const builderSubsidiaryTables = form.fields.mobileNumber ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales, form.meta.defaultLocale) : null;
   const autoPopulateParams = {};
   for (const q of form.questions) {
     if (q.autoPopulateEligible && q.autoPopulateEnabled && AUTO_POPULATE_CONTROL_TYPES.has(q.controlType)) {
@@ -6867,6 +6917,19 @@ function generateSolution(form, config) {
   }
   files.push(buildDataJs(effectiveForm, config, fileNames));
   files.push(buildStyleCss(fileNames));
+  for (const variant of fileNames.localeVariants) {
+    const localeInfo = form.locales.find((l) => l.code === variant.locale);
+    if (!localeInfo) continue;
+    const variantFileNames = { ...fileNames, ffHtml: variant.ffHtml, ffJs: variant.ffJs, ocHtml: variant.ocHtml, ocJs: variant.ocJs };
+    if (config.variants.includes("ff")) {
+      files.push(buildFfHtml(effectiveForm, config, variantFileNames, localeInfo));
+      files.push(buildFfJs(variantFileNames));
+    }
+    if (config.variants.includes("oc")) {
+      files.push(buildOcHtml(effectiveForm, config, variantFileNames, localeInfo));
+      files.push(buildOcJs(variantFileNames));
+    }
+  }
   return files;
 }
 
@@ -6905,9 +6968,11 @@ function defaultBuilderConfig() {
   mapWorkbook,
   migrateDefaultLocale,
   parseWorkbook,
+  resolveCountryName,
   resolveFileNames,
   resolveLocales,
   resolveLocalizedText,
+  subsidiaryCountryCodes,
   translationEntrySchema,
   translationTargetSchema,
   validateContribution,

@@ -7,8 +7,14 @@ import { FormVersion } from "../entities/FormVersion";
 import { ProjectCode } from "../entities/ProjectCode";
 import { QuestionMasterVersion } from "../entities/QuestionMasterVersion";
 import { Subsidiary } from "../entities/Subsidiary";
+import { Upload, type UploadStatus } from "../entities/Upload";
 import { absoluteFilePath, saveQuestionMasterFile } from "./fileService";
 import { listContributionsForForm } from "./formContributionService";
+import { generateFromWorkbook } from "./generationService";
+
+function toArrayBuffer(buffer: Buffer): ArrayBuffer {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+}
 
 export interface QuestionMasterReadinessItem {
   formId: string;
@@ -84,6 +90,144 @@ export async function getReadiness(projectCode: string): Promise<QuestionMasterR
       };
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Excel-upload-based Question Master generation — additive only. Everything
+// above this line (the Form-Initiator-based getReadiness/generateQuestionMaster
+// process) is unchanged. This is a second, independent way to compile a
+// Question Master: sourced from the Excel-upload flow's submitted `Upload`
+// rows instead of Form Initiator's published `Form`s, for admins whose
+// campaigns were run entirely through workbook uploads rather than the form
+// builder. An admin explicitly chooses which of the two to run; neither
+// replaces or is required by the other, and both write into the same
+// QuestionMasterVersions version history (see `source` column) so a
+// project's full export history stays in one place.
+// ---------------------------------------------------------------------------
+
+export interface QuestionMasterUploadReadinessItem {
+  uploadId: string;
+  fileName: string;
+  subsidiaryId: string;
+  status: UploadStatus;
+  version: number | null;
+  /** The gate used both for this UI and for `generateQuestionMasterFromUploads`'s own
+   * inclusion filter — true only once this subsidiary's latest upload under the
+   * project code has actually been submitted (assigned a version), matching
+   * `readyForExport`'s role in `QuestionMasterReadinessItem` above. */
+  readyForExport: boolean;
+}
+
+/** Every active subsidiary's most recent (by upload date) non-deleted Upload under a
+ * project code — the Excel-upload-flow counterpart to `getRelevantForms` above. Unlike
+ * Forms (one row per form, independently ready-or-not), an Upload's own "ready" state
+ * is just its most recent attempt for this project code, since resubmitting supersedes
+ * whatever came before it for that subsidiary. */
+async function getRelevantUploads(projectCode: string): Promise<Upload[]> {
+  const activeSubsidiaryNames = new Set(
+    (await AppDataSource.getRepository(Subsidiary).find({ where: { isActive: true } })).map((s) => s.name),
+  );
+  const uploads = await AppDataSource.getRepository(Upload).find({ where: { projectCode, isDeleted: false } });
+
+  const latestBySubsidiary = new Map<string, Upload>();
+  for (const upload of uploads) {
+    if (!activeSubsidiaryNames.has(upload.subsidiaryId)) continue;
+    const current = latestBySubsidiary.get(upload.subsidiaryId);
+    if (!current || upload.uploadDate > current.uploadDate) {
+      latestBySubsidiary.set(upload.subsidiaryId, upload);
+    }
+  }
+  return [...latestBySubsidiary.values()];
+}
+
+export async function getUploadReadiness(projectCode: string): Promise<QuestionMasterUploadReadinessItem[]> {
+  const uploads = await getRelevantUploads(projectCode);
+  return uploads.map((u) => ({
+    uploadId: u.id,
+    fileName: u.fileName,
+    subsidiaryId: u.subsidiaryId,
+    status: u.status,
+    version: u.version,
+    readyForExport: u.status === "submitted",
+  }));
+}
+
+export type GenerateQuestionMasterFromUploadsOutcome = "ok" | "project_not_found" | "not_locked" | "no_uploads";
+
+export interface GenerateQuestionMasterFromUploadsResult {
+  outcome: GenerateQuestionMasterFromUploadsOutcome;
+  version?: QuestionMasterVersion;
+}
+
+/**
+ * Additive counterpart to `generateQuestionMaster` below: compiles Question Master
+ * rows from the Excel-upload flow's submitted `Upload`s under a project code, instead
+ * of Form Initiator's published `Form`s. `Upload` never persists a `FormDefinition` of
+ * its own (only the source workbook + generated output files), so each one's
+ * definition is re-derived by re-running the exact same parse/map pipeline the upload
+ * itself was generated with (`generationService.generateFromWorkbook`, re-applying
+ * that upload's own stored `questionOverrides` — same approach `regenerateUpload`
+ * uses) against its stored source `.xlsx`.
+ *
+ * Same locking precondition and version-numbering scheme as `generateQuestionMaster`
+ * (shared `QuestionMasterVersions` sequence per project code) — the two are otherwise
+ * completely independent call paths.
+ */
+export async function generateQuestionMasterFromUploads(
+  projectCode: string,
+  division: string,
+  generatedByUserId: string,
+): Promise<GenerateQuestionMasterFromUploadsResult> {
+  const projectCodeRow = await AppDataSource.getRepository(ProjectCode).findOne({ where: { code: projectCode } });
+  if (!projectCodeRow) {
+    return { outcome: "project_not_found" };
+  }
+  if (!projectCodeRow.isLocked) {
+    return { outcome: "not_locked" };
+  }
+
+  const uploads = (await getRelevantUploads(projectCode)).filter((u) => u.status === "submitted");
+  if (uploads.length === 0) {
+    return { outcome: "no_uploads" };
+  }
+
+  const allRows: QuestionMasterRow[] = [];
+  const subsidiaryIds = new Set<string>();
+  for (const upload of uploads) {
+    const buffer = await fsp.readFile(absoluteFilePath(upload.filePath));
+    const requiredOverrides = upload.questionOverrides
+      ? (JSON.parse(upload.questionOverrides) as Record<string, boolean>)
+      : undefined;
+    const { form } = generateFromWorkbook(toArrayBuffer(buffer), upload.fileName, requiredOverrides);
+    allRows.push(...buildQuestionMasterRows(form, division, projectCode));
+    subsidiaryIds.add(upload.subsidiaryId);
+  }
+
+  const workbookBytes = buildQuestionMasterWorkbook(allRows);
+  const id = randomUUID();
+  const filePath = await saveQuestionMasterFile(projectCode, id, workbookBytes);
+
+  const version = await AppDataSource.transaction(async (manager) => {
+    const rows: Array<{ nextVersion: number }> = await manager.query(
+      `SELECT ISNULL(MAX(version), 0) + 1 AS nextVersion FROM QuestionMasterVersions WITH (UPDLOCK, HOLDLOCK) WHERE projectCode = @0`,
+      [projectCode],
+    );
+    const nextVersion = rows[0].nextVersion;
+    const repo = manager.getRepository(QuestionMasterVersion);
+    const entity = repo.create({
+      id,
+      projectCode,
+      version: nextVersion,
+      division,
+      filePath,
+      subsidiaryCount: subsidiaryIds.size,
+      totalRows: allRows.length,
+      generatedByUserId,
+      source: "excel_upload",
+    });
+    return repo.save(entity);
+  });
+  return { outcome: "ok", version };
 }
 
 export type GenerateQuestionMasterOutcome = "ok" | "project_not_found" | "not_locked";

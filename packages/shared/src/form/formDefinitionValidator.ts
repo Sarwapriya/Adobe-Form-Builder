@@ -69,6 +69,9 @@ export function validateFormDefinition(form: FormDefinition): ValidationResult {
     if (!form.fields.privacyPolicy.textByLocale?.[form.meta.defaultLocale]) {
       warnings.push(warn("The Privacy Policy field has no consent text for the default locale."));
     }
+    if (!form.fields.privacyPolicy.linkTextByLocale?.[form.meta.defaultLocale]) {
+      warnings.push(warn("The Privacy Policy field has no link text for the default locale — the link will render empty."));
+    }
     if (form.fields.privacyPolicy.visibleInVariants && form.fields.privacyPolicy.visibleInVariants.length === 0) {
       warnings.push(warn("The Privacy Policy field isn't shown in Full Form or One-Click — it won't appear anywhere until you enable at least one."));
     }

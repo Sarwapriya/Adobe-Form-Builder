@@ -98,6 +98,7 @@ export function migrateDefaultLocale(
   if (f.privacyPolicy) {
     f.privacyPolicy.textByLocale = text(f.privacyPolicy.textByLocale);
     f.privacyPolicy.linkUrlByLocale = text(f.privacyPolicy.linkUrlByLocale);
+    if (f.privacyPolicy.linkTextByLocale) f.privacyPolicy.linkTextByLocale = text(f.privacyPolicy.linkTextByLocale);
   }
   if (f.marketingOptin) f.marketingOptin.labelByLocale = text(f.marketingOptin.labelByLocale);
   if (f.additionalConsents) {

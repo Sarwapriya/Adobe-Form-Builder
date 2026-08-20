@@ -258,7 +258,11 @@ CREATE TABLE QuestionMasterVersions (
     subsidiaryCount   INT NOT NULL DEFAULT 0,
     totalRows         INT NOT NULL DEFAULT 0,
     generatedByUserId UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
-    generatedAt       DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+    generatedAt       DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET(),
+    -- 'form_builder' (published Form Initiator forms) or 'excel_upload' (submitted
+    -- workbook uploads) — which generation path produced this version. See
+    -- questionMasterService.ts's generateQuestionMaster vs. generateQuestionMasterFromUploads.
+    source            NVARCHAR(20) NOT NULL DEFAULT 'form_builder'
 );
 CREATE UNIQUE INDEX UQ_QuestionMasterVersions_projectCode_version ON QuestionMasterVersions(projectCode, version);
 CREATE INDEX IX_QuestionMasterVersions_projectCode ON QuestionMasterVersions(projectCode);

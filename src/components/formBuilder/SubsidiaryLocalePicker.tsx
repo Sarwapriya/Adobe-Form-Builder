@@ -15,9 +15,9 @@ import { listSubsidiaryLocales, type SubsidiaryLocale } from "../../api/subsidia
  * (no subsidiary's master fallback is ever literally "en_GB", so the swap can't
  * misfire against an already-configured form).
  *
- * Enable/disable only — every text field in the ad-hoc builder is always
- * edited in the form's single default (fallback) locale, so there's no
- * per-locale "editing" selector here.
+ * Enable/disable only — which locale's text every field actually edits is a
+ * separate concern, handled by the sibling LocaleEditingSwitcher (shown once
+ * more than one locale is enabled here).
  */
 export function SubsidiaryLocalePicker({ subsidiaryName }: { subsidiaryName: string }) {
   const definition = useFormBuilderStore((s) => s.definition);

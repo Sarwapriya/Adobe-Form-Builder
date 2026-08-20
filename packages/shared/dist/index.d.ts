@@ -19,6 +19,7 @@ export { validateFormDefinition } from "./form/formDefinitionValidator";
 export { applyContribution, validateContribution, type ContributionContent, type TranslationEntry, type TranslationTarget } from "./form/contribution";
 export { contributionContentSchema, translationEntrySchema, translationTargetSchema } from "./form/contributionZod";
 export { CALLING_CODES, findCallingCodeEntry, type CallingCodeEntry } from "./form/callingCodes";
+export { resolveCountryName, subsidiaryCountryCodes } from "./form/subsidiaryData";
 export { isRtlLangSubtag, langDisplayName, RTL_LANGS } from "./form/langNames";
 export { generateSolution } from "./codegen/generate";
 export { defaultBuilderConfig, type AnalyticsConfig, type BuilderConfig, type FormVariant, type GeneratedFile, } from "./codegen/types";

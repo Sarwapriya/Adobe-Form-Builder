@@ -40,6 +40,13 @@ interface FormBuilderState {
   pendingReview: boolean;
   submittedForReviewAt: string | null;
   reviewNote: string | null;
+  /** Which locale's text every builder panel (QuestionEditorPanel,
+   * ProfileFieldEditorPanel, ConsentEditorPanel, CampaignHeaderPanel) currently
+   * reads/writes — defaults to the form's own default locale on every load.
+   * LocaleEditingSwitcher (mounted on both FormBuilderEditorPage and
+   * MyAdHocFormEditorPage) is the only UI that calls setActiveLocale; without it
+   * mounted, activeLocale never moves off defaultLocale. */
+  activeLocale: string;
   definition: FormDefinition | null;
   config: BuilderConfig | null;
   validation: ValidationResult;
@@ -50,6 +57,7 @@ interface FormBuilderState {
   error: string | null;
 
   loadForm: (formId: string, mode?: FormBuilderMode) => Promise<void>;
+  setActiveLocale: (locale: string) => void;
   updateDefinition: (updater: (definition: FormDefinition) => FormDefinition) => void;
   updateConfig: (patch: Partial<BuilderConfig>) => void;
   saveDraft: () => Promise<boolean>;
@@ -79,6 +87,7 @@ function applyDetail(detail: FormDetail, mode: FormBuilderMode) {
     pendingReview: detail.pendingReview,
     submittedForReviewAt: detail.submittedForReviewAt,
     reviewNote: detail.reviewNote,
+    activeLocale: content?.definition.meta.defaultLocale ?? "en_GB",
     definition: content?.definition ?? null,
     config: content?.config ?? null,
     validation: content ? validateFormDefinition(content.definition) : EMPTY_VALIDATION,
@@ -97,6 +106,7 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
   pendingReview: false,
   submittedForReviewAt: null,
   reviewNote: null,
+  activeLocale: "en_GB",
   definition: null,
   config: null,
   validation: EMPTY_VALIDATION,
@@ -116,6 +126,10 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
     } finally {
       set({ loading: false });
     }
+  },
+
+  setActiveLocale(locale) {
+    set({ activeLocale: locale });
   },
 
   updateDefinition(updater) {
@@ -233,6 +247,7 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
       pendingReview: false,
       submittedForReviewAt: null,
       reviewNote: null,
+      activeLocale: "en_GB",
       definition: null,
       config: null,
       validation: EMPTY_VALIDATION,

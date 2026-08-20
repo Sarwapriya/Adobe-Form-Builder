@@ -18,6 +18,7 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
   const [variant, setVariant] = useState<FormVariant>("ff");
   const [locale, setLocale] = useState<string>(definition?.meta.defaultLocale ?? "en_GB");
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
 
   const availableVariants = config?.variants ?? ["ff"];
 
@@ -48,14 +49,20 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
   useEffect(() => {
     if (!open || !definition || !config) return;
     if (!availableVariants.includes(variant)) return;
-    const previewConfig = { ...config, variants: [variant] };
-    const files = generateSolution(definition, previewConfig);
-    const fileNames = resolveFileNames(definition, previewConfig);
-    const doc = buildPreviewDocument(files, variant, locale, fileNames);
-    const blob = new Blob([doc], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    setIframeUrl(url);
-    return () => URL.revokeObjectURL(url);
+    setGenError(null);
+    try {
+      const previewConfig = { ...config, variants: [variant] };
+      const files = generateSolution(definition, previewConfig);
+      const fileNames = resolveFileNames(definition, previewConfig);
+      const doc = buildPreviewDocument(files, variant, locale, fileNames);
+      const blob = new Blob([doc], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      setIframeUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } catch (err) {
+      setIframeUrl(null);
+      setGenError(err instanceof Error ? err.message : "Failed to build the preview.");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, definition, config, variant, locale]);
 
@@ -84,7 +91,14 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
       </DialogTitle>
       <DialogContent sx={{ p: 0, display: "flex" }}>
         <Stack sx={{ flexGrow: 1 }}>
-          {iframeUrl && <iframe key={iframeUrl} src={iframeUrl} title="Form preview" style={{ border: "none", flexGrow: 1, width: "100%" }} />}
+          {genError && (
+            <Box sx={{ p: 3 }}>
+              <Box component="pre" sx={{ color: "error.main", whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+                Couldn't build the preview: {genError}
+              </Box>
+            </Box>
+          )}
+          {!genError && iframeUrl && <iframe key={iframeUrl} src={iframeUrl} title="Form preview" style={{ border: "none", flexGrow: 1, width: "100%" }} />}
         </Stack>
       </DialogContent>
     </Dialog>

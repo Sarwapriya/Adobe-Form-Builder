@@ -102,6 +102,7 @@ export declare const profileFieldSetSchema: z.ZodObject<{
     privacyPolicy: z.ZodOptional<z.ZodObject<{
         textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
         linkUrlByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+        linkTextByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
         required: z.ZodOptional<z.ZodBoolean>;
         visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
             ff: "ff";
@@ -246,6 +247,7 @@ export declare const formDefinitionSchema: z.ZodObject<{
         privacyPolicy: z.ZodOptional<z.ZodObject<{
             textByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
             linkUrlByLocale: z.ZodRecord<z.ZodString, z.ZodString>;
+            linkTextByLocale: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
             required: z.ZodOptional<z.ZodBoolean>;
             visibleInVariants: z.ZodOptional<z.ZodArray<z.ZodEnum<{
                 ff: "ff";

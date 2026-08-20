@@ -90,10 +90,18 @@ export interface MobileNumberFieldMeta extends LocalizedFieldMeta {
 }
 
 export interface PrivacyPolicyMeta {
-  /** Excel provides the full paragraph text plus a link URL, but no separate
-   * "link text" translation — codegen renders the URL against generic anchor text. */
+  /** The non-clickable paragraph text (e.g. "I have read and agree to the
+   * Samsung Privacy Policy located at:"), rendered before the link itself. */
   textByLocale: Record<LocaleCode, string>;
   linkUrlByLocale: Record<LocaleCode, string>;
+  /** The link's own visible/clickable text (e.g. "Samsung Privacy Policy"),
+   * distinct from `textByLocale` above — see buildDataJs.ts's
+   * `privacyPolicyLink.label`, consumed by the reference FF.js/OC.js's shared
+   * consent-checkbox loop (`ckbLabelLink.html(...label + ckbLabelLink.html())`).
+   * Excel-sourced forms never populate this (no matching workbook column), so
+   * it's builder-only and optional; codegen falls back to empty text (an empty
+   * clickable anchor) when unset, same as before this field existed. */
+  linkTextByLocale?: Record<LocaleCode, string>;
   /** Whether checking this gates Submit (see `enableDisableSubmit()`'s generic
    * required-consent scan in both FF.js/OC.js). Absent means `true` — Excel-sourced
    * forms never set this and have always been required, so this preserves that

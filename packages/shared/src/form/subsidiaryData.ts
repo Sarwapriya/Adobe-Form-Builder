@@ -17,6 +17,8 @@
  * when no subsidiary is selected).
  */
 
+import { findCallingCodeEntry } from "./callingCodes";
+
 export interface SubsidiaryCountryEntry {
   callingCode: string;
   countryCode: string;
@@ -286,8 +288,7 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "98",
       "countryCode": "IR",
       "countryName": {
-        "en_GB": "Iran",
-        "fr_FR": "Iran"
+        "fa_IR": "Iran"
       }
     }
   ],
@@ -490,8 +491,8 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "20",
       "countryCode": "EG",
       "countryName": {
-        "en_GB": "Egypt",
-        "fr_FR": "Egypte"
+        "en_EG": "Egypt",
+        "ar_EG": "مصر"
       }
     }
   ],
@@ -501,7 +502,7 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "countryCode": "IL",
       "countryName": {
         "en_GB": "Israel",
-        "fr_FR": "Israël"
+        "he_IL": "יִשְׂרָאֵל"
       }
     },
     {
@@ -509,7 +510,7 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "countryCode": "PS",
       "countryName": {
         "en_GB": "Palestine",
-        "fr_FR": "Palestine"
+        "ar_PS": "فلسطين"
       }
     }
   ],
@@ -518,24 +519,22 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "964",
       "countryCode": "IQ",
       "countryName": {
-        "en_GB": "Iraq",
-        "fr_FR": "Irak"
+        "ar_IQ": "العراق",
+        "ku_IQ": "عێراق"
       }
     },
     {
       "callingCode": "962",
       "countryCode": "JO",
       "countryName": {
-        "en_GB": "Jordan",
-        "fr_FR": "Jordanie"
+        "en_JO": "Jordan"
       }
     },
     {
       "callingCode": "961",
       "countryCode": "LB",
       "countryName": {
-        "en_GB": "Lebanon",
-        "fr_FR": "Liban"
+        "en_LB": "Lebanon"
       }
     },
     {
@@ -552,32 +551,28 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "213",
       "countryCode": "DZ",
       "countryName": {
-        "en_GB": "Algeria",
-        "fr_FR": "Algérie"
+        "fr_MA": "Algérie"
       }
     },
     {
       "callingCode": "218",
       "countryCode": "LY",
       "countryName": {
-        "en_GB": "Libya",
-        "fr_FR": "Libye"
+        "fr_MA": "Libye"
       }
     },
     {
       "callingCode": "212",
       "countryCode": "MA",
       "countryName": {
-        "en_GB": "Morocco",
-        "fr_FR": "Maroc"
+        "fr_MA": "Maroc"
       }
     },
     {
       "callingCode": "216",
       "countryCode": "TN",
       "countryName": {
-        "en_GB": "Tunisia",
-        "fr_FR": "Tunisie"
+        "fr_MA": "Tunisie"
       }
     }
   ],
@@ -586,16 +581,14 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "93",
       "countryCode": "AF",
       "countryName": {
-        "en_GB": "Afghanistan",
-        "fr_FR": "Afghanistan"
+        "en_PK": "Afghanistan"
       }
     },
     {
       "callingCode": "92",
       "countryCode": "PK",
       "countryName": {
-        "en_GB": "Pakistan",
-        "fr_FR": "Pakistan"
+        "en_PK": "Pakistan"
       }
     }
   ],
@@ -604,8 +597,8 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "966",
       "countryCode": "SA",
       "countryName": {
-        "en_GB": "Saudi Arabia",
-        "fr_FR": "Arabie saoudite"
+        "en_SA": "Saudi Arabia",
+        "ar_SA": "المملكة العربية السعودية"
       }
     },
     {
@@ -622,8 +615,7 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "90",
       "countryCode": "TR",
       "countryName": {
-        "en_GB": "Türkiye",
-        "fr_FR": "Turquie"
+        "tr_TR": "Türkiye"
       }
     }
   ],
@@ -819,4 +811,52 @@ export function resolveSubsidiaryCountryName(
   if (englishKey) return countryName[englishKey]!;
   const firstKey = Object.keys(countryName)[0];
   return firstKey ? countryName[firstKey]! : "";
+}
+
+/** Every real Samsung translation on record for a given ISO-3166 country code, merged
+ * across every subsidiary in `SUBSIDIARY_DETAIL` that happens to list it (the same
+ * country can appear under multiple subsidiaries with different locale keys — e.g. UAE
+ * appears in SGE's own list plus as a secondary entry for neighboring Gulf subsidiaries
+ * — so merging maximizes which locales are covered). `undefined` when no subsidiary's
+ * reference data mentions this country code at all. */
+function findCountryTranslations(countryCode: string): Record<string, string> | undefined {
+  let merged: Record<string, string> | undefined;
+  for (const entries of Object.values(SUBSIDIARY_DETAIL)) {
+    for (const entry of entries) {
+      if (entry.countryCode === countryCode) {
+        merged = { ...merged, ...entry.countryName };
+      }
+    }
+  }
+  return merged;
+}
+
+/**
+ * Resolves a display name for a country code in a given locale — the one piece of
+ * `subsidiaryData.ts` a builder-authored `fields.mobileNumber` field needs (unlike
+ * Excel-sourced/real-subsidiary forms, which already get real per-locale names via
+ * `SUBSIDIARY_DETAIL` directly). Real Samsung translations (this file's own reference
+ * data, ultimately sourced from `Final_forms_format`'s master `subsidiary_detail`
+ * tables) take priority when available for this country; otherwise falls back to the
+ * generic English-only `CALLING_CODES` table, then the raw code itself as a last
+ * resort. Used by codegen's `buildBuilderSubsidiaryTables` (so the generated form's own
+ * dropdown shows translated names) and by the builder UI's country picker (so admin/
+ * subsidiary users see what they're picking while translating into another locale). */
+export function resolveCountryName(countryCode: string, locale: string, defaultLocale: string): string {
+  const translations = findCountryTranslations(countryCode);
+  if (translations) return resolveSubsidiaryCountryName(translations, locale, defaultLocale);
+  return findCallingCodeEntry(countryCode)?.countryName ?? countryCode;
+}
+
+/**
+ * The ISO-3166 country codes a given Samsung subsidiary's own generated forms offer in
+ * their countryCode/callingCode dropdown, per `SUBSIDIARY_DETAIL`. Lets a builder-authored
+ * `fields.mobileNumber` field restrict its "Countries" picker to just the subsidiary the
+ * form actually belongs to, instead of the full generic `CALLING_CODES` list — mirroring
+ * what an Excel-sourced form for that same subsidiary would already show. Empty when the
+ * subsidiary code isn't one of the ones this repo has real reference data for (see
+ * `STUB_SUBSIDIARY_DETAIL`) — callers should fall back to `CALLING_CODES`'s full list in
+ * that case rather than leaving the picker with no options at all. */
+export function subsidiaryCountryCodes(subsidiaryCode: string): string[] {
+  return (SUBSIDIARY_DETAIL[subsidiaryCode] ?? []).map((e) => e.countryCode);
 }

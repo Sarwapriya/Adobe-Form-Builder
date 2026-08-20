@@ -53,6 +53,7 @@ const mobileNumberFieldMetaSchema = localizedFieldMetaSchema.extend({
 const privacyPolicyMetaSchema = z.object({
   textByLocale: localeTextMap,
   linkUrlByLocale: localeTextMap,
+  linkTextByLocale: localeTextMap.optional(),
   required: z.boolean().optional(),
   visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
 });

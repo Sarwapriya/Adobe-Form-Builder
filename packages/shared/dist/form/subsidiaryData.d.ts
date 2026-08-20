@@ -34,3 +34,25 @@ export declare const SUBSIDIARY_CODES: readonly string[];
  * reference itself never anticipated.
  */
 export declare function resolveSubsidiaryCountryName(countryName: Record<string, string>, locale: string, defaultLocale: string): string;
+/**
+ * Resolves a display name for a country code in a given locale — the one piece of
+ * `subsidiaryData.ts` a builder-authored `fields.mobileNumber` field needs (unlike
+ * Excel-sourced/real-subsidiary forms, which already get real per-locale names via
+ * `SUBSIDIARY_DETAIL` directly). Real Samsung translations (this file's own reference
+ * data, ultimately sourced from `Final_forms_format`'s master `subsidiary_detail`
+ * tables) take priority when available for this country; otherwise falls back to the
+ * generic English-only `CALLING_CODES` table, then the raw code itself as a last
+ * resort. Used by codegen's `buildBuilderSubsidiaryTables` (so the generated form's own
+ * dropdown shows translated names) and by the builder UI's country picker (so admin/
+ * subsidiary users see what they're picking while translating into another locale). */
+export declare function resolveCountryName(countryCode: string, locale: string, defaultLocale: string): string;
+/**
+ * The ISO-3166 country codes a given Samsung subsidiary's own generated forms offer in
+ * their countryCode/callingCode dropdown, per `SUBSIDIARY_DETAIL`. Lets a builder-authored
+ * `fields.mobileNumber` field restrict its "Countries" picker to just the subsidiary the
+ * form actually belongs to, instead of the full generic `CALLING_CODES` list — mirroring
+ * what an Excel-sourced form for that same subsidiary would already show. Empty when the
+ * subsidiary code isn't one of the ones this repo has real reference data for (see
+ * `STUB_SUBSIDIARY_DETAIL`) — callers should fall back to `CALLING_CODES`'s full list in
+ * that case rather than leaving the picker with no options at all. */
+export declare function subsidiaryCountryCodes(subsidiaryCode: string): string[];

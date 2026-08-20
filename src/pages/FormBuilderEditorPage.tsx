@@ -6,6 +6,7 @@ import { useFormBuilderStore } from "../store/formBuilderStore";
 import { PageHeader } from "../components/common/PageHeader";
 import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
 import { LocaleManagerPanel } from "../components/formBuilder/LocaleManagerPanel";
+import { LocaleEditingSwitcher } from "../components/formBuilder/LocaleEditingSwitcher";
 import { VariantConfigPanel } from "../components/formBuilder/VariantConfigPanel";
 import { BuilderCanvas, PredefinedFieldToggles } from "../components/formBuilder/BuilderCanvas";
 import { QuestionEditorPanel } from "../components/formBuilder/QuestionEditorPanel";
@@ -103,6 +104,7 @@ export function FormBuilderEditorPage() {
         <Box sx={{ flex: "1 1 auto", minWidth: 0, width: "100%" }}>
           <CampaignHeaderPanel />
           <LocaleManagerPanel />
+          <LocaleEditingSwitcher />
           {origin !== "adhoc" && <VariantConfigPanel />}
           <PredefinedFieldToggles selectedField={selected} onSelectField={setSelected} />
           <BuilderCanvas

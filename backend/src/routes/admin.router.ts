@@ -51,7 +51,9 @@ import {
 import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
 import {
   generateQuestionMaster,
+  generateQuestionMasterFromUploads,
   getReadiness as getQuestionMasterReadiness,
+  getUploadReadiness as getQuestionMasterUploadReadiness,
   getVersionFile as getQuestionMasterVersionFile,
   listVersions as listQuestionMasterVersions,
 } from "../services/questionMasterService";
@@ -751,6 +753,47 @@ adminRouter.post(
     }
     if (result.outcome === "not_locked") {
       res.status(409).json({ error: "This project code must be locked before generating a Question Master" });
+      return;
+    }
+    res.status(201).json(result.version);
+  })
+);
+
+// Additive counterpart to /question-master/readiness above — every active
+// subsidiary's most recent Excel upload under a project code, plus whether it's been
+// submitted yet. See questionMasterService.getUploadReadiness.
+adminRouter.get(
+  "/question-master/upload-readiness",
+  asyncHandler(async (req, res) => {
+    const projectCode = typeof req.query.projectCode === "string" ? req.query.projectCode : undefined;
+    if (!projectCode) {
+      res.status(400).json({ error: "projectCode query param is required" });
+      return;
+    }
+    const readiness = await getQuestionMasterUploadReadiness(projectCode);
+    res.json(readiness);
+  })
+);
+
+// Additive counterpart to /question-master/generate above — compiles every submitted
+// Excel upload under the given project code into a new, versioned Question Master
+// .xlsx. See questionMasterService.generateQuestionMasterFromUploads.
+adminRouter.post(
+  "/question-master/generate-from-uploads",
+  validateBody(generateQuestionMasterSchema),
+  asyncHandler(async (req, res) => {
+    const { projectCode, division } = req.body as z.infer<typeof generateQuestionMasterSchema>;
+    const result = await generateQuestionMasterFromUploads(projectCode, division ?? "", req.auth!.sub);
+    if (result.outcome === "project_not_found") {
+      res.status(404).json({ error: `Unknown project code "${projectCode}"` });
+      return;
+    }
+    if (result.outcome === "not_locked") {
+      res.status(409).json({ error: "This project code must be locked before generating a Question Master" });
+      return;
+    }
+    if (result.outcome === "no_uploads") {
+      res.status(409).json({ error: "No active subsidiary has a submitted Excel upload under this project code yet" });
       return;
     }
     res.status(201).json(result.version);

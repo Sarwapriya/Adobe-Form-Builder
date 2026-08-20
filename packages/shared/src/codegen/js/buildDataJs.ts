@@ -1,6 +1,6 @@
 import { findCallingCodeEntry } from "../../form/callingCodes";
 import { resolveLocalizedText, type FormDefinition, type LocaleCode, type LocaleInfo, type PageCopy } from "../../form/formDefinition";
-import { COUNTRY_SUBSIDIARY, SUBSIDIARY_DETAIL, type SubsidiaryCountryEntry } from "../../form/subsidiaryData";
+import { COUNTRY_SUBSIDIARY, resolveCountryName, SUBSIDIARY_DETAIL, type SubsidiaryCountryEntry } from "../../form/subsidiaryData";
 import { answerDomKey, autoPopulateParamName } from "../domIds";
 import type { FileNames } from "../fileNames";
 import type { BuilderConfig, GeneratedFile } from "../types";
@@ -24,10 +24,17 @@ const AUTO_POPULATE_CONTROL_TYPES = new Set(["radio", "checkbox", "dropdown"]);
  * `subsidiaryData.ts`. Every one of the form's own locales also gets its country
  * suffix mapped to the same key, even if that country isn't in `countries` — so a
  * locale whose own country wasn't explicitly configured still resolves to a working
- * (if not country-specific) dropdown instead of an undefined-subsidiary lookup. */
+ * (if not country-specific) dropdown instead of an undefined-subsidiary lookup.
+ *
+ * Each country's name is resolved per-locale via `resolveCountryName` — real Samsung
+ * translations (subsidiaryData.ts, sourced from Final_forms_format's master
+ * `subsidiary_detail` tables) when available, English CALLING_CODES name otherwise —
+ * rather than stamping the same English name under every locale key, so a locale being
+ * translated into (e.g. Arabic) shows its own country names, not English ones. */
 function buildBuilderSubsidiaryTables(
   countries: string[],
   locales: LocaleInfo[],
+  defaultLocale: LocaleCode,
 ): { countrySubsidiary: Record<string, string>; subsidiaryDetail: Record<string, SubsidiaryCountryEntry[]> } {
   const countrySubsidiary: Record<string, string> = {};
   const entries: SubsidiaryCountryEntry[] = [];
@@ -39,7 +46,7 @@ function buildBuilderSubsidiaryTables(
     entries.push({
       callingCode: entry.callingCode,
       countryCode: entry.countryCode,
-      countryName: Object.fromEntries(locales.map((l) => [l.code, entry.countryName])),
+      countryName: Object.fromEntries(locales.map((l) => [l.code, resolveCountryName(entry.countryCode, l.code, defaultLocale)])),
     });
   }
 
@@ -136,7 +143,7 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
         : "",
       privacyPolicy: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.textByLocale, locale, defaultLocale) : "",
       privacyPolicyLink: {
-        label: "",
+        label: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkTextByLocale, locale, defaultLocale) : "",
         image: "",
         imageAlt: "",
         url: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkUrlByLocale, locale, defaultLocale) : "",
@@ -205,7 +212,7 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
   }
 
   const builderSubsidiaryTables = form.fields.mobileNumber
-    ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales)
+    ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales, form.meta.defaultLocale)
     : null;
 
   // paramName -> questionId, for the One-Click reference script's

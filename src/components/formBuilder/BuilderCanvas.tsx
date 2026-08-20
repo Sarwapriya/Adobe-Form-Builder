@@ -358,7 +358,7 @@ export function PredefinedFieldToggles({
         delete nextFields[key];
         if (selectedField === key) onSelectField(null);
       } else if (key === "privacyPolicy") {
-        nextFields.privacyPolicy = { textByLocale: { [d.meta.defaultLocale]: "I agree to the" }, linkUrlByLocale: {} };
+        nextFields.privacyPolicy = { textByLocale: { [d.meta.defaultLocale]: "I agree to the" }, linkUrlByLocale: {}, linkTextByLocale: {} };
       } else {
         const label = consentToggleItems.find((i) => i.key === key)!.label;
         nextFields[key] = { labelByLocale: { [d.meta.defaultLocale]: label } };

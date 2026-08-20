@@ -40,6 +40,7 @@ import { AddQuestionMasterVersions1900000000000 } from "../migrations/1900000000
 import { AddProjectCodeIsLocked1910000000000 } from "../migrations/1910000000000-AddProjectCodeIsLocked";
 import { AddSubsidiaryLocales1920000000000 } from "../migrations/1920000000000-AddSubsidiaryLocales";
 import { AddFormOriginAndReview1930000000000 } from "../migrations/1930000000000-AddFormOriginAndReview";
+import { AddQuestionMasterSource1940000000000 } from "../migrations/1940000000000-AddQuestionMasterSource";
 
 const entities = [
   Upload,
@@ -84,6 +85,7 @@ const migrations = [
   AddProjectCodeIsLocked1910000000000,
   AddSubsidiaryLocales1920000000000,
   AddFormOriginAndReview1930000000000,
+  AddQuestionMasterSource1940000000000,
 ];
 
 /**

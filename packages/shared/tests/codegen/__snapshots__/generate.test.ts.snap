@@ -467,8 +467,7 @@ const subsidiary_detail = {
       "callingCode": "98",
       "countryCode": "IR",
       "countryName": {
-        "en_GB": "Iran",
-        "fr_FR": "Iran"
+        "fa_IR": "Iran"
       }
     }
   ],
@@ -671,8 +670,8 @@ const subsidiary_detail = {
       "callingCode": "20",
       "countryCode": "EG",
       "countryName": {
-        "en_GB": "Egypt",
-        "fr_FR": "Egypte"
+        "en_EG": "Egypt",
+        "ar_EG": "مصر"
       }
     }
   ],
@@ -682,7 +681,7 @@ const subsidiary_detail = {
       "countryCode": "IL",
       "countryName": {
         "en_GB": "Israel",
-        "fr_FR": "Israël"
+        "he_IL": "יִשְׂרָאֵל"
       }
     },
     {
@@ -690,7 +689,7 @@ const subsidiary_detail = {
       "countryCode": "PS",
       "countryName": {
         "en_GB": "Palestine",
-        "fr_FR": "Palestine"
+        "ar_PS": "فلسطين"
       }
     }
   ],
@@ -699,24 +698,22 @@ const subsidiary_detail = {
       "callingCode": "964",
       "countryCode": "IQ",
       "countryName": {
-        "en_GB": "Iraq",
-        "fr_FR": "Irak"
+        "ar_IQ": "العراق",
+        "ku_IQ": "عێراق"
       }
     },
     {
       "callingCode": "962",
       "countryCode": "JO",
       "countryName": {
-        "en_GB": "Jordan",
-        "fr_FR": "Jordanie"
+        "en_JO": "Jordan"
       }
     },
     {
       "callingCode": "961",
       "countryCode": "LB",
       "countryName": {
-        "en_GB": "Lebanon",
-        "fr_FR": "Liban"
+        "en_LB": "Lebanon"
       }
     },
     {
@@ -733,32 +730,28 @@ const subsidiary_detail = {
       "callingCode": "213",
       "countryCode": "DZ",
       "countryName": {
-        "en_GB": "Algeria",
-        "fr_FR": "Algérie"
+        "fr_MA": "Algérie"
       }
     },
     {
       "callingCode": "218",
       "countryCode": "LY",
       "countryName": {
-        "en_GB": "Libya",
-        "fr_FR": "Libye"
+        "fr_MA": "Libye"
       }
     },
     {
       "callingCode": "212",
       "countryCode": "MA",
       "countryName": {
-        "en_GB": "Morocco",
-        "fr_FR": "Maroc"
+        "fr_MA": "Maroc"
       }
     },
     {
       "callingCode": "216",
       "countryCode": "TN",
       "countryName": {
-        "en_GB": "Tunisia",
-        "fr_FR": "Tunisie"
+        "fr_MA": "Tunisie"
       }
     }
   ],
@@ -767,16 +760,14 @@ const subsidiary_detail = {
       "callingCode": "93",
       "countryCode": "AF",
       "countryName": {
-        "en_GB": "Afghanistan",
-        "fr_FR": "Afghanistan"
+        "en_PK": "Afghanistan"
       }
     },
     {
       "callingCode": "92",
       "countryCode": "PK",
       "countryName": {
-        "en_GB": "Pakistan",
-        "fr_FR": "Pakistan"
+        "en_PK": "Pakistan"
       }
     }
   ],
@@ -785,8 +776,8 @@ const subsidiary_detail = {
       "callingCode": "966",
       "countryCode": "SA",
       "countryName": {
-        "en_GB": "Saudi Arabia",
-        "fr_FR": "Arabie saoudite"
+        "en_SA": "Saudi Arabia",
+        "ar_SA": "المملكة العربية السعودية"
       }
     },
     {
@@ -803,8 +794,7 @@ const subsidiary_detail = {
       "callingCode": "90",
       "countryCode": "TR",
       "countryName": {
-        "en_GB": "Türkiye",
-        "fr_FR": "Turquie"
+        "tr_TR": "Türkiye"
       }
     }
   ],

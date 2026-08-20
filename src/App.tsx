@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { CssBaseline, ThemeProvider } from "@mui/material";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { theme } from "./app/theme.ts";
+import { ErrorBoundary } from "./app/ErrorBoundary.tsx";
 import { AppLayout } from "./app/AppLayout.tsx";
 import { AppShell } from "./components/AppShell.tsx";
 import { AdminRoute } from "./auth/AdminRoute.tsx";
@@ -36,41 +37,43 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          {/* The original no-login, fully client-side wizard — kept as a
-              quick/offline generator alongside the authenticated flow below,
-              not gated behind a session. */}
-          <Route path="/local" element={<AppShell />} />
+      <ErrorBoundary>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            {/* The original no-login, fully client-side wizard — kept as a
+                quick/offline generator alongside the authenticated flow below,
+                not gated behind a session. */}
+            <Route path="/local" element={<AppShell />} />
 
-          <Route element={<ProtectedRoute />}>
-            <Route element={<AppLayout />}>
-              <Route index element={<UploadHistoryPage />} />
-              <Route path="my-forms" element={<Navigate to="/my-forms/hr" replace />} />
-              <Route path="my-forms/hr" element={<MyHrFormsListPage />} />
-              <Route path="my-forms/adhoc" element={<MyAdHocFormsListPage />} />
-              <Route path="my-forms/adhoc/:id" element={<MyAdHocFormEditorPage />} />
-              <Route path="my-forms/:id" element={<MyFormTranslatePage />} />
-              <Route path="my-submissions" element={<MySubmissionsPage />} />
-              <Route path="my-subsidiary" element={<MySubsidiaryPage />} />
-              <Route element={<AdminRoute />}>
-                <Route path="admin" element={<AdminDashboardPage />} />
-                <Route path="admin/history" element={<AdminHistoryPage />} />
-                <Route path="admin/configuration" element={<ConfigurationPage />} />
-                <Route path="admin/users" element={<UserManagementPage />} />
-                <Route path="admin/form-builder" element={<Navigate to="/admin/form-builder/hr" replace />} />
-                <Route path="admin/form-builder/hr" element={<HrFormInitiatorListPage />} />
-                <Route path="admin/form-builder/adhoc" element={<AdHocFormInitiatorListPage />} />
-                <Route path="admin/form-builder/:id" element={<FormBuilderEditorPage />} />
-                <Route path="admin/question-master" element={<QuestionMasterPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppLayout />}>
+                <Route index element={<UploadHistoryPage />} />
+                <Route path="my-forms" element={<Navigate to="/my-forms/hr" replace />} />
+                <Route path="my-forms/hr" element={<MyHrFormsListPage />} />
+                <Route path="my-forms/adhoc" element={<MyAdHocFormsListPage />} />
+                <Route path="my-forms/adhoc/:id" element={<MyAdHocFormEditorPage />} />
+                <Route path="my-forms/:id" element={<MyFormTranslatePage />} />
+                <Route path="my-submissions" element={<MySubmissionsPage />} />
+                <Route path="my-subsidiary" element={<MySubsidiaryPage />} />
+                <Route element={<AdminRoute />}>
+                  <Route path="admin" element={<AdminDashboardPage />} />
+                  <Route path="admin/history" element={<AdminHistoryPage />} />
+                  <Route path="admin/configuration" element={<ConfigurationPage />} />
+                  <Route path="admin/users" element={<UserManagementPage />} />
+                  <Route path="admin/form-builder" element={<Navigate to="/admin/form-builder/hr" replace />} />
+                  <Route path="admin/form-builder/hr" element={<HrFormInitiatorListPage />} />
+                  <Route path="admin/form-builder/adhoc" element={<AdHocFormInitiatorListPage />} />
+                  <Route path="admin/form-builder/:id" element={<FormBuilderEditorPage />} />
+                  <Route path="admin/question-master" element={<QuestionMasterPage />} />
+                </Route>
               </Route>
             </Route>
-          </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }

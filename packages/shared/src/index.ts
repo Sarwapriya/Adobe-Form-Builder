@@ -52,8 +52,10 @@ export { contributionContentSchema, translationEntrySchema, translationTargetSch
 
 // Country/calling-code lookup — needed by a builder UI's own Mobile Number field
 // configuration (country picker); the Samsung-specific subsidiaryData.ts tables stay
-// internal, only this generic table is part of the public surface.
+// internal, only this generic table plus resolveCountryName (a single purpose-built
+// lookup, not the raw Samsung tables themselves) are part of the public surface.
 export { CALLING_CODES, findCallingCodeEntry, type CallingCodeEntry } from "./form/callingCodes";
+export { resolveCountryName, subsidiaryCountryCodes } from "./form/subsidiaryData";
 
 // Locale/RTL helpers — needed by a builder UI's own locale setup, since it has no
 // Excel metadata row to derive LocaleInfo from automatically.
