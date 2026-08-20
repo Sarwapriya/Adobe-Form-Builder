@@ -365,3 +365,34 @@ export function saveSmtpSettings(input: SaveSmtpSettingsInput): Promise<SmtpSett
 export function sendSmtpTestEmail(): Promise<{ ok: true; sentTo: string }> {
   return apiClient.post<{ ok: true; sentTo: string }>("/api/v1/admin/smtp-settings/test");
 }
+
+/** DB-stored FabriXAI Agent connection settings (see backend's
+ * fabrixSettingsService.ts, mirroring smtpSettingsService.ts's own shape) —
+ * `hasApiKey` reflects whether one is currently saved; the real key is never
+ * sent to the browser. */
+export interface FabrixSettings {
+  baseUrl: string;
+  agentId: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+}
+
+export interface SaveFabrixSettingsInput {
+  baseUrl: string;
+  agentId: string;
+  enabled: boolean;
+  /** Omit or leave blank to keep whatever key is already saved. */
+  apiKey?: string;
+}
+
+export function getFabrixSettings(): Promise<FabrixSettings> {
+  return apiClient.get<FabrixSettings>("/api/v1/admin/fabrix-settings");
+}
+
+export function saveFabrixSettings(input: SaveFabrixSettingsInput): Promise<FabrixSettings> {
+  return apiClient.patch<FabrixSettings>("/api/v1/admin/fabrix-settings", input);
+}
+
+export function sendFabrixTestMessage(): Promise<{ ok: boolean; error?: string }> {
+  return apiClient.post<{ ok: boolean; error?: string }>("/api/v1/admin/fabrix-settings/test");
+}

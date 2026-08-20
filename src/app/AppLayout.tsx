@@ -6,11 +6,13 @@ import {
   Collapse,
   Divider,
   Drawer,
+  Grow,
   IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Paper,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -32,10 +34,31 @@ import ListAltIcon from "@mui/icons-material/ListAlt";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
+import { useAiChatStore } from "../store/aiChatStore";
+import { AIChatButton } from "../components/ai/AIChatButton";
+import { AIChatPanel } from "../components/ai/AIChatPanel";
 
 const EXPANDED_WIDTH = 260;
 const COLLAPSED_WIDTH = 76;
 const COLLAPSE_STORAGE_KEY = "sidebarCollapsed";
+const AI_PANEL_WIDTH = 380;
+
+/** Matches "/admin/form-builder/:id" — deliberately excludes the two static
+ * list sub-routes ("/admin/form-builder/hr", "/admin/form-builder/adhoc"),
+ * which have no form to scope the AI panel to. */
+const ADMIN_FORM_BUILDER_ID_RE = /^\/admin\/form-builder\/(?!hr$|adhoc$)([^/]+)$/;
+/** Matches "/my-forms/adhoc/:id" — deliberately excludes the bare
+ * "/my-forms/adhoc" list page itself. */
+const MY_ADHOC_FORM_ID_RE = /^\/my-forms\/adhoc\/([^/]+)$/;
+
+/** When the current page is one of the two Form Builder editors, the AI
+ * panel's conversation gets scoped to that form (campaign context, and
+ * client-applied actions target its draft) — returns null everywhere else,
+ * which the panel treats as "general chat" (search/reference previous
+ * campaigns, no form to apply an edit to). */
+function editorFormIdFromPath(pathname: string): string | null {
+  return pathname.match(ADMIN_FORM_BUILDER_ID_RE)?.[1] ?? pathname.match(MY_ADHOC_FORM_ID_RE)?.[1] ?? null;
+}
 
 interface NavChild {
   to: string;
@@ -103,6 +126,13 @@ export function AppLayout() {
   useEffect(() => {
     localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
   }, [collapsed]);
+
+  const editorFormId = editorFormIdFromPath(location.pathname);
+  const aiOpen = useAiChatStore((s) => s.open);
+
+  useEffect(() => {
+    useAiChatStore.getState().setFormId(editorFormId);
+  }, [editorFormId]);
 
   async function handleLogout() {
     await logout();
@@ -469,6 +499,35 @@ export function AppLayout() {
           <Outlet />
         </Box>
       </Box>
+
+      {/* Available on every authenticated page under this layout — a
+          master-page fixture, not scoped to the two form editors — so both
+          admin and subsidiary users always have it in the bottom-right
+          corner. Floats *over* the page rather than a persistent drawer that
+          resizes it, so the rest of the page's content keeps its full width
+          whether the assistant is open or minimized. Only the *context* it
+          hands the assistant (which form, if any) changes with the route,
+          via editorFormId above. */}
+      <Grow in={aiOpen} style={{ transformOrigin: "bottom right" }}>
+        <Paper
+          elevation={8}
+          sx={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            width: AI_PANEL_WIDTH,
+            height: "min(70vh, 640px)",
+            zIndex: (t) => t.zIndex.drawer + 2,
+            borderRadius: 3,
+            overflow: "hidden",
+            display: aiOpen ? "flex" : "none",
+            flexDirection: "column",
+          }}
+        >
+          <AIChatPanel />
+        </Paper>
+      </Grow>
+      <AIChatButton />
     </Box>
   );
 }

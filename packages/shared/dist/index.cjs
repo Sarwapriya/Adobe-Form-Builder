@@ -32,7 +32,12 @@ var index_exports = {};
 __export(index_exports, {
   CALLING_CODES: () => CALLING_CODES,
   ENGLISH_LOCALE: () => ENGLISH_LOCALE,
+  MUTATING_AI_TOOLS: () => MUTATING_AI_TOOLS,
+  READ_ONLY_AI_TOOLS: () => READ_ONLY_AI_TOOLS,
   RTL_LANGS: () => RTL_LANGS,
+  SERVER_EXECUTED_AI_TOOLS: () => SERVER_EXECUTED_AI_TOOLS,
+  aiChatRequestSchema: () => aiChatRequestSchema,
+  aiToolCallSchema: () => aiToolCallSchema,
   applyContribution: () => applyContribution,
   buildQuestionMasterRows: () => buildQuestionMasterRows,
   buildQuestionMasterWorkbook: () => buildQuestionMasterWorkbook,
@@ -41,7 +46,9 @@ __export(index_exports, {
   findCallingCodeEntry: () => findCallingCodeEntry,
   formDefinitionSchema: () => formDefinitionSchema,
   generateSolution: () => generateSolution,
+  isMutatingAiTool: () => isMutatingAiTool,
   isRtlLangSubtag: () => isRtlLangSubtag,
+  isServerExecutedAiTool: () => isServerExecutedAiTool,
   isSupportedExcelFile: () => isSupportedExcelFile,
   langDisplayName: () => langDisplayName,
   mapWorkbook: () => mapWorkbook,
@@ -2255,6 +2262,107 @@ function resolveCountryName(countryCode, locale, defaultLocale) {
 function subsidiaryCountryCodes(subsidiaryCode) {
   return (SUBSIDIARY_DETAIL[subsidiaryCode] ?? []).map((e) => e.countryCode);
 }
+
+// src/ai/aiTypes.ts
+var READ_ONLY_AI_TOOLS = [
+  "SEARCH_CAMPAIGNS",
+  "GET_CAMPAIGN",
+  "GET_CAMPAIGN_QUESTIONS",
+  "SEARCH_QUESTIONS",
+  "FIND_SIMILAR_CAMPAIGNS",
+  "FIND_SIMILAR_QUESTIONS",
+  "VALIDATE_FORM"
+];
+var MUTATING_AI_TOOLS = [
+  "CREATE_CAMPAIGN",
+  "CLONE_CAMPAIGN",
+  "ADD_QUESTION",
+  "UPDATE_QUESTION",
+  "DELETE_QUESTION",
+  "REORDER_QUESTIONS",
+  "SUGGEST_QUESTIONS",
+  "TRANSLATE_QUESTIONS"
+];
+var SERVER_EXECUTED_AI_TOOLS = ["CREATE_CAMPAIGN", "CLONE_CAMPAIGN"];
+function isMutatingAiTool(tool) {
+  return MUTATING_AI_TOOLS.includes(tool);
+}
+function isServerExecutedAiTool(tool) {
+  return SERVER_EXECUTED_AI_TOOLS.includes(tool);
+}
+
+// src/ai/aiTypesZod.ts
+var import_zod3 = require("zod");
+var statusSchema = import_zod3.z.enum(["draft", "published", "unpublished"]);
+var searchCampaignsArgsSchema = import_zod3.z.object({
+  searchText: import_zod3.z.string().trim().min(1).max(200).optional(),
+  projectCode: import_zod3.z.string().trim().min(1).max(100).optional(),
+  status: statusSchema.optional()
+});
+var getCampaignArgsSchema = import_zod3.z.object({ formId: import_zod3.z.string().uuid() });
+var getCampaignQuestionsArgsSchema = import_zod3.z.object({ formId: import_zod3.z.string().uuid() });
+var searchQuestionsArgsSchema = import_zod3.z.object({
+  searchText: import_zod3.z.string().trim().min(1).max(200),
+  formId: import_zod3.z.string().uuid().optional()
+});
+var findSimilarCampaignsArgsSchema = import_zod3.z.object({ formId: import_zod3.z.string().uuid() });
+var findSimilarQuestionsArgsSchema = import_zod3.z.object({
+  formId: import_zod3.z.string().uuid().optional(),
+  questionId: import_zod3.z.string().optional(),
+  text: import_zod3.z.string().trim().min(1).max(500).optional()
+});
+var validateFormArgsSchema = import_zod3.z.object({ formId: import_zod3.z.string().uuid() });
+var createCampaignArgsSchema = import_zod3.z.object({
+  name: import_zod3.z.string().trim().min(1).max(200),
+  subsidiaryId: import_zod3.z.string().trim().min(1),
+  projectCode: import_zod3.z.string().trim().min(1).optional()
+});
+var cloneCampaignArgsSchema = import_zod3.z.object({
+  sourceFormId: import_zod3.z.string().uuid(),
+  name: import_zod3.z.string().trim().min(1).max(200),
+  subsidiaryId: import_zod3.z.string().trim().min(1),
+  projectCode: import_zod3.z.string().trim().min(1).optional()
+});
+var addQuestionArgsSchema = import_zod3.z.object({ question: questionDefinitionSchema });
+var updateQuestionArgsSchema = import_zod3.z.object({
+  questionId: import_zod3.z.string().min(1),
+  patch: questionDefinitionSchema.partial()
+});
+var deleteQuestionArgsSchema = import_zod3.z.object({ questionId: import_zod3.z.string().min(1) });
+var reorderQuestionsArgsSchema = import_zod3.z.object({
+  orderedQuestionIds: import_zod3.z.array(import_zod3.z.string().min(1)).min(1)
+});
+var suggestQuestionsArgsSchema = import_zod3.z.object({
+  topic: import_zod3.z.string().trim().min(1).max(300),
+  count: import_zod3.z.number().int().min(1).max(10),
+  locale: import_zod3.z.string().optional()
+});
+var translateQuestionsArgsSchema = import_zod3.z.object({
+  questionIds: import_zod3.z.array(import_zod3.z.string().min(1)).min(1),
+  targetLocale: import_zod3.z.string().min(1)
+});
+var aiToolCallSchema = import_zod3.z.discriminatedUnion("tool", [
+  import_zod3.z.object({ tool: import_zod3.z.literal("SEARCH_CAMPAIGNS"), args: searchCampaignsArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("GET_CAMPAIGN"), args: getCampaignArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("GET_CAMPAIGN_QUESTIONS"), args: getCampaignQuestionsArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("SEARCH_QUESTIONS"), args: searchQuestionsArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("FIND_SIMILAR_CAMPAIGNS"), args: findSimilarCampaignsArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("FIND_SIMILAR_QUESTIONS"), args: findSimilarQuestionsArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("VALIDATE_FORM"), args: validateFormArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("CREATE_CAMPAIGN"), args: createCampaignArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("CLONE_CAMPAIGN"), args: cloneCampaignArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("ADD_QUESTION"), args: addQuestionArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("UPDATE_QUESTION"), args: updateQuestionArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("DELETE_QUESTION"), args: deleteQuestionArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("REORDER_QUESTIONS"), args: reorderQuestionsArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("SUGGEST_QUESTIONS"), args: suggestQuestionsArgsSchema }),
+  import_zod3.z.object({ tool: import_zod3.z.literal("TRANSLATE_QUESTIONS"), args: translateQuestionsArgsSchema })
+]);
+var aiChatRequestSchema = import_zod3.z.object({
+  conversationId: import_zod3.z.string().uuid().optional(),
+  formId: import_zod3.z.string().uuid().optional(),
+  message: import_zod3.z.string().trim().min(1).max(4e3)
+});
 
 // src/codegen/css/referenceCssContent.ts
 var REFERENCE_CSS = `a,
@@ -6953,7 +7061,12 @@ function defaultBuilderConfig() {
 0 && (module.exports = {
   CALLING_CODES,
   ENGLISH_LOCALE,
+  MUTATING_AI_TOOLS,
+  READ_ONLY_AI_TOOLS,
   RTL_LANGS,
+  SERVER_EXECUTED_AI_TOOLS,
+  aiChatRequestSchema,
+  aiToolCallSchema,
   applyContribution,
   buildQuestionMasterRows,
   buildQuestionMasterWorkbook,
@@ -6962,7 +7075,9 @@ function defaultBuilderConfig() {
   findCallingCodeEntry,
   formDefinitionSchema,
   generateSolution,
+  isMutatingAiTool,
   isRtlLangSubtag,
+  isServerExecutedAiTool,
   isSupportedExcelFile,
   langDisplayName,
   mapWorkbook,

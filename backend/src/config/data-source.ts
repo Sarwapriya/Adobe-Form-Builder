@@ -16,6 +16,9 @@ import { Form } from "../entities/Form";
 import { FormVersion } from "../entities/FormVersion";
 import { FormContribution } from "../entities/FormContribution";
 import { QuestionMasterVersion } from "../entities/QuestionMasterVersion";
+import { AIConversation } from "../entities/AIConversation";
+import { AIConversationMessage } from "../entities/AIConversationMessage";
+import { AIAction } from "../entities/AIAction";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 import { SubmittedOnlyVersioning1720000000000 } from "../migrations/1720000000000-SubmittedOnlyVersioning";
@@ -41,6 +44,7 @@ import { AddProjectCodeIsLocked1910000000000 } from "../migrations/1910000000000
 import { AddSubsidiaryLocales1920000000000 } from "../migrations/1920000000000-AddSubsidiaryLocales";
 import { AddFormOriginAndReview1930000000000 } from "../migrations/1930000000000-AddFormOriginAndReview";
 import { AddQuestionMasterSource1940000000000 } from "../migrations/1940000000000-AddQuestionMasterSource";
+import { AddAiAssistant1950000000000 } from "../migrations/1950000000000-AddAiAssistant";
 
 const entities = [
   Upload,
@@ -59,6 +63,9 @@ const entities = [
   FormVersion,
   FormContribution,
   QuestionMasterVersion,
+  AIConversation,
+  AIConversationMessage,
+  AIAction,
 ];
 const migrations = [
   InitSchema1700000000000,
@@ -86,6 +93,7 @@ const migrations = [
   AddSubsidiaryLocales1920000000000,
   AddFormOriginAndReview1930000000000,
   AddQuestionMasterSource1940000000000,
+  AddAiAssistant1950000000000,
 ];
 
 /**

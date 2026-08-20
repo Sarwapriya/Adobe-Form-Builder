@@ -51,6 +51,8 @@ import {
 import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
 import { sendTestEmail } from "../services/emailService";
 import { getSmtpSettingsForDisplay, saveSmtpSettings } from "../services/smtpSettingsService";
+import { getFabrixSettingsForDisplay, saveFabrixSettings } from "../services/fabrixSettingsService";
+import { sendMessage as sendFabrixMessage } from "../services/fabrixAIService";
 import {
   generateQuestionMaster,
   generateQuestionMasterFromUploads,
@@ -887,5 +889,65 @@ adminRouter.post(
       return;
     }
     res.json({ ok: true, sentTo: user.email });
+  })
+);
+
+// DB-stored FabriXAI Agent-API connection config, admin-managed — mirrors the
+// SMTP settings routes immediately above (see fabrixSettingsService.ts for the
+// AdminSettings keys used, and fabrixAIService.ts's own doc comment for the
+// wire contract these settings feed). The real API key is write-only from the
+// browser's perspective: GET never returns it, only whether one is set
+// (hasApiKey).
+const fabrixSettingsSchema = z.object({
+  baseUrl: z.string().trim().min(1),
+  agentId: z.string().trim().min(1),
+  apiKey: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
+
+adminRouter.get(
+  "/fabrix-settings",
+  asyncHandler(async (_req, res) => {
+    res.json(await getFabrixSettingsForDisplay());
+  })
+);
+
+adminRouter.patch(
+  "/fabrix-settings",
+  validateBody(fabrixSettingsSchema),
+  asyncHandler(async (req, res) => {
+    const input = req.body as z.infer<typeof fabrixSettingsSchema>;
+    await saveFabrixSettings({
+      baseUrl: input.baseUrl,
+      agentId: input.agentId,
+      apiKey: input.apiKey,
+      enabled: input.enabled,
+    });
+    res.json(await getFabrixSettingsForDisplay());
+  })
+);
+
+// Sends a trivial prompt through FabriXAI using whatever settings are
+// currently saved — the FabriXAI equivalent of the SMTP "test email" button
+// above: immediate confirmation of whether the adapter's best-guess wire
+// contract (see fabrixAIService.ts's callFabrixAgent) actually round-trips
+// against the real service, instead of only finding out mid-conversation.
+adminRouter.post(
+  "/fabrix-settings/test",
+  asyncHandler(async (_req, res) => {
+    const settings = await getFabrixSettingsForDisplay();
+    if (!settings.baseUrl || !settings.agentId) {
+      res.status(400).json({ ok: false, error: "FabriXAI base URL and agent id must be configured first" });
+      return;
+    }
+    const result = await sendFabrixMessage({
+      agentId: settings.agentId,
+      messages: [{ role: "user", content: "Reply with the single word OK." }],
+    });
+    if (!result.ok) {
+      res.json({ ok: false, error: result.error });
+      return;
+    }
+    res.json({ ok: true });
   })
 );

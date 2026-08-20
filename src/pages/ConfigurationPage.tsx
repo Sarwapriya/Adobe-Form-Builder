@@ -7,6 +7,7 @@ import { SubsidiaryProjectBlockManager } from "../components/admin/SubsidiaryPro
 import { SubsidiaryProjectBulkBlockManager } from "../components/admin/SubsidiaryProjectBulkBlockManager";
 import { SubsidiaryLocaleManager } from "../components/admin/SubsidiaryLocaleManager";
 import { SmtpSettingsManager } from "../components/admin/SmtpSettingsManager";
+import { FabrixSettingsManager } from "../components/admin/FabrixSettingsManager";
 import { PageHeader } from "../components/common/PageHeader";
 
 /**
@@ -49,6 +50,7 @@ export function ConfigurationPage() {
       />
       <SubsidiaryLocaleManager />
       <SmtpSettingsManager />
+      <FabrixSettingsManager />
     </Box>
   );
 }

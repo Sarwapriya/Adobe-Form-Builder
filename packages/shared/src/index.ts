@@ -61,6 +61,43 @@ export { resolveCountryName, subsidiaryCountryCodes } from "./form/subsidiaryDat
 // Excel metadata row to derive LocaleInfo from automatically.
 export { isRtlLangSubtag, langDisplayName, RTL_LANGS } from "./form/langNames";
 
+// FabriXAI-backed Form Builder assistant — chat/tool-call wire contract shared
+// between the backend's ai.router.ts/aiAssistantService.ts and the frontend's
+// aiChatApi.ts/aiChatStore.ts. See aiTypes.ts's own doc comment.
+export {
+  READ_ONLY_AI_TOOLS,
+  MUTATING_AI_TOOLS,
+  SERVER_EXECUTED_AI_TOOLS,
+  isMutatingAiTool,
+  isServerExecutedAiTool,
+  type AIToolName,
+  type AIToolCall,
+  type SearchCampaignsArgs,
+  type GetCampaignArgs,
+  type GetCampaignQuestionsArgs,
+  type SearchQuestionsArgs,
+  type FindSimilarCampaignsArgs,
+  type FindSimilarQuestionsArgs,
+  type ValidateFormArgs,
+  type CreateCampaignArgs,
+  type CloneCampaignArgs,
+  type AddQuestionArgs,
+  type UpdateQuestionArgs,
+  type DeleteQuestionArgs,
+  type ReorderQuestionsArgs,
+  type SuggestQuestionsArgs,
+  type TranslateQuestionsArgs,
+  type AIChatRequest,
+  type AIActionSummary,
+  type AICampaignReference,
+  type AIChatResponse,
+  type AIConversationSummary,
+  type AIConversationMessageView,
+  type AIConversationDetail,
+  type AIConfirmActionResponse,
+} from "./ai/aiTypes";
+export { aiToolCallSchema, aiChatRequestSchema } from "./ai/aiTypesZod";
+
 // Codegen pipeline
 export { generateSolution } from "./codegen/generate";
 export {

@@ -235,6 +235,10 @@ export interface ListFormsOptions {
    * (HR Form Initiator / Ad-hoc Forms), same split as the subsidiary side's own
    * My Forms submenu. */
   origin?: FormOrigin;
+  /** Exact-match filter on Form.projectCode — added for aiCampaignTools.ts's
+   * SEARCH_CAMPAIGNS tool (the plan's "extend SEARCH_CAMPAIGNS to also
+   * optionally filter by projectCode"); no existing caller used this before. */
+  projectCode?: string;
 }
 
 /** Admin-facing list — every builder form regardless of who created it (this feature
@@ -261,6 +265,9 @@ export async function listForms(options: ListFormsOptions = {}): Promise<PagedRe
   }
   if (options.origin) {
     qb.andWhere("form.origin = :origin", { origin: options.origin });
+  }
+  if (options.projectCode) {
+    qb.andWhere("form.projectCode = :projectCode", { projectCode: options.projectCode });
   }
 
   qb.orderBy("form.updatedAt", "DESC").skip(skip).take(pageSize);

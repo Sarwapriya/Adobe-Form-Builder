@@ -20,3 +20,17 @@ export const authRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many attempts, please try again later." },
 });
+
+/** Applied only to POST /ai/chat (see ai.router.ts) — each call costs real
+ * FabriXAI tokens/money, so this stays tight like authRateLimiter rather
+ * than the generous general limiter, but keyed per-user rather than the
+ * package's IP default isn't needed here (IP-based is fine — the general
+ * limiter already caps abusive traffic at a higher volume; this just caps
+ * spend). */
+export const aiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many AI requests, please try again later." },
+});

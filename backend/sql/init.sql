@@ -315,3 +315,44 @@ INSERT INTO SubsidiaryLocales (subsidiaryName, code, langSubtag, isRtl, label, i
 -- submitting an upload locks that version's generated files against further
 -- regeneration/re-upload.
 INSERT INTO AdminSettings ([key], value) VALUES ('lockGeneratedFilesOnSubmit', 'true');
+
+-- FabriXAI-backed Form Builder assistant: conversations, their turns, and the
+-- audit trail of every mutating action the assistant ever proposed. See
+-- backend/src/migrations/1950000000000-AddAiAssistant.ts.
+CREATE TABLE AIConversations (
+    id          UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    userId      UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
+    formId      UNIQUEIDENTIFIER NULL REFERENCES Forms(id),
+    title       NVARCHAR(200) NULL,
+    status      NVARCHAR(20) NOT NULL DEFAULT 'active',
+    createdAt   DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET(),
+    updatedAt   DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+CREATE INDEX IX_AIConversations_userId ON AIConversations(userId);
+
+CREATE TABLE AIConversationMessages (
+    id              UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    conversationId  UNIQUEIDENTIFIER NOT NULL REFERENCES AIConversations(id),
+    role            NVARCHAR(20) NOT NULL,
+    message         NVARCHAR(MAX) NOT NULL,
+    tokenUsage      INT NULL,
+    model           NVARCHAR(100) NULL,
+    requestId       NVARCHAR(100) NULL,
+    createdAt       DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+CREATE INDEX IX_AIConversationMessages_conversationId ON AIConversationMessages(conversationId);
+
+CREATE TABLE AIActions (
+    id                UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    conversationId    UNIQUEIDENTIFIER NOT NULL REFERENCES AIConversations(id),
+    formId            UNIQUEIDENTIFIER NULL REFERENCES Forms(id),
+    userId            UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
+    actionType        NVARCHAR(50) NOT NULL,
+    requestJson       NVARCHAR(MAX) NOT NULL,
+    responseJson      NVARCHAR(MAX) NULL,
+    confirmed         BIT NOT NULL DEFAULT 0,
+    executed          BIT NOT NULL DEFAULT 0,
+    executionResult   NVARCHAR(MAX) NULL,
+    createdAt         DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+CREATE INDEX IX_AIActions_conversationId ON AIActions(conversationId);
