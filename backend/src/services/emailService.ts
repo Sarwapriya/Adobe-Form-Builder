@@ -17,8 +17,8 @@ interface ResolvedSmtpConfig {
 /**
  * Resolves SMTP connection config for a single send — DB-stored settings
  * (see smtpSettingsService.ts, admin-configurable via the Configuration
- * page) win if present, otherwise falls back to the original SMTP_*/FROM env
- * vars so an existing env-var-only deployment keeps working unchanged.
+ * page) win if present, otherwise falls back to the original SMTP_HOST/PORT/SECURE/USER/PASSWORD/FROM
+ * env vars so an existing env-var-only deployment keeps working unchanged.
  * Re-resolved fresh on every call (no module-level caching) so a settings
  * change via the admin UI takes effect on the very next email with no
  * invalidation logic to get wrong — sending here is not a hot path (at most
