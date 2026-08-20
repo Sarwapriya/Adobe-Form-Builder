@@ -61,14 +61,33 @@ const createFormSchema = z.object({
   name: z.string().trim().min(1),
   subsidiaryId: z.string().trim().min(1),
   projectCode: z.string().trim().min(1).optional(),
+  // "Copy from an existing form" — clones that form's current content
+  // (draft if it has one, else published) as this new form's starting
+  // definition/config instead of a blank template. Any existing,
+  // non-deleted form is a valid source (admin already has full visibility
+  // into every form, ad-hoc included) — see createForm's own doc comment.
+  copyFromFormId: z.string().trim().min(1).optional(),
 });
 
 formBuilderRouter.post(
   "/",
   validateBody(createFormSchema),
   asyncHandler(async (req, res) => {
-    const { name, subsidiaryId, projectCode } = req.body as z.infer<typeof createFormSchema>;
-    const form = await createForm({ name, subsidiaryId, projectCode: projectCode ?? null, userId: req.auth!.sub });
+    const { name, subsidiaryId, projectCode, copyFromFormId } = req.body as z.infer<typeof createFormSchema>;
+    if (copyFromFormId) {
+      const source = await getFormDetail(copyFromFormId);
+      if (!source) {
+        res.status(404).json({ error: "Form to copy not found" });
+        return;
+      }
+    }
+    const form = await createForm({
+      name,
+      subsidiaryId,
+      projectCode: projectCode ?? null,
+      userId: req.auth!.sub,
+      copyFromFormId,
+    });
     res.status(201).json(form);
   }),
 );

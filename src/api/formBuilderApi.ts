@@ -106,6 +106,10 @@ export interface CreateFormInput {
   name: string;
   subsidiaryId: string;
   projectCode?: string;
+  /** "Copy from an existing form" — the id of a form whose current content
+   * (draft or published, whichever is more current) is cloned as this new
+   * form's starting definition/config. Any existing form is a valid source. */
+  copyFromFormId?: string;
 }
 
 export function createForm(input: CreateFormInput): Promise<FormListItem> {

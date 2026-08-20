@@ -59,7 +59,15 @@ subsidiaryFormsRouter.get(
 // taken from the request body — always forced to the caller's own
 // req.auth.subsidiaryId, same convention as upload.router.ts.
 
-const createAdHocFormSchema = z.object({ name: z.string().trim().min(1).max(200) });
+const createAdHocFormSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  // "Copy from an existing form" — clones one of this same subsidiary's own
+  // previous ad-hoc forms as the starting point instead of a blank template.
+  // Ownership-checked below via findOwnedAdHocForm, same as every other
+  // /adhoc/* route — never trusts the id alone, so a subsidiary user can't
+  // pull another subsidiary's private ad-hoc content by guessing an id.
+  copyFromFormId: z.string().trim().min(1).optional(),
+});
 
 subsidiaryFormsRouter.post(
   "/adhoc",
@@ -70,8 +78,15 @@ subsidiaryFormsRouter.post(
       res.status(403).json({ error: "This account has no subsidiary assigned" });
       return;
     }
-    const { name } = req.body as z.infer<typeof createAdHocFormSchema>;
-    const form = await createForm({ name, subsidiaryId, userId: req.auth!.sub, origin: "adhoc" });
+    const { name, copyFromFormId } = req.body as z.infer<typeof createAdHocFormSchema>;
+    if (copyFromFormId) {
+      const owned = await findOwnedAdHocForm(copyFromFormId, subsidiaryId);
+      if (!owned) {
+        res.status(404).json({ error: "Form to copy not found" });
+        return;
+      }
+    }
+    const form = await createForm({ name, subsidiaryId, userId: req.auth!.sub, origin: "adhoc", copyFromFormId });
     res.status(201).json(form);
   }),
 );

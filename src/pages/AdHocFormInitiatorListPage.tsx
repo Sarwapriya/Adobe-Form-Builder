@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Alert,
@@ -7,6 +8,10 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   MenuItem,
   Paper,
@@ -14,12 +19,14 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { ApiError } from "../api/apiClient";
-import { deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
+import { createForm, deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
+import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
+import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
+import { FormRowIconActions } from "../components/common/FormRowIconActions";
 
 const STATUS_COLOR: Record<FormStatus, "default" | "success" | "warning"> = {
   draft: "default",
@@ -38,10 +45,14 @@ const STATUS_OPTIONS: Array<{ value: FormStatus | ""; label: string }> = [
  * "Ad-hoc Forms" — the Form Initiator submenu page for subsidiary-initiated
  * submissions (origin: "adhoc", see MyAdHocFormEditorPage on the subsidiary
  * side), fully separate from the sibling "HR Form Initiator" submenu page
- * (HrFormInitiatorListPage), which only ever covers admin-authored forms.
- * No "New Form" button here — an admin never creates an ad-hoc form directly,
- * only reviews (AdHocReviewPanel, on the shared FormBuilderEditorPage) what a
- * subsidiary user has already submitted.
+ * (HrFormInitiatorListPage), which only ever covers admin-authored forms. No
+ * generic "New Form" button here — an admin never creates an ad-hoc-origin
+ * form directly, only reviews (AdHocReviewPanel, on the shared
+ * FormBuilderEditorPage) what a subsidiary user has already submitted. Each
+ * row's Copy action is the one exception: it lets admin reuse a good ad-hoc
+ * submission's questions/fields/consents as the starting point for a brand
+ * new admin-origin (HR) form — same createForm({ copyFromFormId }) plumbing
+ * HrFormInitiatorListPage's own Copy action uses.
  */
 export function AdHocFormInitiatorListPage() {
   const navigate = useNavigate();
@@ -52,6 +63,15 @@ export function AdHocFormInitiatorListPage() {
   const [pendingReviewOnly, setPendingReviewOnly] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteForm, setConfirmDeleteForm] = useState<FormListItem | null>(null);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
+  const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newSubsidiaryId, setNewSubsidiaryId] = useState("");
+  const [newProjectCode, setNewProjectCode] = useState("");
+  const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
+  const [creating, setCreating] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -74,6 +94,51 @@ export function AdHocFormInitiatorListPage() {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, pendingReviewOnly]);
+
+  useEffect(() => {
+    if (!createOpen) return;
+    listSubsidiaries().then(setSubsidiaries).catch(() => undefined);
+    listOpenProjectCodes().then(setProjectCodes).catch(() => undefined);
+  }, [createOpen]);
+
+  function closeCreateDialog() {
+    setCreateOpen(false);
+    setNewName("");
+    setNewSubsidiaryId("");
+    setNewProjectCode("");
+    setCopySourceForm(null);
+  }
+
+  /** Row-level "Copy" action — opens a New Form dialog (Name/Subsidiary/
+   * Project Code, same as HR Form Initiator's own) that creates a brand new
+   * admin-origin form pre-filled from this ad-hoc submission's content. */
+  function handleCopy(form: FormListItem) {
+    setCopySourceForm(form);
+    setNewSubsidiaryId(form.subsidiaryId);
+    setCreateOpen(true);
+  }
+
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    if (!newName.trim() || !newSubsidiaryId || !copySourceForm) return;
+
+    setCreating(true);
+    setError(null);
+    try {
+      const form = await createForm({
+        name: newName.trim(),
+        subsidiaryId: newSubsidiaryId,
+        projectCode: newProjectCode || undefined,
+        copyFromFormId: copySourceForm.id,
+      });
+      closeCreateDialog();
+      navigate(`/admin/form-builder/${form.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create form");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   async function handleConfirmDelete() {
     if (!confirmDeleteForm) return;
@@ -156,18 +221,12 @@ export function AdHocFormInitiatorListPage() {
               )}
               {form.pendingReview && <Chip label="Pending review" size="small" color="warning" />}
               <Chip label={form.status} color={STATUS_COLOR[form.status]} size="small" />
-              <Button
-                size="small"
-                color="error"
-                startIcon={<DeleteIcon />}
-                disabled={deletingId === form.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setConfirmDeleteForm(form);
-                }}
-              >
-                Delete
-              </Button>
+              <FormRowIconActions
+                copyTooltip="Copy into a new HR form"
+                onCopy={() => handleCopy(form)}
+                onDelete={() => setConfirmDeleteForm(form)}
+                deleteDisabled={deletingId === form.id}
+              />
             </Paper>
           ))}
         </Stack>
@@ -182,6 +241,65 @@ export function AdHocFormInitiatorListPage() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmDeleteForm(null)}
       />
+
+      <Dialog open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
+        <Box component="form" onSubmit={handleCreate}>
+          <DialogTitle>New Form (copy)</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              {copySourceForm && (
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                  Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
+                  everything afterward. This creates a new HR form, separate from the ad-hoc submission.
+                </Alert>
+              )}
+              <TextField
+                label="Campaign name"
+                size="small"
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                required
+              />
+              <TextField
+                select
+                label="Subsidiary"
+                size="small"
+                value={newSubsidiaryId}
+                onChange={(e) => setNewSubsidiaryId(e.target.value)}
+                required
+              >
+                {subsidiaries.map((s) => (
+                  <MenuItem key={s.id} value={s.name}>
+                    {s.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                label="Project Code (optional)"
+                size="small"
+                value={newProjectCode}
+                onChange={(e) => setNewProjectCode(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              >
+                <MenuItem value="">None</MenuItem>
+                {projectCodes.map((pc) => (
+                  <MenuItem key={pc.id} value={pc.code}>
+                    {pc.code}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeCreateDialog}>Cancel</Button>
+            <Button type="submit" variant="contained" disabled={!newName.trim() || !newSubsidiaryId || creating}>
+              {creating ? "Creating..." : "Create"}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
     </Box>
   );
 }

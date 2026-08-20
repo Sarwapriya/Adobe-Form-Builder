@@ -24,8 +24,12 @@ export function getMyFormDetail(formId: string): Promise<FormDetail> {
  * *published* admin-authored form). The subsidiary is never sent in the request
  * body — the server always forces it to the caller's own account.
  */
-export function createAdHocForm(name: string): Promise<FormListItem> {
-  return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name });
+/** `copyFromFormId` clones one of this subsidiary's own previous ad-hoc
+ * forms' current content as the starting point instead of a blank form —
+ * ownership-checked server-side, so it can only ever be one of this same
+ * subsidiary's own ad-hoc forms. */
+export function createAdHocForm(name: string, copyFromFormId?: string): Promise<FormListItem> {
+  return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name, copyFromFormId });
 }
 
 export function listMyAdHocForms(): Promise<FormListItem[]> {

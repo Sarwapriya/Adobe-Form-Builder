@@ -150,13 +150,36 @@ export interface CreateFormInput {
   /** Defaults to "admin" — pass "adhoc" for a subsidiary user's own My Forms
    * submission (see subsidiaryForms.router.ts's POST /adhoc). */
   origin?: FormOrigin;
+  /** "Copy from an existing form" — clones that form's current content (its
+   * draft if it has one, else its published version — same precedence
+   * getFormDetail's own consumers already use) as this new form's starting
+   * definition/config instead of a blank template. meta.subsidiary is always
+   * overwritten to *this* new form's own subsidiaryId regardless of what the
+   * source form's was, and enforceVariantsForOrigin still applies on top —
+   * so copying an admin HR form into a new ad-hoc one (or across
+   * subsidiaries) is always safe. Callers are expected to have already
+   * validated the source exists/is accessible (see the two router call
+   * sites) — a source that can't be found here just falls back to a blank
+   * form rather than failing the whole creation. */
+  copyFromFormId?: string;
 }
 
-/** Creates a new builder form: an empty draft FormVersion plus the Form row pointing
- * at it. No generation happens yet — a brand-new form has no questions, so it
- * wouldn't pass validateFormDefinition anyway (expected; only Publish enforces that). */
+/** Creates a new builder form: a draft FormVersion (blank, or cloned from an
+ * existing form — see copyFromFormId) plus the Form row pointing at it. No
+ * generation happens yet — a brand-new blank form has no questions, so it
+ * wouldn't pass validateFormDefinition anyway (expected; only Publish
+ * enforces that) — a copied one might already be publish-ready, which is the
+ * point. */
 export async function createForm(input: CreateFormInput): Promise<FormListItem> {
-  const { name, subsidiaryId, projectCode, userId, origin = "admin" } = input;
+  const { name, subsidiaryId, projectCode, userId, origin = "admin", copyFromFormId } = input;
+
+  const copySource = copyFromFormId ? await getFormDetail(copyFromFormId) : null;
+  const sourceContent = copySource?.draft ?? copySource?.published ?? null;
+
+  const definition: FormDefinition = sourceContent
+    ? { ...sourceContent.definition, meta: { ...sourceContent.definition.meta, subsidiary: subsidiaryId } }
+    : emptyFormDefinition(subsidiaryId);
+  const config: BuilderConfig = enforceVariantsForOrigin(origin, sourceContent ? sourceContent.config : defaultConfig(origin));
 
   return AppDataSource.transaction(async (manager) => {
     const formId = crypto.randomUUID();
@@ -185,8 +208,8 @@ export async function createForm(input: CreateFormInput): Promise<FormListItem> 
       versionRepo.create({
         formId,
         versionNumber: null,
-        definition: JSON.stringify(emptyFormDefinition(subsidiaryId)),
-        config: JSON.stringify(defaultConfig(origin)),
+        definition: JSON.stringify(definition),
+        config: JSON.stringify(config),
         status: "draft",
         createdByUserId: userId,
       }),

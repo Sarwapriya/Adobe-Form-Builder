@@ -10,20 +10,18 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   Paper,
   Stack,
   TextField,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
 import { ApiError } from "../api/apiClient";
 import { createAdHocForm, deleteAdHocForm, listMyAdHocForms } from "../api/subsidiaryFormsApi";
 import type { FormListItem } from "../api/formBuilderApi";
 import { PageHeader } from "../components/common/PageHeader";
+import { FormRowIconActions } from "../components/common/FormRowIconActions";
 
 type AdHocStatusLabel = "Draft" | "Pending review" | "Rejected" | "Published";
 
@@ -55,6 +53,12 @@ export function MyAdHocFormsListPage() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  /** Set when "New Ad-hoc Form" is opened via a specific row's Copy action
+   * (below) — the dialog still asks for a fresh Name; only the
+   * questions/fields/consents are cloned from this form. Null for the
+   * ordinary "New Ad-hoc Form" button, which creates a blank form exactly
+   * as before. */
+  const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -75,13 +79,23 @@ export function MyAdHocFormsListPage() {
     refresh();
   }, []);
 
+  function closeCreateDialog() {
+    setCreateOpen(false);
+    setNewName("");
+    setCopySourceForm(null);
+  }
+
+  function handleCopy(form: FormListItem) {
+    setCopySourceForm(form);
+    setCreateOpen(true);
+  }
+
   async function handleCreate() {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      const created = await createAdHocForm(newName.trim());
-      setCreateOpen(false);
-      setNewName("");
+      const created = await createAdHocForm(newName.trim(), copySourceForm?.id);
+      closeCreateDialog();
       navigate(`/my-forms/adhoc/${created.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create form");
@@ -162,23 +176,12 @@ export function MyAdHocFormsListPage() {
                   </Box>
                   <Stack direction="row" spacing={0.5} alignItems="center">
                     <Chip label={statusLabel} size="small" color={AD_HOC_STATUS_COLOR[statusLabel]} />
-                    {form.status === "draft" && (
-                      <Tooltip title="Delete">
-                        <span>
-                          <IconButton
-                            size="small"
-                            aria-label="Delete"
-                            disabled={deletingId === form.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleDelete(form);
-                            }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    )}
+                    <FormRowIconActions
+                      copyTooltip="Copy into a new ad-hoc form"
+                      onCopy={() => handleCopy(form)}
+                      onDelete={form.status === "draft" ? () => void handleDelete(form) : undefined}
+                      deleteDisabled={deletingId === form.id}
+                    />
                   </Stack>
                 </Box>
               );
@@ -187,22 +190,29 @@ export function MyAdHocFormsListPage() {
         )}
       </Paper>
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>New Ad-hoc Form</DialogTitle>
+      <Dialog open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>{copySourceForm ? "New Ad-hoc Form (copy)" : "New Ad-hoc Form"}</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            fullWidth
-            size="small"
-            label="Name"
-            sx={{ mt: 1 }}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-          />
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {copySourceForm && (
+              <Alert severity="info" sx={{ borderRadius: 2 }}>
+                Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
+                everything afterward.
+              </Alert>
+            )}
+            <TextField
+              autoFocus
+              fullWidth
+              size="small"
+              label="Name"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+            />
+          </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setCreateOpen(false)} disabled={creating}>
+          <Button onClick={closeCreateDialog} disabled={creating}>
             Cancel
           </Button>
           <Button variant="contained" disabled={!newName.trim() || creating} onClick={handleCreate}>

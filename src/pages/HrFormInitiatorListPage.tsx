@@ -18,7 +18,6 @@ import {
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { ApiError } from "../api/apiClient";
 import { createForm, deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
@@ -26,6 +25,7 @@ import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
+import { FormRowIconActions } from "../components/common/FormRowIconActions";
 
 const STATUS_COLOR: Record<FormStatus, "default" | "success" | "warning"> = {
   draft: "default",
@@ -62,6 +62,12 @@ export function HrFormInitiatorListPage() {
   const [newName, setNewName] = useState("");
   const [newSubsidiaryId, setNewSubsidiaryId] = useState("");
   const [newProjectCode, setNewProjectCode] = useState("");
+  /** Set when "New Form" is opened via a specific row's Copy action (below) —
+   * the dialog still asks Name/Subsidiary/Project Code fresh (per the
+   * feature's own requirement), only the questions/fields/consents are
+   * cloned from this form. Null for the ordinary "New Form" button, which
+   * creates a blank form exactly as before. */
+  const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
   const [creating, setCreating] = useState(false);
   const [confirmDeleteForm, setConfirmDeleteForm] = useState<FormListItem | null>(null);
 
@@ -89,6 +95,21 @@ export function HrFormInitiatorListPage() {
     listOpenProjectCodes().then(setProjectCodes).catch(() => undefined);
   }, [createOpen]);
 
+  function closeCreateDialog() {
+    setCreateOpen(false);
+    setNewName("");
+    setNewSubsidiaryId("");
+    setNewProjectCode("");
+    setCopySourceForm(null);
+  }
+
+  /** Row-level "Copy" action — opens the same New Form dialog, but with this
+   * form pinned as the content source instead of the blank template. */
+  function handleCopy(form: FormListItem) {
+    setCopySourceForm(form);
+    setCreateOpen(true);
+  }
+
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     if (!newName.trim() || !newSubsidiaryId) return;
@@ -100,11 +121,9 @@ export function HrFormInitiatorListPage() {
         name: newName.trim(),
         subsidiaryId: newSubsidiaryId,
         projectCode: newProjectCode || undefined,
+        copyFromFormId: copySourceForm?.id,
       });
-      setCreateOpen(false);
-      setNewName("");
-      setNewSubsidiaryId("");
-      setNewProjectCode("");
+      closeCreateDialog();
       navigate(`/admin/form-builder/${form.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create form");
@@ -194,18 +213,11 @@ export function HrFormInitiatorListPage() {
                 <Chip label={`v${form.publishedVersionNumber}`} size="small" variant="outlined" />
               )}
               <Chip label={form.status} color={STATUS_COLOR[form.status]} size="small" />
-              <Button
-                size="small"
-                color="error"
-                startIcon={<DeleteIcon />}
-                disabled={deletingId === form.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setConfirmDeleteForm(form);
-                }}
-              >
-                Delete
-              </Button>
+              <FormRowIconActions
+                onCopy={() => handleCopy(form)}
+                onDelete={() => setConfirmDeleteForm(form)}
+                deleteDisabled={deletingId === form.id}
+              />
             </Paper>
           ))}
         </Stack>
@@ -221,13 +233,19 @@ export function HrFormInitiatorListPage() {
         onCancel={() => setConfirmDeleteForm(null)}
       />
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
         <Box component="form" onSubmit={handleCreate}>
-          <DialogTitle>New Form</DialogTitle>
+          <DialogTitle>{copySourceForm ? "New Form (copy)" : "New Form"}</DialogTitle>
           <DialogContent>
             <Stack spacing={2} sx={{ pt: 1 }}>
+              {copySourceForm && (
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                  Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
+                  everything afterward.
+                </Alert>
+              )}
               <TextField
-                label="Name"
+                label="Campaign name"
                 size="small"
                 autoFocus
                 value={newName}
@@ -266,7 +284,7 @@ export function HrFormInitiatorListPage() {
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button onClick={closeCreateDialog}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={!newName.trim() || !newSubsidiaryId || creating}>
               {creating ? "Creating..." : "Create"}
             </Button>
