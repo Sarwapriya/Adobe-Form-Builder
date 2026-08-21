@@ -16,7 +16,7 @@ import type {
 } from "@formbuilder/shared";
 import type { UserRole } from "../entities/User";
 import { isAdminRole } from "../entities/User";
-import { getFormDetail, listForms, type FormDetail, type FormListItem } from "./formBuilderService";
+import { findOwnedAdHocForm, getFormDetail, listForms, listMyAdHocForms, type FormDetail, type FormListItem } from "./formBuilderService";
 import { getAccessibleFormDetail, listAccessibleForms } from "./formAccessService";
 
 /**
@@ -94,10 +94,15 @@ export interface QuestionSearchResult {
 
 /** Every form the caller may read, scoped exactly like a human hitting
  * GET /api/v1/admin/forms (admin) or GET /api/v1/forms (subsidiary user)
- * would see — admins see every non-deleted form regardless of subsidiary,
- * a subsidiary-scoped standard user sees only their own subsidiary's
- * *published* forms (formAccessService's own restriction, not loosened
- * here), and a standard user with no subsidiary assigned sees nothing. */
+ * would see — admins see every non-deleted form regardless of subsidiary. A
+ * subsidiary-scoped standard user sees their own subsidiary's *published*
+ * forms (formAccessService's own restriction, not loosened here) **plus**
+ * their own ad-hoc forms regardless of status (`listMyAdHocForms`, deduped
+ * by id) — without this, a subsidiary user's own in-progress, not-yet-
+ * published ad-hoc drafts would be invisible to SEARCH_CAMPAIGNS even
+ * though they're editing one right now (see getCallerFormDetail's own doc
+ * comment for the matching single-form fix). A standard user with no
+ * subsidiary assigned sees nothing. */
 async function listCallerForms(
   ctx: AiToolCallerContext,
   filters: { search?: string; projectCode?: string; status?: SearchCampaignsArgs["status"] } = {},
@@ -113,7 +118,14 @@ async function listCallerForms(
   }
 
   if (!ctx.subsidiaryId) return [];
-  let forms = await listAccessibleForms(ctx.subsidiaryId, ctx.userId);
+  const [accessible, myAdHoc] = await Promise.all([
+    listAccessibleForms(ctx.subsidiaryId, ctx.userId),
+    listMyAdHocForms(ctx.subsidiaryId),
+  ]);
+  const byId = new Map(accessible.map((f) => [f.id, f]));
+  for (const f of myAdHoc) if (!byId.has(f.id)) byId.set(f.id, f);
+  let forms = [...byId.values()];
+
   if (filters.status) forms = forms.filter((f) => f.status === filters.status);
   if (filters.projectCode) forms = forms.filter((f) => f.projectCode === filters.projectCode);
   if (filters.search) {
@@ -126,11 +138,27 @@ async function listCallerForms(
 /** Same access rule as `listCallerForms`, for a single form by id — returns
  * null identically whether the form doesn't exist or the caller can't see
  * it, matching this codebase's "never leak which case occurred" ownership
- * convention (see uploadService.findOwnedUpload's own doc comment). */
+ * convention (see uploadService.findOwnedUpload's own doc comment).
+ *
+ * For a non-admin, `getAccessibleFormDetail` alone only covers *other*
+ * forms shared with this subsidiary and only once *published* — it
+ * deliberately excludes the subsidiary's own in-progress ad-hoc drafts (see
+ * its own doc comment). That would make GET_CAMPAIGN, and every mutating
+ * tool's confirm-time re-check, silently fail for the single most common
+ * subsidiary-side scenario: chatting with the assistant while building a
+ * brand-new, not-yet-published ad-hoc campaign. So a non-admin's own ad-hoc
+ * form (`findOwnedAdHocForm`, draft or published, same ownership check
+ * `subsidiaryForms.router.ts`'s own `/adhoc/:id` routes use) is checked as a
+ * second, equally-valid path before giving up. */
 export async function getCallerFormDetail(ctx: AiToolCallerContext, formId: string): Promise<FormDetail | null> {
   if (isAdminRole(ctx.role)) return getFormDetail(formId);
   if (!ctx.subsidiaryId) return null;
-  return getAccessibleFormDetail(formId, ctx.subsidiaryId);
+
+  const accessible = await getAccessibleFormDetail(formId, ctx.subsidiaryId);
+  if (accessible) return accessible;
+
+  const owned = await findOwnedAdHocForm(formId, ctx.subsidiaryId);
+  return owned ? getFormDetail(formId) : null;
 }
 
 function toCompactCampaign(formId: string, name: string, status: string, detail: FormDetail): CompactCampaign {
@@ -300,6 +328,7 @@ export async function buildCampaignReferences(ctx: AiToolCallerContext, results:
       formId: results[i].formId,
       name: results[i].name,
       status: results[i].status,
+      origin: detail.origin,
       questionCount: content?.definition.questions.length ?? 0,
       locales: content?.definition.locales.map((l) => l.code) ?? [],
       updatedAt: results[i].updatedAt,

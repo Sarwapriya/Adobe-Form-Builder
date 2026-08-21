@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Chip, Paper, Stack, Typography } from "@mui/material";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type {
   AIActionSummary,
   AddQuestionArgs,
@@ -13,6 +13,7 @@ import type {
 import { CONTROL_TYPE_LABEL } from "../formBuilder/formBuilderHelpers";
 import { useAiChatStore } from "../../store/aiChatStore";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { isAdminRole, useAuthStore } from "../../auth/authStore";
 import { AIConfirmationDialog } from "./AIConfirmationDialog";
 
 const PRIMARY_LABEL: Partial<Record<AIActionSummary["actionType"], string>> = {
@@ -100,13 +101,16 @@ function ActionPreview({ action }: { action: AIActionSummary }) {
  * and navigates, since aiChatStore.confirmAction deliberately stops at
  * removing the action / applying a client-side edit and leaves navigation to
  * the caller (per the plan, `useFormBuilderStore` shouldn't know about
- * routing).
+ * routing). The destination editor is chosen from the caller's *role*, not
+ * the current page — the AI panel is a master-page fixture available from
+ * any screen (see AppLayout.tsx), so a campaign created from, say, the
+ * Upload History page still needs to route correctly.
  */
 export function AIActionCard({ action }: { action: AIActionSummary }) {
   const confirmAction = useAiChatStore((s) => s.confirmAction);
   const rejectAction = useAiChatStore((s) => s.rejectAction);
   const navigate = useNavigate();
-  const location = useLocation();
+  const isAdmin = useAuthStore((s) => isAdminRole(s.user?.role));
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -115,7 +119,7 @@ export function AIActionCard({ action }: { action: AIActionSummary }) {
     try {
       const response = await confirmAction(action.id);
       if (response?.formId) {
-        const basePrefix = location.pathname.startsWith("/my-forms/adhoc") ? "/my-forms/adhoc" : "/admin/form-builder";
+        const basePrefix = isAdmin ? "/admin/form-builder" : "/my-forms/adhoc";
         navigate(`${basePrefix}/${response.formId}`);
       }
     } finally {

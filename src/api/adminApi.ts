@@ -375,14 +375,22 @@ export interface FabrixSettings {
   agentId: string;
   enabled: boolean;
   hasApiKey: boolean;
+  /** Whether the extra x-fabrix-client / x-openapi-token headers some
+   * FabriXAI deployments require are currently set — see this gateway's own
+   * fabrixAIService.ts. Neither value is ever sent to the browser. */
+  hasClientHeader: boolean;
+  hasOpenApiToken: boolean;
 }
 
 export interface SaveFabrixSettingsInput {
   baseUrl: string;
   agentId: string;
   enabled: boolean;
-  /** Omit or leave blank to keep whatever key is already saved. */
+  /** Omit or leave blank to keep whatever value is already saved, for each
+   * of these three secrets. */
   apiKey?: string;
+  clientHeader?: string;
+  openApiToken?: string;
 }
 
 export function getFabrixSettings(): Promise<FabrixSettings> {

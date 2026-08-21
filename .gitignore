@@ -1,8 +1,7 @@
 node_modules/
+dist/
 dist-sample-solution/
 .DS_Store
 *.tsbuildinfo
 .env
-backend/dist/
 backend/uploads/
-node_modules

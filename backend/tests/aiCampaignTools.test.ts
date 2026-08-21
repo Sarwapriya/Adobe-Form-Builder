@@ -35,9 +35,13 @@ const listFormsMock = vi.fn(async () => ({
   pageSize: 20,
 }));
 
+const listMyAdHocFormsMock = vi.fn(async () => []);
+
 vi.mock("../src/services/formBuilderService", () => ({
   listForms: (...args: unknown[]) => listFormsMock(...args),
   getFormDetail: vi.fn(async () => null),
+  findOwnedAdHocForm: vi.fn(async () => null),
+  listMyAdHocForms: (...args: unknown[]) => listMyAdHocFormsMock(...args),
 }));
 
 const listAccessibleFormsMock = vi.fn(async (subsidiaryId: string) => [
@@ -70,6 +74,7 @@ describe("aiCampaignTools.searchCampaigns tenant scoping", () => {
   beforeEach(() => {
     listFormsMock.mockClear();
     listAccessibleFormsMock.mockClear();
+    listMyAdHocFormsMock.mockClear();
   });
 
   it("lets an admin search across every subsidiary via listForms, not listAccessibleForms", async () => {
@@ -84,6 +89,31 @@ describe("aiCampaignTools.searchCampaigns tenant scoping", () => {
     expect(results.map((r) => r.formId)).toEqual(["f2"]);
     expect(listAccessibleFormsMock).toHaveBeenCalledWith("SUB_B", "user-1");
     expect(listFormsMock).not.toHaveBeenCalled();
+  });
+
+  it("also includes the caller's own not-yet-published ad-hoc forms, deduped against listAccessibleForms", async () => {
+    listMyAdHocFormsMock.mockResolvedValueOnce([
+      {
+        id: "f3",
+        name: "My draft ad-hoc campaign",
+        subsidiaryId: "SUB_B",
+        projectCode: null,
+        status: "draft" as const,
+        createdByUserId: "user-1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        publishedVersionNumber: null,
+        origin: "adhoc" as const,
+        pendingReview: false,
+        submittedForReviewAt: null,
+        reviewedAt: null,
+        reviewNote: null,
+      },
+    ]);
+
+    const results = await searchCampaigns({ userId: "user-1", role: "standard", subsidiaryId: "SUB_B" }, {});
+    expect(results.map((r) => r.formId).sort()).toEqual(["f2", "f3"]);
+    expect(listMyAdHocFormsMock).toHaveBeenCalledWith("SUB_B");
   });
 
   it("never falls back to the admin listing for a standard user with no subsidiary assigned", async () => {

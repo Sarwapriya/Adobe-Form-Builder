@@ -125,6 +125,11 @@ export interface AICampaignReference {
   formId: string;
   name: string;
   status: string;
+  /** "admin" (Form Initiator/HR) or "adhoc" (a subsidiary user's own
+   * submission) — the frontend needs this to route [View]/[Use as Template]
+   * to the right editor, since the AI panel is a master-page fixture and
+   * can't infer it from the current page (see CampaignReferenceCard.tsx). */
+  origin: "admin" | "adhoc";
   questionCount: number;
   locales: string[];
   updatedAt: string;

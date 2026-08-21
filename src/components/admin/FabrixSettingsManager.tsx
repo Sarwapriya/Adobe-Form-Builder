@@ -8,15 +8,16 @@ import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
 
 /**
- * Admin-only FabriXAI Agent connection settings — Base URL / Agent ID / API
- * Key (masked, DB-stored encrypted server-side, see backend
- * fabrixSettingsService.ts) / Enabled switch, used by the AI copilot chat
- * (`/api/v1/ai/chat`) in preference to the server's FABRIX_* environment
- * variables when set here. Mirrors SmtpSettingsManager.tsx's exact shape:
- * the API key field is write-only — the server never sends the real value
- * back, only whether one is currently set (`hasApiKey`), so this form always
- * starts blank and only overwrites the stored key if the admin actually
- * types a new one.
+ * Admin-only FabriXAI Agent connection settings — Base URL / Agent ID /
+ * Enabled switch, plus three secrets (API Key, Client Header, OpenAPI
+ * Token — all DB-stored encrypted server-side, see backend
+ * fabrixSettingsService.ts), used by the AI copilot chat (`/api/v1/ai/chat`)
+ * in preference to the server's FABRIX_* environment variables when set
+ * here. Mirrors SmtpSettingsManager.tsx's exact shape: every secret field is
+ * write-only — the server never sends the real value back, only whether one
+ * is currently set (`hasApiKey`/`hasClientHeader`/`hasOpenApiToken`), so
+ * this form always starts blank and only overwrites a stored secret if the
+ * admin actually types a new one.
  */
 export function FabrixSettingsManager() {
   const [settings, setSettings] = useState<FabrixSettings | null>(null);
@@ -30,6 +31,8 @@ export function FabrixSettingsManager() {
   const [baseUrl, setBaseUrl] = useState("");
   const [agentId, setAgentId] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [clientHeader, setClientHeader] = useState("");
+  const [openApiToken, setOpenApiToken] = useState("");
   const [enabled, setEnabled] = useState(true);
 
   async function refresh() {
@@ -42,6 +45,8 @@ export function FabrixSettingsManager() {
       setAgentId(result.agentId);
       setEnabled(result.enabled);
       setApiKey("");
+      setClientHeader("");
+      setOpenApiToken("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load FabriXAI settings");
     } finally {
@@ -65,6 +70,8 @@ export function FabrixSettingsManager() {
         agentId: agentId.trim(),
         enabled,
         apiKey: apiKey.trim() || undefined,
+        clientHeader: clientHeader.trim() || undefined,
+        openApiToken: openApiToken.trim() || undefined,
       });
       setSaveNotice("FabriXAI settings saved.");
       await refresh();
@@ -150,8 +157,32 @@ export function FabrixSettingsManager() {
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={settings?.hasApiKey ? "configured — leave blank to keep" : "not set"}
             fullWidth
-            sx={{ mb: 2, maxWidth: 400 }}
+            sx={{ mb: 1.5, maxWidth: 400 }}
           />
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Some FabriXAI deployments (a gateway in front of the real agent API) need these two extra headers as well
+            — leave both blank if your endpoint only needs the API key above.
+          </Typography>
+          <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+            <TextField
+              label="Client Header"
+              size="small"
+              type="password"
+              value={clientHeader}
+              onChange={(e) => setClientHeader(e.target.value)}
+              placeholder={settings?.hasClientHeader ? "configured — leave blank to keep" : "not set"}
+              sx={{ minWidth: 320, flex: 1 }}
+            />
+            <TextField
+              label="OpenAPI Token"
+              size="small"
+              type="password"
+              value={openApiToken}
+              onChange={(e) => setOpenApiToken(e.target.value)}
+              placeholder={settings?.hasOpenApiToken ? "configured — leave blank to keep" : "not set"}
+              sx={{ minWidth: 320, flex: 1 }}
+            />
+          </Stack>
           <Stack direction="row" spacing={1.5}>
             <Button type="submit" variant="contained" disabled={!baseUrl.trim() || !agentId.trim() || saving}>
               {saving ? "Saving..." : "Save"}

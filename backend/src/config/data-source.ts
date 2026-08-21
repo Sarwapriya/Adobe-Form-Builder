@@ -45,6 +45,7 @@ import { AddSubsidiaryLocales1920000000000 } from "../migrations/1920000000000-A
 import { AddFormOriginAndReview1930000000000 } from "../migrations/1930000000000-AddFormOriginAndReview";
 import { AddQuestionMasterSource1940000000000 } from "../migrations/1940000000000-AddQuestionMasterSource";
 import { AddAiAssistant1950000000000 } from "../migrations/1950000000000-AddAiAssistant";
+import { WidenAdminSettingValue1960000000000 } from "../migrations/1960000000000-WidenAdminSettingValue";
 
 const entities = [
   Upload,
@@ -94,6 +95,7 @@ const migrations = [
   AddFormOriginAndReview1930000000000,
   AddQuestionMasterSource1940000000000,
   AddAiAssistant1950000000000,
+  WidenAdminSettingValue1960000000000,
 ];
 
 /**

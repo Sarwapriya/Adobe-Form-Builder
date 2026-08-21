@@ -25,13 +25,21 @@ caller of `sendMessage` (`aiAssistantService.ts`, the admin
 
 ## The current best-guess shape
 
-```
-POST {baseUrl}/api/v1/agents/{agentId}/chat
-Headers:
-  Authorization: Bearer <apiKey>
-  Content-Type: application/json
+The URL and auth headers below reflect the actual configured endpoint (a
+Samsung SDS FabriXAI trial gateway) — only the **request/response body
+shape** is still an unverified guess.
 
-Request body:
+```
+POST {baseUrl}     (the full chat endpoint — nothing is appended to it)
+Headers:
+  Content-Type: application/json
+  Authorization: Bearer <apiKey>            (if configured)
+  x-fabrix-client: <FABRIX_CLIENT_HEADER>    (if configured — a signed JWT this
+                                               gateway requires)
+  x-openapi-token: <FABRIX_OPENAPI_TOKEN>    (if configured — an OAuth2 bearer
+                                               access token this gateway requires)
+
+Request body (UNVERIFIED):
 {
   "conversationId": "<optional string>",
   "messages": [
@@ -39,7 +47,7 @@ Request body:
   ]
 }
 
-Response body (200):
+Response body (200, UNVERIFIED):
 {
   "conversationId": "<string>",
   "reply": "<string>",
@@ -48,6 +56,21 @@ Response body (200):
   "requestId": "<string>"                  // optional
 }
 ```
+
+Note that `request.agentId` is currently unused by `callFabrixAgent` — the
+configured `baseUrl` already points at one specific agent/endpoint for this
+gateway. If this deployment ever needs to route to more than one agent
+through the same base URL, `agentId` will need to go somewhere in the
+request (most likely a header) — it isn't today.
+
+All three secrets (`apiKey`, `clientHeader`, `openApiToken`) are admin-
+configurable from Configuration → AI Assistant Settings, encrypted at rest
+the same way the SMTP password is (`secretCipher.ts`), with the server-side
+`FABRIX_*` env vars as the deploy-time fallback for each — see
+`fabrixSettingsService.ts`. `AdminSettings.value` was widened from
+`NVARCHAR(255)` to `NVARCHAR(MAX)` (migration
+`1960000000000-WidenAdminSettingValue`) specifically because the encrypted
+`openApiToken` value is large enough to overflow the original column.
 
 Non-2xx responses are read as text (capped to 500 chars) and treated as a
 failure; 5xx and network-level failures (timeout/DNS/connection reset) are

@@ -119,7 +119,11 @@ function applyClientAction(actionType: AIToolName, data: unknown): void {
 }
 
 export const useAiChatStore = create<AiChatState>((set, get) => ({
-  open: localStorage.getItem(OPEN_STORAGE_KEY) !== "true",
+  // Defaults to minimized (unset localStorage → false) so a first-time visit
+  // shows the pulsing AIChatButton bubble rather than the panel already
+  // taking up screen space — only an explicit prior "left it open" ("false"
+  // in the collapsed key) reopens it automatically.
+  open: localStorage.getItem(OPEN_STORAGE_KEY) === "false",
   formId: null,
   conversationId: null,
   messages: [],

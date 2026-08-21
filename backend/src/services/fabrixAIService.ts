@@ -74,8 +74,8 @@ export async function sendMessage(request: FabrixChatRequest): Promise<FabrixCha
   if (!settings.enabled) {
     return { ok: false, error: "FabriXAI is disabled" };
   }
-  if (!settings.apiKey) {
-    return { ok: false, error: "FabriXAI API key is not configured" };
+  if (!settings.apiKey && !settings.openApiToken) {
+    return { ok: false, error: "FabriXAI API key or openapi token is not configured" };
   }
 
   const startedAt = Date.now();
@@ -138,29 +138,40 @@ interface FabrixCallFailure {
 /**
  * *** THE ONE ISOLATED WIRE-CONTRACT SEAM — NEEDS VERIFICATION ***
  *
- * FabriXAI's real Agent-invocation REST contract is not publicly documented
- * as of this writing (docs.fabrix.ai only covers a separate asset-analytics
- * API). Everything below is a best-guess REST/Bearer shape, chosen to be the
- * most conventional possible design so it's a reasonable starting point:
+ * Points at the configured FabriXAI trial endpoint (a gateway in front of the
+ * real agent API, per FABRIX_API_BASE_URL — the full chat URL, nothing
+ * appended):
  *
- *   POST {baseUrl}/api/v1/agents/{agentId}/chat
- *   Headers: Authorization: Bearer <apiKey>, Content-Type: application/json
+ *   POST {baseUrl}
+ *   Headers: Content-Type: application/json,
+ *            Authorization: Bearer <apiKey>            (if configured)
+ *            x-fabrix-client: <FABRIX_CLIENT_HEADER>     (if configured)
+ *            x-openapi-token: <FABRIX_OPENAPI_TOKEN>     (if configured)
  *   Body:    { conversationId?: string, messages: [{ role, content }] }
  *   Response: { conversationId: string, reply: string,
  *               usage?: { totalTokens: number }, model?: string, requestId?: string }
  *
- * See backend/docs/fabrixai-integration.md for the full write-up of this
- * assumption and exactly what to change here once real docs/console access
- * are available. Nothing outside this function depends on these exact field
- * names or URL shape — sendMessage's FabrixChatResult is the stable contract
- * the rest of the app relies on.
+ * The body/response shape is still an unverified best guess — only the URL
+ * and auth headers reflect the actual configured endpoint. See
+ * backend/docs/fabrixai-integration.md for the full write-up and exactly
+ * what to check once this has been exercised against the real service.
+ * Nothing outside this function depends on these exact field names or URL
+ * shape — sendMessage's FabrixChatResult is the stable contract the rest of
+ * the app relies on.
  */
 async function callFabrixAgent(
   config: FabrixSettings,
   request: FabrixChatRequest,
   signal: AbortSignal,
 ): Promise<FabrixCallResult | FabrixCallFailure> {
-  const url = `${config.baseUrl.replace(/\/+$/, "")}/api/v1/agents/${encodeURIComponent(request.agentId)}/chat`;
+  // config.baseUrl already points at the full chat endpoint for this
+  // deployment (a gateway in front of the real agent API, per the
+  // FABRIX_CLIENT_HEADER/FABRIX_OPENAPI_TOKEN headers below) — nothing is
+  // appended to it. request.agentId is currently unused here as a result;
+  // if this gateway ever needs to route to more than one agent through the
+  // same base URL, it'll need to go somewhere below (a header, most likely)
+  // — see fabrixai-integration.md.
+  const url = config.baseUrl.replace(/\/+$/, "");
   const body = JSON.stringify({
     conversationId: request.conversationId,
     messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
@@ -172,7 +183,9 @@ async function callFabrixAgent(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
+        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+        ...(config.clientHeader ? { "x-fabrix-client": config.clientHeader } : {}),
+        ...(config.openApiToken ? { "x-openapi-token": config.openApiToken } : {}),
       },
       body,
       signal,

@@ -902,6 +902,8 @@ const fabrixSettingsSchema = z.object({
   baseUrl: z.string().trim().min(1),
   agentId: z.string().trim().min(1),
   apiKey: z.string().optional(),
+  clientHeader: z.string().optional(),
+  openApiToken: z.string().optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -921,6 +923,8 @@ adminRouter.patch(
       baseUrl: input.baseUrl,
       agentId: input.agentId,
       apiKey: input.apiKey,
+      clientHeader: input.clientHeader,
+      openApiToken: input.openApiToken,
       enabled: input.enabled,
     });
     res.json(await getFabrixSettingsForDisplay());

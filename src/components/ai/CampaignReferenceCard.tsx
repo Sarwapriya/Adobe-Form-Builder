@@ -1,6 +1,7 @@
 import { Button, Chip, Paper, Stack, Typography } from "@mui/material";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { AICampaignReference } from "@formbuilder/shared";
+import { isAdminRole, useAuthStore } from "../../auth/authStore";
 
 const STATUS_COLOR: Record<string, "default" | "success" | "warning"> = {
   draft: "default",
@@ -17,11 +18,15 @@ const STATUS_COLOR: Record<string, "default" | "success" | "warning"> = {
  * useAiChatStore.getState().sendMessage, or trigger a CLONE_CAMPAIGN
  * proposal some other way — deliberately left open per the plan).
  *
- * `AICampaignReference` carries no "origin" (admin vs. ad-hoc) field, so
- * [View] infers which editor route to use from the *current* location
- * instead — the AI panel only ever mounts on one of the two editor routes
- * (see AppLayout.tsx's gating), so the current path is a reliable signal for
- * which tree a referenced form's editor lives under.
+ * [View] routes off the caller's own role plus `reference.origin`, not the
+ * current page — the AI panel is a master-page fixture reachable from any
+ * screen (see AppLayout.tsx), so a reference surfaced while browsing, say,
+ * Upload History still needs to land on the right editor. An admin always
+ * lands on FormBuilderEditorPage (it handles both origins); a subsidiary
+ * user lands on their own ad-hoc editor only for their own ad-hoc-origin
+ * forms, and on the translate/contribution page for admin-origin forms
+ * shared with their subsidiary (they can't open FormBuilderEditorPage at
+ * all — that route is admin-only).
  */
 export function CampaignReferenceCard({
   reference,
@@ -33,11 +38,16 @@ export function CampaignReferenceCard({
   onUseAsTemplate?: (formId: string) => void;
 }) {
   const navigate = useNavigate();
-  const location = useLocation();
+  const isAdmin = useAuthStore((s) => isAdminRole(s.user?.role));
 
   function handleView() {
-    const basePrefix = location.pathname.startsWith("/my-forms/adhoc") ? "/my-forms/adhoc" : "/admin/form-builder";
-    navigate(`${basePrefix}/${reference.formId}`);
+    if (isAdmin) {
+      navigate(`/admin/form-builder/${reference.formId}`);
+    } else if (reference.origin === "adhoc") {
+      navigate(`/my-forms/adhoc/${reference.formId}`);
+    } else {
+      navigate(`/my-forms/${reference.formId}`);
+    }
   }
 
   return (

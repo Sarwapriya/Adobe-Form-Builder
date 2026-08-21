@@ -164,7 +164,10 @@ CREATE TABLE EmailLogs (
 
 CREATE TABLE AdminSettings (
     [key]   NVARCHAR(50) PRIMARY KEY,
-    value   NVARCHAR(255) NOT NULL
+    -- MAX, not a fixed cap — a few settings (e.g. FABRIX_OPENAPI_TOKEN's
+    -- encrypted value) are large signed tokens. See migration
+    -- 1960000000000-WidenAdminSettingValue.
+    value   NVARCHAR(MAX) NOT NULL
 );
 
 -- The admin-managed picklist behind the upload form's "Project Code" dropdown.
