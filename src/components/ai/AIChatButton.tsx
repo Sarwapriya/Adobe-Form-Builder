@@ -1,8 +1,8 @@
 import { Avatar, AvatarGroup, Box, Tooltip, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
 import { useAiChatStore } from "../../store/aiChatStore";
+import { AiBotAvatar } from "./AiBotAvatar";
 
 /**
  * Floating widget bubble for the AI Assistant — shown whenever the panel is
@@ -56,9 +56,7 @@ export function AIChatButton() {
           <Avatar sx={{ bgcolor: "secondary.main" }}>
             <PersonIcon fontSize="small" />
           </Avatar>
-          <Avatar sx={{ bgcolor: "primary.main" }}>
-            <SmartToyIcon fontSize="small" />
-          </Avatar>
+          <AiBotAvatar size={30} />
         </AvatarGroup>
         <Typography variant="caption" fontWeight={700} sx={{ whiteSpace: "nowrap" }}>
           AI Assistant

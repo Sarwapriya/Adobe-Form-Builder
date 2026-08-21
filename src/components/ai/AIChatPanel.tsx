@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Box, Button, Divider, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import RemoveIcon from "@mui/icons-material/Remove";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { useAiChatStore } from "../../store/aiChatStore";
 import { AIChatMessage } from "./AIChatMessage";
 import { AIChatInput } from "./AIChatInput";
 import { AIActionCard } from "./AIActionCard";
 import { QuestionSuggestionCard } from "./QuestionSuggestionCard";
+import { AiBotAvatar } from "./AiBotAvatar";
 
 /**
  * The floating AI panel's content: header (title + minimize), a scrollable
@@ -52,7 +52,7 @@ export function AIChatPanel() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", width: "100%" }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 2, py: 1.5 }}>
-        <SmartToyIcon fontSize="small" color="primary" />
+        <AiBotAvatar size={26} />
         <Typography variant="subtitle1" fontWeight={700} sx={{ flexGrow: 1 }}>
           AI Assistant
         </Typography>
