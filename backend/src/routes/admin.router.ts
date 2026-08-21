@@ -54,6 +54,16 @@ import { getSmtpSettingsForDisplay, saveSmtpSettings } from "../services/smtpSet
 import { getFabrixSettingsForDisplay, saveFabrixSettings } from "../services/fabrixSettingsService";
 import { sendMessage as sendFabrixMessage } from "../services/fabrixAIService";
 import {
+  listFabrixModels,
+  createFabrixModel,
+  updateFabrixModel,
+  moveFabrixModel,
+  deleteFabrixModel,
+} from "../services/fabrixModelsService";
+import { getClaudeSettingsForDisplay, saveClaudeSettings } from "../services/claudeSettingsService";
+import { sendMessage as sendClaudeMessage } from "../services/claudeAIService";
+import { listClaudeModels } from "../services/claudeModelsService";
+import {
   generateQuestionMaster,
   generateQuestionMasterFromUploads,
   getReadiness as getQuestionMasterReadiness,
@@ -892,18 +902,18 @@ adminRouter.post(
   })
 );
 
-// DB-stored FabriXAI Agent-API connection config, admin-managed — mirrors the
-// SMTP settings routes immediately above (see fabrixSettingsService.ts for the
+// DB-stored connection config for the FabriX OpenAPI chat endpoint
+// (POST /openapi/chat/v1/messages), admin-managed — mirrors the SMTP
+// settings routes immediately above (see fabrixSettingsService.ts for the
 // AdminSettings keys used, and fabrixAIService.ts's own doc comment for the
-// wire contract these settings feed). The real API key is write-only from the
-// browser's perspective: GET never returns it, only whether one is set
-// (hasApiKey).
+// confirmed wire contract these settings feed). The two secrets
+// (clientHeader/openApiToken) are write-only from the browser's
+// perspective: GET never returns them, only whether one is set.
 const fabrixSettingsSchema = z.object({
   baseUrl: z.string().trim().min(1),
-  agentId: z.string().trim().min(1),
-  apiKey: z.string().optional(),
   clientHeader: z.string().optional(),
   openApiToken: z.string().optional(),
+  userEmail: z.string().trim().optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -921,10 +931,9 @@ adminRouter.patch(
     const input = req.body as z.infer<typeof fabrixSettingsSchema>;
     await saveFabrixSettings({
       baseUrl: input.baseUrl,
-      agentId: input.agentId,
-      apiKey: input.apiKey,
       clientHeader: input.clientHeader,
       openApiToken: input.openApiToken,
+      userEmail: input.userEmail,
       enabled: input.enabled,
     });
     res.json(await getFabrixSettingsForDisplay());
@@ -933,21 +942,155 @@ adminRouter.patch(
 
 // Sends a trivial prompt through FabriXAI using whatever settings are
 // currently saved — the FabriXAI equivalent of the SMTP "test email" button
-// above: immediate confirmation of whether the adapter's best-guess wire
-// contract (see fabrixAIService.ts's callFabrixAgent) actually round-trips
-// against the real service, instead of only finding out mid-conversation.
+// above: immediate confirmation of whether the confirmed wire contract (see
+// fabrixAIService.ts's callFabrixAgent) actually round-trips against the
+// real service, instead of only finding out mid-conversation.
 adminRouter.post(
   "/fabrix-settings/test",
   asyncHandler(async (_req, res) => {
     const settings = await getFabrixSettingsForDisplay();
-    if (!settings.baseUrl || !settings.agentId) {
-      res.status(400).json({ ok: false, error: "FabriXAI base URL and agent id must be configured first" });
+    if (!settings.baseUrl || settings.enabledModelCount === 0) {
+      res.status(400).json({ ok: false, error: "FabriXAI base URL and at least one enabled model must be configured first" });
       return;
     }
     const result = await sendFabrixMessage({
-      agentId: settings.agentId,
       messages: [{ role: "user", content: "Reply with the single word OK." }],
     });
+    if (!result.ok) {
+      res.json({ ok: false, error: result.error });
+      return;
+    }
+    res.json({ ok: true });
+  })
+);
+
+// The admin-managed FabriX LLM catalog (Configuration > AI Assistant >
+// Models) — every *enabled* row is sent together in the chat request's
+// modelIds array (see fabrixSettingsService.ts/fabrixAIService.ts), letting
+// FabriX route around/fall back past a model that's unavailable or
+// token/rate-limited rather than this app needing its own retry logic.
+adminRouter.get(
+  "/fabrix-models",
+  asyncHandler(async (_req, res) => {
+    res.json(await listFabrixModels());
+  })
+);
+
+const createFabrixModelSchema = z.object({
+  name: z.string().trim().min(1),
+  modelId: z.string().trim().min(1),
+});
+
+adminRouter.post(
+  "/fabrix-models",
+  validateBody(createFabrixModelSchema),
+  asyncHandler(async (req, res) => {
+    const input = req.body as z.infer<typeof createFabrixModelSchema>;
+    const created = await createFabrixModel(input);
+    res.status(201).json(created);
+  })
+);
+
+const updateFabrixModelSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  modelId: z.string().trim().min(1).optional(),
+  isEnabled: z.boolean().optional(),
+});
+
+adminRouter.patch(
+  "/fabrix-models/:id",
+  validateBody(updateFabrixModelSchema),
+  asyncHandler(async (req, res) => {
+    const updated = await updateFabrixModel(req.params.id, req.body as z.infer<typeof updateFabrixModelSchema>);
+    if (!updated) {
+      res.status(404).json({ error: "fabrix model not found" });
+      return;
+    }
+    res.json(updated);
+  })
+);
+
+const moveFabrixModelSchema = z.object({
+  direction: z.enum(["up", "down"]),
+});
+
+adminRouter.post(
+  "/fabrix-models/:id/move",
+  validateBody(moveFabrixModelSchema),
+  asyncHandler(async (req, res) => {
+    const { direction } = req.body as z.infer<typeof moveFabrixModelSchema>;
+    const moved = await moveFabrixModel(req.params.id, direction);
+    if (!moved) {
+      res.status(404).json({ error: "fabrix model not found" });
+      return;
+    }
+    res.json(moved);
+  })
+);
+
+adminRouter.delete(
+  "/fabrix-models/:id",
+  asyncHandler(async (req, res) => {
+    const deleted = await deleteFabrixModel(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: "fabrix model not found" });
+      return;
+    }
+    res.status(204).send();
+  })
+);
+
+// DB-stored connection config for the Anthropic Claude Messages API,
+// admin-managed — the automatic fallback provider used only when FabriX
+// can't be reached (see aiProviderService.ts). Simpler surface than
+// FabriX's: one API key, one model string, no separate headers/model-array.
+// The key is write-only from the browser's perspective: GET never returns
+// it, only whether one is set.
+const claudeSettingsSchema = z.object({
+  model: z.string().trim().min(1),
+  apiKey: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
+
+adminRouter.get(
+  "/claude-settings",
+  asyncHandler(async (_req, res) => {
+    res.json(await getClaudeSettingsForDisplay());
+  })
+);
+
+// Read-only reference catalog of known Claude model ids, for the Model
+// field's picklist in the admin UI (see claudeModelsService.ts).
+adminRouter.get(
+  "/claude-models",
+  asyncHandler(async (_req, res) => {
+    res.json(await listClaudeModels());
+  })
+);
+
+adminRouter.patch(
+  "/claude-settings",
+  validateBody(claudeSettingsSchema),
+  asyncHandler(async (req, res) => {
+    const input = req.body as z.infer<typeof claudeSettingsSchema>;
+    await saveClaudeSettings({ model: input.model, apiKey: input.apiKey, enabled: input.enabled });
+    res.json(await getClaudeSettingsForDisplay());
+  })
+);
+
+// Sends a trivial prompt through Claude directly (not via aiProviderService's
+// dispatch) using whatever Claude settings are currently saved — lets an
+// admin verify the Claude connection works even while FabriX is the active
+// provider, mirroring the FabriX "Send test message" button above.
+adminRouter.post(
+  "/claude-settings/test",
+  asyncHandler(async (_req, res) => {
+    const settings = await getClaudeSettingsForDisplay();
+    if (!settings.hasApiKey) {
+      res.status(400).json({ ok: false, error: "A Claude API key must be configured first" });
+      return;
+    }
+    const result = await sendClaudeMessage({ messages: [{ role: "user", content: "Reply with the single word OK." }] });
     if (!result.ok) {
       res.json({ ok: false, error: result.error });
       return;

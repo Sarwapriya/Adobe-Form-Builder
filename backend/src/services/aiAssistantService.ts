@@ -29,22 +29,23 @@ import type { AccessTokenPayload } from "./authService";
 import { ConflictError, NotFoundError, ValidationError } from "../utils/errors";
 import * as aiCampaignTools from "./aiCampaignTools";
 import { buildSystemPrompt } from "./aiSystemPrompt";
-import { getFabrixSettings } from "./fabrixSettingsService";
-import { sendMessage as sendFabrixMessage, type FabrixChatTurn } from "./fabrixAIService";
+import { sendMessage as sendAiMessage, type AiChatTurn } from "./aiProviderService";
 import { createForm, getFormDetail } from "./formBuilderService";
 import { getAccessibleFormDetail } from "./formAccessService";
 
 /**
- * The orchestrator: the one place in the backend that talks to FabriXAI and
- * decides what to do with its reply (see the plan's §6). Every route in
- * ai.router.ts is a thin wrapper over the functions here.
+ * The orchestrator: the one place in the backend that talks to the AI
+ * provider (FabriX or Claude, whichever is currently active — see
+ * aiProviderService.ts) and decides what to do with its reply (see the
+ * plan's §6). Every route in ai.router.ts is a thin wrapper over the
+ * functions here. This file never imports a specific provider's service
+ * directly — sendAiMessage dispatches to whichever one is configured active,
+ * so nothing here needs to know or care which provider actually ran.
  *
  * Conversation history is always resent in full on every call (bounded to
- * the last ~20 messages) rather than relying on FabriXAI's own
- * conversation-state — the exact shape of any provider-side statefulness is
- * unconfirmed (see fabrixAIService.ts), so this deliberately stays
- * stateless from FabriXAI's point of view: this backend is the only source
- * of truth for what a conversation contains.
+ * the last ~20 messages) rather than relying on any provider's own
+ * conversation-state — this backend is the only source of truth for what a
+ * conversation contains, regardless of which provider is active.
  */
 
 const HISTORY_LIMIT = 20;
@@ -133,8 +134,8 @@ function extractToolCall(replyText: string): { call: AIToolCall; remainderText: 
   return { call: parsed.data, remainderText: replyText.replace(extracted.matchedBlock, "").trim() };
 }
 
-function buildBaseTurns(campaignContextJson: string | null, historyRows: AIConversationMessage[]): FabrixChatTurn[] {
-  const turns: FabrixChatTurn[] = [{ role: "system", content: buildSystemPrompt() }];
+function buildBaseTurns(campaignContextJson: string | null, historyRows: AIConversationMessage[]): AiChatTurn[] {
+  const turns: AiChatTurn[] = [{ role: "system", content: buildSystemPrompt() }];
   if (campaignContextJson) {
     turns.push({ role: "system", content: section("CAMPAIGN DATA", campaignContextJson) });
   }
@@ -218,14 +219,13 @@ function buildSuggestedQuestion(
   };
 }
 
-/** Re-prompts FabriXAI (a fresh, isolated exchange — not appended to the
+/** Re-prompts the active AI provider (a fresh, isolated exchange — not appended to the
  * visible conversation transcript) asking it to generate `args.count`
  * candidate questions on `args.topic`, retrying once if the reply doesn't
  * parse/validate. Returns the questions that validated successfully against
  * ADD_QUESTION's own zod schema (via aiToolCallSchema) — never a raw,
  * unvalidated model response. */
 async function generateSuggestedQuestions(
-  agentId: string,
   args: SuggestQuestionsArgs,
   defaultLocale: LocaleCode,
 ): Promise<QuestionDefinition[]> {
@@ -239,8 +239,7 @@ async function generateSuggestedQuestions(
   );
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await sendFabrixMessage({
-      agentId,
+    const result = await sendAiMessage({
       messages: [{ role: "system", content: buildSystemPrompt() }, { role: "user", content: instruction }],
     });
     if (!result.ok) continue;
@@ -278,7 +277,6 @@ interface TranslationUpdate {
  * merged into the existing headingByLocale/answers[].textByLocale maps so no
  * other locale's text is lost. */
 async function generateTranslations(
-  agentId: string,
   args: TranslateQuestionsArgs,
   questions: QuestionDefinition[],
   defaultLocale: LocaleCode,
@@ -300,8 +298,7 @@ async function generateTranslations(
   );
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await sendFabrixMessage({
-      agentId,
+    const result = await sendAiMessage({
       messages: [{ role: "system", content: buildSystemPrompt() }, { role: "user", content: instruction }],
     });
     if (!result.ok) continue;
@@ -335,12 +332,6 @@ export async function sendChatMessage(auth: AccessTokenPayload, request: AIChatR
   const conversation = await loadOrCreateConversation(auth, request);
   await persistMessage(conversation.id, "user", request.message);
 
-  const settings = await getFabrixSettings();
-  if (!settings || !settings.enabled) {
-    await persistMessage(conversation.id, "assistant", FALLBACK_MESSAGE);
-    return { conversationId: conversation.id, message: FALLBACK_MESSAGE, actions: [], references: [] };
-  }
-
   try {
     const historyRows = await AppDataSource.getRepository(AIConversationMessage).find({
       where: { conversationId: conversation.id },
@@ -361,12 +352,13 @@ export async function sendChatMessage(auth: AccessTokenPayload, request: AIChatR
     }
 
     const baseTurns = buildBaseTurns(campaignContextJson, priorHistory);
-    const userTurn: FabrixChatTurn = { role: "user", content: section("USER MESSAGE", request.message) };
-    const initial = await sendFabrixMessage({ agentId: settings.agentId, messages: [...baseTurns, userTurn] });
+    const userTurn: AiChatTurn = { role: "user", content: section("USER MESSAGE", request.message) };
+    const initial = await sendAiMessage({ messages: [...baseTurns, userTurn] });
 
     if (!initial.ok) {
-      await persistMessage(conversation.id, "assistant", FALLBACK_MESSAGE);
-      return { conversationId: conversation.id, message: FALLBACK_MESSAGE, actions: [], references: [] };
+      console.error("[aiAssistantService] AI provider call failed:", initial.error);
+      await persistMessage(conversation.id, "assistant", initial.error);
+      return { conversationId: conversation.id, message: initial.error, actions: [], references: [] };
     }
 
     const toolCall = extractToolCall(initial.replyText);
@@ -386,10 +378,10 @@ export async function sendChatMessage(auth: AccessTokenPayload, request: AIChatR
     const { call, remainderText } = toolCall;
 
     if (!isMutatingAiTool(call.tool)) {
-      return await handleReadOnlyTool(conversation, ctx, settings.agentId, baseTurns, userTurn, initial.replyText, call);
+      return await handleReadOnlyTool(conversation, ctx, baseTurns, userTurn, initial.replyText, call);
     }
 
-    return await handleMutatingTool(conversation, ctx, auth, settings.agentId, formId, call, remainderText);
+    return await handleMutatingTool(conversation, ctx, auth, formId, call, remainderText);
   } catch (err) {
     console.error("[aiAssistantService] sendChatMessage failed", err);
     await persistMessage(conversation.id, "assistant", FALLBACK_MESSAGE);
@@ -400,22 +392,21 @@ export async function sendChatMessage(auth: AccessTokenPayload, request: AIChatR
 async function handleReadOnlyTool(
   conversation: AIConversation,
   ctx: aiCampaignTools.AiToolCallerContext,
-  agentId: string,
-  baseTurns: FabrixChatTurn[],
-  userTurn: FabrixChatTurn,
+  baseTurns: AiChatTurn[],
+  userTurn: AiChatTurn,
   toolCallReplyText: string,
   call: AIToolCall,
 ): Promise<AIChatResponse> {
   const toolResult = await executeReadOnlyTool(ctx, call);
   await persistMessage(conversation.id, "tool", JSON.stringify({ tool: call.tool, args: call.args, result: toolResult }));
 
-  const followUpTurns: FabrixChatTurn[] = [
+  const followUpTurns: AiChatTurn[] = [
     ...baseTurns,
     userTurn,
     { role: "assistant", content: toolCallReplyText },
     { role: "tool", content: section("TOOL RESULTS", JSON.stringify(toolResult)) },
   ];
-  const final = await sendFabrixMessage({ agentId, messages: followUpTurns });
+  const final = await sendAiMessage({ messages: followUpTurns });
 
   const message = final.ok ? final.replyText : FALLBACK_MESSAGE;
   await persistMessage(conversation.id, "assistant", message, final.ok ? { tokenUsage: final.tokenUsage, model: final.model, requestId: final.requestId } : undefined);
@@ -453,7 +444,6 @@ async function handleMutatingTool(
   conversation: AIConversation,
   ctx: aiCampaignTools.AiToolCallerContext,
   auth: AccessTokenPayload,
-  agentId: string,
   formId: string | null,
   call: AIToolCall,
   remainderText: string,
@@ -461,7 +451,7 @@ async function handleMutatingTool(
   if (call.tool === "SUGGEST_QUESTIONS") {
     const campaign = formId ? await aiCampaignTools.getCampaign(ctx, { formId }) : null;
     const defaultLocale = campaign?.defaultLocale || "en_GB";
-    const questions = await generateSuggestedQuestions(agentId, call.args, defaultLocale);
+    const questions = await generateSuggestedQuestions(call.args, defaultLocale);
     if (questions.length === 0) {
       const message = "I wasn't able to generate valid question suggestions right now — please try again.";
       await persistMessage(conversation.id, "assistant", message);
@@ -485,7 +475,7 @@ async function handleMutatingTool(
       await persistMessage(conversation.id, "assistant", message);
       return { conversationId: conversation.id, message, actions: [], references: [] };
     }
-    const updates = await generateTranslations(agentId, call.args, content.definition.questions, content.definition.meta.defaultLocale);
+    const updates = await generateTranslations(call.args, content.definition.questions, content.definition.meta.defaultLocale);
     if (updates.length === 0) {
       const message = "I wasn't able to generate valid translations right now — please try again.";
       await persistMessage(conversation.id, "assistant", message);

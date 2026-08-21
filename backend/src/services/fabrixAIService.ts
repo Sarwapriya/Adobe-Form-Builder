@@ -21,7 +21,6 @@ export interface FabrixChatTurn {
 }
 
 export interface FabrixChatRequest {
-  agentId: string;
   conversationId?: string;
   messages: FabrixChatTurn[];
 }
@@ -62,8 +61,8 @@ function isRetryableStatus(status: number): boolean {
  * network/provider failure is normalized into a value instead of an
  * exception.
  *
- * Logs `{agentId, conversationId, durationMs, status}` on completion —
- * deliberately never the API key or the Authorization header value, matching
+ * Logs `{modelIds, conversationId, durationMs, status}` on completion —
+ * deliberately never the client-header or openapi-token values, matching
  * the logging discipline emailService.ts already follows for SMTP creds.
  */
 export async function sendMessage(request: FabrixChatRequest): Promise<FabrixChatResult> {
@@ -74,8 +73,8 @@ export async function sendMessage(request: FabrixChatRequest): Promise<FabrixCha
   if (!settings.enabled) {
     return { ok: false, error: "FabriXAI is disabled" };
   }
-  if (!settings.apiKey && !settings.openApiToken) {
-    return { ok: false, error: "FabriXAI API key or openapi token is not configured" };
+  if (!settings.clientHeader || !settings.openApiToken) {
+    return { ok: false, error: "FabriXAI client header or openapi token is not configured" };
   }
 
   const startedAt = Date.now();
@@ -90,7 +89,7 @@ export async function sendMessage(request: FabrixChatRequest): Promise<FabrixCha
 
       if (result.ok) {
         console.log(
-          `[fabrixAIService] agentId=${settings.agentId} conversationId=${request.conversationId ?? "(new)"} durationMs=${Date.now() - startedAt} status=ok`,
+          `[fabrixAIService] modelIds=${settings.modelIds.join(",")} conversationId=${request.conversationId ?? "(new)"} durationMs=${Date.now() - startedAt} status=ok`,
         );
         return result;
       }
@@ -98,7 +97,7 @@ export async function sendMessage(request: FabrixChatRequest): Promise<FabrixCha
       lastError = result.error;
       if (!result.retryable || attempt === settings.maxRetries) {
         console.error(
-          `[fabrixAIService] agentId=${settings.agentId} conversationId=${request.conversationId ?? "(new)"} durationMs=${Date.now() - startedAt} status=error error=${lastError}`,
+          `[fabrixAIService] modelIds=${settings.modelIds.join(",")} conversationId=${request.conversationId ?? "(new)"} durationMs=${Date.now() - startedAt} status=error error=${lastError}`,
         );
         return { ok: false, error: lastError };
       }
@@ -108,7 +107,7 @@ export async function sendMessage(request: FabrixChatRequest): Promise<FabrixCha
       lastError = err instanceof Error ? err.message : String(err);
       if (!RETRYABLE_NETWORK_ERROR_NAMES.has(name) || attempt === settings.maxRetries) {
         console.error(
-          `[fabrixAIService] agentId=${settings.agentId} conversationId=${request.conversationId ?? "(new)"} durationMs=${Date.now() - startedAt} status=error error=${lastError}`,
+          `[fabrixAIService] modelIds=${settings.modelIds.join(",")} conversationId=${request.conversationId ?? "(new)"} durationMs=${Date.now() - startedAt} status=error error=${lastError}`,
         );
         return { ok: false, error: lastError };
       }
@@ -136,46 +135,74 @@ interface FabrixCallFailure {
 }
 
 /**
- * *** THE ONE ISOLATED WIRE-CONTRACT SEAM — NEEDS VERIFICATION ***
+ * The real FabriX OpenAPI chat contract (confirmed against the manual —
+ * https://nsds.fabrix-s.samsungsds.com/public/contents-web/manual/fabrix_openAPI_manual/en/index.html,
+ * "POST /openapi/chat/v1/messages" section):
  *
- * Points at the configured FabriXAI trial endpoint (a gateway in front of the
- * real agent API, per FABRIX_API_BASE_URL — the full chat URL, nothing
- * appended):
- *
- *   POST {baseUrl}
+ *   POST {baseUrl}/openapi/chat/v1/messages
  *   Headers: Content-Type: application/json,
- *            Authorization: Bearer <apiKey>            (if configured)
- *            x-fabrix-client: <FABRIX_CLIENT_HEADER>     (if configured)
- *            x-openapi-token: <FABRIX_OPENAPI_TOKEN>     (if configured)
- *   Body:    { conversationId?: string, messages: [{ role, content }] }
- *   Response: { conversationId: string, reply: string,
- *               usage?: { totalTokens: number }, model?: string, requestId?: string }
+ *            x-fabrix-client: <FABRIX_CLIENT_HEADER>   (required)
+ *            x-openapi-token: <FABRIX_OPENAPI_TOKEN>   (required — the docs'
+ *              own example value is "Bearer eyJXXX", i.e. the token value
+ *              itself is expected to already carry the "Bearer " prefix as
+ *              issued; we defensively add it here if it's missing rather
+ *              than assuming the stored value is formatted correctly)
+ *            x-generative-ai-user-email: <FABRIX_USER_EMAIL>  (optional —
+ *              portal user tracking, omitted entirely when not configured)
+ *   Body:    { modelIds: string[], contents: string[], isStream: false,
+ *              systemPrompt?: string }
+ *            modelIds carries every currently-*enabled* model from the
+ *            admin-managed FabrixModels catalog (Configuration > AI
+ *            Assistant > Models — see fabrixModelsService.ts), in priority
+ *            order — listing more than one is what lets FabriX itself route
+ *            around/swap past a model that's unavailable or token/rate-
+ *            limited, rather than this app needing its own retry-with-
+ *            different-model logic.
+ *            `contents` is a flat, role-less array of conversation turns in
+ *            order (not `{role, content}` objects) — our own FabrixChatTurn
+ *            role tagging is collapsed here: every "system" turn's content
+ *            is merged into `systemPrompt`, everything else (user/assistant/
+ *            tool) becomes one more entry in `contents`, in order. This is
+ *            safe because every turn this app builds is already internally
+ *            labeled with a section header (see aiSystemPrompt.ts / the
+ *            "CAMPAIGN DATA"/"TOOL RESULTS"/"USER MESSAGE" markers in
+ *            aiAssistantService.ts) — the labeling the model relies on lives
+ *            in the text itself, not in the (unsupported) role field.
+ *   Response: { content: string, status: "SUCCESS"|"ERROR"|"FILTER_INVALID",
+ *               responseCode: string, modelType?: string,
+ *               filterBlockReason?: { message?: string } }
+ *            Critically, a failed request can still come back HTTP 200 with
+ *            status !== "SUCCESS" — response.ok alone doesn't mean success.
  *
- * The body/response shape is still an unverified best guess — only the URL
- * and auth headers reflect the actual configured endpoint. See
- * backend/docs/fabrixai-integration.md for the full write-up and exactly
- * what to check once this has been exercised against the real service.
- * Nothing outside this function depends on these exact field names or URL
- * shape — sendMessage's FabrixChatResult is the stable contract the rest of
- * the app relies on.
+ * Not part of the real contract at all: `conversationId` (the API has no
+ * such field — full history is resent as `contents` every turn, which
+ * aiAssistantService.ts already does) and true SSE streaming (we always
+ * send `isStream: false` and parse one JSON response).
  */
 async function callFabrixAgent(
   config: FabrixSettings,
   request: FabrixChatRequest,
   signal: AbortSignal,
 ): Promise<FabrixCallResult | FabrixCallFailure> {
-  // config.baseUrl already points at the full chat endpoint for this
-  // deployment (a gateway in front of the real agent API, per the
-  // FABRIX_CLIENT_HEADER/FABRIX_OPENAPI_TOKEN headers below) — nothing is
-  // appended to it. request.agentId is currently unused here as a result;
-  // if this gateway ever needs to route to more than one agent through the
-  // same base URL, it'll need to go somewhere below (a header, most likely)
-  // — see fabrixai-integration.md.
-  const url = config.baseUrl.replace(/\/+$/, "");
+  const baseUrl = config.baseUrl.replace(/\/+$/, "");
+  const url = `${baseUrl}/openapi/chat/v1/messages`;
+
+  const systemPrompt = request.messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  const contents = request.messages.filter((m) => m.role !== "system").map((m) => m.content);
+
   const body = JSON.stringify({
-    conversationId: request.conversationId,
-    messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
+    modelIds: config.modelIds,
+    contents,
+    isStream: false,
+    ...(systemPrompt ? { systemPrompt } : {}),
   });
+
+  const openApiTokenHeader = config.openApiToken.startsWith("Bearer ")
+    ? config.openApiToken
+    : `Bearer ${config.openApiToken}`;
 
   let response: Response;
   try {
@@ -183,9 +210,9 @@ async function callFabrixAgent(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
-        ...(config.clientHeader ? { "x-fabrix-client": config.clientHeader } : {}),
-        ...(config.openApiToken ? { "x-openapi-token": config.openApiToken } : {}),
+        "x-fabrix-client": config.clientHeader,
+        "x-openapi-token": openApiTokenHeader,
+        ...(config.userEmail ? { "x-generative-ai-user-email": config.userEmail } : {}),
       },
       body,
       signal,
@@ -209,11 +236,11 @@ async function callFabrixAgent(
   }
 
   let payload: {
-    conversationId?: string;
-    reply?: string;
-    usage?: { totalTokens?: number };
-    model?: string;
-    requestId?: string;
+    content?: string;
+    status?: string;
+    responseCode?: string;
+    modelType?: string;
+    filterBlockReason?: { message?: string | null } | null;
   };
   try {
     payload = await response.json();
@@ -221,16 +248,18 @@ async function callFabrixAgent(
     return { ok: false, error: "FabriXAI returned a non-JSON response", retryable: false };
   }
 
-  if (typeof payload.reply !== "string") {
-    return { ok: false, error: "FabriXAI response did not include a reply", retryable: false };
+  if (payload.status === "ERROR" || payload.status === "FILTER_INVALID") {
+    const detail = payload.filterBlockReason?.message || payload.status;
+    return { ok: false, error: `FabriXAI returned an error: ${detail}`, retryable: false };
+  }
+
+  if (typeof payload.content !== "string") {
+    return { ok: false, error: "FabriXAI response did not include content", retryable: false };
   }
 
   return {
     ok: true,
-    replyText: payload.reply,
-    providerConversationId: payload.conversationId,
-    tokenUsage: payload.usage?.totalTokens,
-    model: payload.model,
-    requestId: payload.requestId,
+    replyText: payload.content,
+    model: payload.modelType,
   };
 }

@@ -366,29 +366,33 @@ export function sendSmtpTestEmail(): Promise<{ ok: true; sentTo: string }> {
   return apiClient.post<{ ok: true; sentTo: string }>("/api/v1/admin/smtp-settings/test");
 }
 
-/** DB-stored FabriXAI Agent connection settings (see backend's
- * fabrixSettingsService.ts, mirroring smtpSettingsService.ts's own shape) —
- * `hasApiKey` reflects whether one is currently saved; the real key is never
- * sent to the browser. */
+/** DB-stored connection settings for the FabriX OpenAPI chat endpoint
+ * (POST /openapi/chat/v1/messages — see backend's fabrixSettingsService.ts,
+ * mirroring smtpSettingsService.ts's own shape). `hasClientHeader`/
+ * `hasOpenApiToken` reflect whether each secret is currently saved; the real
+ * values are never sent to the browser. Which model(s) are actually used
+ * lives in the separate FabrixModel catalog below (Configuration > AI
+ * Assistant > Models), not here — `enabledModelCount` just reflects it. */
 export interface FabrixSettings {
   baseUrl: string;
-  agentId: string;
   enabled: boolean;
-  hasApiKey: boolean;
-  /** Whether the extra x-fabrix-client / x-openapi-token headers some
-   * FabriXAI deployments require are currently set — see this gateway's own
-   * fabrixAIService.ts. Neither value is ever sent to the browser. */
+  /** Optional `x-generative-ai-user-email` header value — not a secret. */
+  userEmail: string;
+  /** Whether the required x-fabrix-client / x-openapi-token auth headers are
+   * currently set. Neither value is ever sent to the browser. */
   hasClientHeader: boolean;
   hasOpenApiToken: boolean;
+  /** How many models are currently enabled in the FabrixModel catalog. Zero
+   * means the assistant is unusable even if everything else here is set. */
+  enabledModelCount: number;
 }
 
 export interface SaveFabrixSettingsInput {
   baseUrl: string;
-  agentId: string;
   enabled: boolean;
+  userEmail?: string;
   /** Omit or leave blank to keep whatever value is already saved, for each
-   * of these three secrets. */
-  apiKey?: string;
+   * of these two secrets. */
   clientHeader?: string;
   openApiToken?: string;
 }
@@ -403,4 +407,86 @@ export function saveFabrixSettings(input: SaveFabrixSettingsInput): Promise<Fabr
 
 export function sendFabrixTestMessage(): Promise<{ ok: boolean; error?: string }> {
   return apiClient.post<{ ok: boolean; error?: string }>("/api/v1/admin/fabrix-settings/test");
+}
+
+/** One selectable FabriX LLM — see backend's FabrixModel entity. Every
+ * enabled row (sortOrder ascending) is sent together as the chat request's
+ * modelIds array, so FabriX can route around/fall back past one that's
+ * unavailable or token/rate-limited. */
+export interface FabrixModel {
+  id: string;
+  name: string;
+  modelId: string;
+  isEnabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export function listFabrixModels(): Promise<FabrixModel[]> {
+  return apiClient.get<FabrixModel[]>("/api/v1/admin/fabrix-models");
+}
+
+export function createFabrixModel(name: string, modelId: string): Promise<FabrixModel> {
+  return apiClient.post<FabrixModel>("/api/v1/admin/fabrix-models", { name, modelId });
+}
+
+export function updateFabrixModel(
+  id: string,
+  input: { name?: string; modelId?: string; isEnabled?: boolean },
+): Promise<FabrixModel> {
+  return apiClient.patch<FabrixModel>(`/api/v1/admin/fabrix-models/${id}`, input);
+}
+
+export function moveFabrixModel(id: string, direction: "up" | "down"): Promise<FabrixModel> {
+  return apiClient.post<FabrixModel>(`/api/v1/admin/fabrix-models/${id}/move`, { direction });
+}
+
+export function deleteFabrixModel(id: string): Promise<void> {
+  return apiClient.delete(`/api/v1/admin/fabrix-models/${id}`);
+}
+
+/** DB-stored connection settings for the Anthropic Claude Messages API (see
+ * backend's claudeSettingsService.ts) — used automatically as a fallback
+ * whenever FabriX can't be reached (see backend's aiProviderService.ts).
+ * Much simpler surface than FabriX: one API key, one model string, no
+ * separate headers. */
+export interface ClaudeSettings {
+  model: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+}
+
+export interface SaveClaudeSettingsInput {
+  model: string;
+  enabled: boolean;
+  /** Omit or leave blank to keep whatever key is already saved. */
+  apiKey?: string;
+}
+
+export function getClaudeSettings(): Promise<ClaudeSettings> {
+  return apiClient.get<ClaudeSettings>("/api/v1/admin/claude-settings");
+}
+
+export function saveClaudeSettings(input: SaveClaudeSettingsInput): Promise<ClaudeSettings> {
+  return apiClient.patch<ClaudeSettings>("/api/v1/admin/claude-settings", input);
+}
+
+export function sendClaudeTestMessage(): Promise<{ ok: boolean; error?: string }> {
+  return apiClient.post<{ ok: boolean; error?: string }>("/api/v1/admin/claude-settings/test");
+}
+
+/** Read-only reference catalog of known Claude model ids (see backend's
+ * ClaudeModel entity) — feeds the Model field's picklist in
+ * ClaudeSettingsManager. Not admin-editable the way FabrixModel is: these
+ * are Anthropic's own official model ids, not tenant-specific values. */
+export interface ClaudeModel {
+  id: string;
+  name: string;
+  modelId: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export function listClaudeModels(): Promise<ClaudeModel[]> {
+  return apiClient.get<ClaudeModel[]>("/api/v1/admin/claude-models");
 }

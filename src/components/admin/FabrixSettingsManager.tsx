@@ -8,16 +8,19 @@ import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
 
 /**
- * Admin-only FabriXAI Agent connection settings — Base URL / Agent ID /
- * Enabled switch, plus three secrets (API Key, Client Header, OpenAPI
- * Token — all DB-stored encrypted server-side, see backend
- * fabrixSettingsService.ts), used by the AI copilot chat (`/api/v1/ai/chat`)
- * in preference to the server's FABRIX_* environment variables when set
- * here. Mirrors SmtpSettingsManager.tsx's exact shape: every secret field is
+ * Admin-only connection settings for the FabriX OpenAPI chat endpoint
+ * (POST {baseUrl}/openapi/chat/v1/messages) backing the Form Builder's AI
+ * copilot chat panel — Base URL / Enabled switch / optional user email, plus
+ * the two required secrets (Client Header, OpenAPI Token — DB-stored
+ * encrypted server-side, see backend fabrixSettingsService.ts), used in
+ * preference to the server's FABRIX_* environment variables when set here.
+ * Which model(s) are actually used lives in the separate FabrixModelManager
+ * ("Models" tab) — this form only shows how many are currently enabled.
+ * Mirrors SmtpSettingsManager.tsx's exact shape: every secret field is
  * write-only — the server never sends the real value back, only whether one
- * is currently set (`hasApiKey`/`hasClientHeader`/`hasOpenApiToken`), so
- * this form always starts blank and only overwrites a stored secret if the
- * admin actually types a new one.
+ * is currently set (`hasClientHeader`/`hasOpenApiToken`), so this form
+ * always starts blank and only overwrites a stored secret if the admin
+ * actually types a new one.
  */
 export function FabrixSettingsManager() {
   const [settings, setSettings] = useState<FabrixSettings | null>(null);
@@ -29,8 +32,7 @@ export function FabrixSettingsManager() {
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const [baseUrl, setBaseUrl] = useState("");
-  const [agentId, setAgentId] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const [clientHeader, setClientHeader] = useState("");
   const [openApiToken, setOpenApiToken] = useState("");
   const [enabled, setEnabled] = useState(true);
@@ -42,9 +44,8 @@ export function FabrixSettingsManager() {
       const result = await getFabrixSettings();
       setSettings(result);
       setBaseUrl(result.baseUrl);
-      setAgentId(result.agentId);
+      setUserEmail(result.userEmail);
       setEnabled(result.enabled);
-      setApiKey("");
       setClientHeader("");
       setOpenApiToken("");
     } catch (err) {
@@ -67,9 +68,8 @@ export function FabrixSettingsManager() {
     try {
       await saveFabrixSettings({
         baseUrl: baseUrl.trim(),
-        agentId: agentId.trim(),
         enabled,
-        apiKey: apiKey.trim() || undefined,
+        userEmail: userEmail.trim() || undefined,
         clientHeader: clientHeader.trim() || undefined,
         openApiToken: openApiToken.trim() || undefined,
       });
@@ -103,8 +103,10 @@ export function FabrixSettingsManager() {
     <Paper sx={{ p: 2, mb: 2 }}>
       <SectionHeader icon={<SmartToyIcon fontSize="small" color="primary" />} title="AI Assistant (FabriXAI) Settings" />
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
-        Connection details for the FabriXAI Agent API backing the Form Builder's AI copilot chat panel. Overrides the
-        server's FABRIX_* environment variables when set here.
+        Connection details for the FabriX OpenAPI chat endpoint (POST /openapi/chat/v1/messages) backing the Form
+        Builder's AI copilot chat panel. This is the primary provider — always tried first; "Other AI Providers"
+        below is used automatically only if this can't be reached. Overrides the server's FABRIX_* environment
+        variables when set here. Pick which model(s) to use on the "Models" tab.
       </Typography>
 
       {error && !loading && (
@@ -122,6 +124,11 @@ export function FabrixSettingsManager() {
           {testResult.message}
         </Alert>
       )}
+      {!loading && settings && settings.enabledModelCount === 0 && (
+        <Alert severity="warning" sx={{ mb: 1.5 }}>
+          No models are enabled yet — the assistant can't respond until at least one is turned on in the "Models" tab.
+        </Alert>
+      )}
 
       {loading ? (
         <LoadingState />
@@ -134,38 +141,29 @@ export function FabrixSettingsManager() {
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               required
+              helperText="Calls POST {this}/openapi/chat/v1/messages"
               sx={{ minWidth: 320 }}
             />
             <TextField
-              label="Agent ID"
+              label="User Email (optional)"
               size="small"
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-              required
-              sx={{ minWidth: 240 }}
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              helperText="Sent as x-generative-ai-user-email, for portal tracking"
+              sx={{ minWidth: 260 }}
             />
             <FormControlLabel
               control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
               label="Enabled"
             />
           </Stack>
-          <TextField
-            label="API Key"
-            size="small"
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={settings?.hasApiKey ? "configured — leave blank to keep" : "not set"}
-            fullWidth
-            sx={{ mb: 1.5, maxWidth: 400 }}
-          />
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-            Some FabriXAI deployments (a gateway in front of the real agent API) need these two extra headers as well
-            — leave both blank if your endpoint only needs the API key above.
+            Both headers below are required by the FabriX OpenAPI endpoint — leave blank only to keep a value that's
+            already saved.
           </Typography>
           <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
             <TextField
-              label="Client Header"
+              label="Client Header (x-fabrix-client)"
               size="small"
               type="password"
               value={clientHeader}
@@ -174,7 +172,7 @@ export function FabrixSettingsManager() {
               sx={{ minWidth: 320, flex: 1 }}
             />
             <TextField
-              label="OpenAPI Token"
+              label="OpenAPI Token (x-openapi-token)"
               size="small"
               type="password"
               value={openApiToken}
@@ -184,7 +182,7 @@ export function FabrixSettingsManager() {
             />
           </Stack>
           <Stack direction="row" spacing={1.5}>
-            <Button type="submit" variant="contained" disabled={!baseUrl.trim() || !agentId.trim() || saving}>
+            <Button type="submit" variant="contained" disabled={!baseUrl.trim() || saving}>
               {saving ? "Saving..." : "Save"}
             </Button>
             <Button variant="outlined" onClick={handleTest} disabled={testing || !settings?.baseUrl}>

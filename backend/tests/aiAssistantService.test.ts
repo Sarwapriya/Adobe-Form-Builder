@@ -6,8 +6,10 @@ vi.mock("../src/config/data-source", () => ({ AppDataSource: fakeDataSource }));
 vi.mock("../src/services/fabrixSettingsService", () => ({
   getFabrixSettings: vi.fn(async () => ({
     baseUrl: "https://fabrix.example.com",
-    apiKey: "test-key",
-    agentId: "agent-1",
+    modelIds: ["model-1"],
+    clientHeader: "test-client-header",
+    openApiToken: "test-openapi-token",
+    userEmail: "",
     enabled: true,
     timeoutSeconds: 30,
     maxRetries: 2,
@@ -100,10 +102,10 @@ describe("aiAssistantService.sendChatMessage — tool-dispatch logic", () => {
     expect(response.message).toContain("tool");
   });
 
-  it("falls back gracefully instead of throwing when FabriXAI errors", async () => {
+  it("falls back gracefully instead of throwing when the AI provider errors, surfacing the real error text", async () => {
     sendFabrixMessageMock.mockResolvedValueOnce({ ok: false, error: "boom" });
     const response = await sendChatMessage(auth, { message: "hi" });
-    expect(response.message).toMatch(/temporarily unavailable/i);
+    expect(response.message).toBe("boom");
     expect(response.actions).toEqual([]);
   });
 

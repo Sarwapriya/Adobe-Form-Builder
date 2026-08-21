@@ -19,6 +19,8 @@ import { QuestionMasterVersion } from "../entities/QuestionMasterVersion";
 import { AIConversation } from "../entities/AIConversation";
 import { AIConversationMessage } from "../entities/AIConversationMessage";
 import { AIAction } from "../entities/AIAction";
+import { FabrixModel } from "../entities/FabrixModel";
+import { ClaudeModel } from "../entities/ClaudeModel";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 import { SubmittedOnlyVersioning1720000000000 } from "../migrations/1720000000000-SubmittedOnlyVersioning";
@@ -46,6 +48,8 @@ import { AddFormOriginAndReview1930000000000 } from "../migrations/1930000000000
 import { AddQuestionMasterSource1940000000000 } from "../migrations/1940000000000-AddQuestionMasterSource";
 import { AddAiAssistant1950000000000 } from "../migrations/1950000000000-AddAiAssistant";
 import { WidenAdminSettingValue1960000000000 } from "../migrations/1960000000000-WidenAdminSettingValue";
+import { AddFabrixModels1970000000000 } from "../migrations/1970000000000-AddFabrixModels";
+import { AddClaudeModels1980000000000 } from "../migrations/1980000000000-AddClaudeModels";
 
 const entities = [
   Upload,
@@ -67,6 +71,8 @@ const entities = [
   AIConversation,
   AIConversationMessage,
   AIAction,
+  FabrixModel,
+  ClaudeModel,
 ];
 const migrations = [
   InitSchema1700000000000,
@@ -96,6 +102,8 @@ const migrations = [
   AddQuestionMasterSource1940000000000,
   AddAiAssistant1950000000000,
   WidenAdminSettingValue1960000000000,
+  AddFabrixModels1970000000000,
+  AddClaudeModels1980000000000,
 ];
 
 /**

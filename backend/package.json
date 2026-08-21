@@ -14,6 +14,7 @@
     "playwright:install": "playwright install chromium"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@formbuilder/shared": "*",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",

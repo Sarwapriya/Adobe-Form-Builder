@@ -22,8 +22,10 @@ vi.mock("../src/middleware/authJwt", () => ({
 vi.mock("../src/services/fabrixSettingsService", () => ({
   getFabrixSettings: vi.fn(async () => ({
     baseUrl: "https://fabrix.example.com",
-    apiKey: "test-key",
-    agentId: "agent-1",
+    modelIds: ["model-1"],
+    clientHeader: "test-client-header",
+    openApiToken: "test-openapi-token",
+    userEmail: "",
     enabled: true,
     timeoutSeconds: 30,
     maxRetries: 2,

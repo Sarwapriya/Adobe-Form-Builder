@@ -359,3 +359,47 @@ CREATE TABLE AIActions (
     createdAt         DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
 CREATE INDEX IX_AIActions_conversationId ON AIActions(conversationId);
+
+-- Admin-managed FabriX LLM catalog — every *enabled* row's modelId, in
+-- sortOrder, is sent together as the chat request's modelIds array (see
+-- fabrixAIService.ts), letting FabriX route around/fall back past a
+-- model that's unavailable or token/rate-limited.
+CREATE TABLE FabrixModels (
+    id          UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    name        NVARCHAR(100) NOT NULL,
+    modelId     NVARCHAR(100) NOT NULL,
+    isEnabled   BIT NOT NULL DEFAULT 1,
+    sortOrder   INT NOT NULL DEFAULT 0,
+    createdAt   DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+INSERT INTO FabrixModels (name, modelId, isEnabled, sortOrder) VALUES
+    ('Glm 5.2',                '019f23a1-46aa-7fa5-a6ab-391127fea7e6', 1, 0),
+    ('Samsung LLM-Reasoning',  '01995a66-a919-7b3d-a589-e200de57555a', 1, 1),
+    ('gpt-oss-120b(Mid)',      '019a774a-c6ad-7518-b37c-d651c2696c66', 1, 2),
+    ('Gemma4',                 '019f238e-5c49-7bd2-b2fc-e500174936cf', 1, 3),
+    ('gpt-oss-120b(Low)',      '01996fce-5f0e-7807-b8ae-aaca7532dc3e', 1, 4),
+    ('Llama 3.3',              '01995a69-ab51-77a5-a6bd-364528f8d7a9', 1, 5),
+    ('Samsung 2.3 37B',        '01992d20-4584-752b-a3aa-4d17612e8df9', 1, 6),
+    ('gpt-4o',                 '019a774a-c6ad-7518-b37c-d651c2696c66', 1, 7),
+    ('gpt-4',                  '019a774a-c6ad-7518-b37c-d651c2696c66', 1, 8);
+
+-- Reference catalog of known Claude models (Configuration > AI Assistant >
+-- Claude Settings) — unlike FabrixModels, no isEnabled flag: the Messages
+-- API takes exactly one model per request, tracked separately in
+-- AdminSettings ("claudeModel"), not per catalog row.
+CREATE TABLE ClaudeModels (
+    id          UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    name        NVARCHAR(100) NOT NULL,
+    modelId     NVARCHAR(100) NOT NULL,
+    sortOrder   INT NOT NULL DEFAULT 0,
+    createdAt   DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
+);
+INSERT INTO ClaudeModels (name, modelId, sortOrder) VALUES
+    ('Claude Fable 5',    'claude-fable-5',    0),
+    ('Claude Opus 5',     'claude-opus-5',     1),
+    ('Claude Opus 4.8',   'claude-opus-4-8',   2),
+    ('Claude Opus 4.7',   'claude-opus-4-7',   3),
+    ('Claude Opus 4.6',   'claude-opus-4-6',   4),
+    ('Claude Sonnet 5',   'claude-sonnet-5',   5),
+    ('Claude Sonnet 4.6', 'claude-sonnet-4-6', 6),
+    ('Claude Haiku 4.5',  'claude-haiku-4-5',  7);
