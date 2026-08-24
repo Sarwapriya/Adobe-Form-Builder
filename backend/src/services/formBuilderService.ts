@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import {
   defaultBuilderConfig,
   generateSolution,
+  remapLocalesForCopy,
   resolveFileNames,
   validateFormDefinition,
   type BuilderConfig,
@@ -18,6 +19,7 @@ import { GeneratedFile as GeneratedFileEntity, type GeneratedFileType } from "..
 import { resolvePaging, type PagedResult } from "../utils/queryParsing";
 import { absoluteFilePath, saveFormVersionGeneratedFiles } from "./fileService";
 import { classifyFileType } from "./generationService";
+import { listSubsidiaryLocales } from "./subsidiaryLocaleService";
 import { buildZip, type ZipEntry } from "./zipService";
 import { sendAdHocReviewSubmittedNotification } from "./emailService";
 
@@ -157,10 +159,14 @@ export interface CreateFormInput {
    * overwritten to *this* new form's own subsidiaryId regardless of what the
    * source form's was, and enforceVariantsForOrigin still applies on top —
    * so copying an admin HR form into a new ad-hoc one (or across
-   * subsidiaries) is always safe. Callers are expected to have already
-   * validated the source exists/is accessible (see the two router call
-   * sites) — a source that can't be found here just falls back to a blank
-   * form rather than failing the whole creation. */
+   * subsidiaries) is always safe. When the target subsidiary differs from the
+   * source form's own, `locales` is also swapped to *that* subsidiary's own
+   * approved locale list (see subsidiaryLocaleService.ts) instead of keeping
+   * the source's original locales, which likely don't apply at all under a
+   * different subsidiary — see the locale-swap block below. Callers are
+   * expected to have already validated the source exists/is accessible (see
+   * the two router call sites) — a source that can't be found here just
+   * falls back to a blank form rather than failing the whole creation. */
   copyFromFormId?: string;
 }
 
@@ -176,9 +182,37 @@ export async function createForm(input: CreateFormInput): Promise<FormListItem> 
   const copySource = copyFromFormId ? await getFormDetail(copyFromFormId) : null;
   const sourceContent = copySource?.draft ?? copySource?.published ?? null;
 
-  const definition: FormDefinition = sourceContent
-    ? { ...sourceContent.definition, meta: { ...sourceContent.definition.meta, subsidiary: subsidiaryId } }
-    : emptyFormDefinition(subsidiaryId);
+  let definition: FormDefinition;
+  if (sourceContent) {
+    definition = { ...sourceContent.definition, meta: { ...sourceContent.definition.meta, subsidiary: subsidiaryId } };
+
+    // Copying into a different subsidiary than the source form's own — the
+    // source's locales were chosen for a different subsidiary and likely
+    // aren't even valid for this one, so swap in the new subsidiary's own
+    // approved locale list instead of silently carrying the old one over.
+    // remapLocalesForCopy maps each new locale's content from whichever
+    // source locale shares its language (ignoring country) — e.g. an ar_SA
+    // source form copied into a subsidiary offering ar_IQ/ar_JO fills both
+    // from ar_SA — falling back to the source's own default locale for a
+    // language the source doesn't have at all (see its own doc comment for
+    // the full worked example).
+    if (sourceContent.definition.meta.subsidiary !== subsidiaryId) {
+      const masterLocales = await listSubsidiaryLocales(subsidiaryId);
+      if (masterLocales.length > 0) {
+        const fallback = masterLocales.find((l) => l.isFallback) ?? masterLocales[0];
+        const newLocales = masterLocales.map((l) => ({
+          code: l.code,
+          langSubtag: l.langSubtag,
+          isRtl: l.isRtl,
+          sourceColumn: "builder" as const,
+          label: l.label,
+        }));
+        definition = remapLocalesForCopy(definition, newLocales, fallback.code);
+      }
+    }
+  } else {
+    definition = emptyFormDefinition(subsidiaryId);
+  }
   const config: BuilderConfig = enforceVariantsForOrigin(origin, sourceContent ? sourceContent.config : defaultConfig(origin));
 
   return AppDataSource.transaction(async (manager) => {

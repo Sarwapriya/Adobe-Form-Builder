@@ -11,7 +11,10 @@ import {
 } from "../api/subsidiaryFormsApi";
 import { PageHeader } from "../components/common/PageHeader";
 
+// listMyAllContributions never returns a "draft" row (see formContributionService's
+// own filter) — this entry only exists so the Record type-checks.
 const STATUS_COLOR: Record<ContributionStatus, "default" | "success" | "error"> = {
+  draft: "default",
   pending: "default",
   approved: "success",
   rejected: "error",

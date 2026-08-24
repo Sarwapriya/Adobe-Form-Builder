@@ -57,7 +57,10 @@ export function VariantConfigPanel() {
 
   if (!definition || !config) return null;
   const variants = config.variants ?? ["ff", "oc"];
-  const hasMobileNumber = !!definition.fields.mobileNumber && definition.fields.mobileNumber.countries.length > 0;
+  const mobileNumber = definition.fields.mobileNumber;
+  const hasMobileNumber =
+    !!mobileNumber &&
+    (mobileNumber.countries.length > 0 || Object.values(mobileNumber.countriesByLocale ?? {}).some((c) => (c?.length ?? 0) > 0));
   const hasProfileFields = !!(definition.fields.firstName || definition.fields.lastName || definition.fields.email);
 
   function toggle(variant: FormVariant, checked: boolean) {

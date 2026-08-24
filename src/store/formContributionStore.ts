@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import {
   resolveLocalizedText,
+  targetKey,
   validateContribution,
+  type AnswerDefinition,
   type BuilderConfig,
   type ConsentDefinition,
   type ContributionContent,
@@ -13,39 +15,18 @@ import {
 import {
   ContributionInvalidError,
   getMyFormDetail,
+  saveContributionDraft as apiSaveContributionDraft,
   submitContribution as apiSubmitContribution,
   type ContributionSummary,
 } from "../api/subsidiaryFormsApi";
 
 const EMPTY_VALIDATION: ValidationResult = { errors: [], warnings: [] };
 
-/** Stable string key for a TranslationTarget, used as the working-edits map key
- * (see `translations` below) — collision-free by construction since it encodes
- * every discriminant field. */
-export function targetKey(target: TranslationTarget): string {
-  switch (target.kind) {
-    case "profileLabel":
-      return `profileLabel:${target.field}`;
-    case "privacyPolicyText":
-      return "privacyPolicyText";
-    case "privacyPolicyLink":
-      return "privacyPolicyLink";
-    case "termsAndConditionsText":
-      return "termsAndConditionsText";
-    case "termsAndConditionsUrl":
-      return "termsAndConditionsUrl";
-    case "consentText":
-      return `consentText:${target.consentId}`;
-    case "consentLink":
-      return `consentLink:${target.consentId}`;
-    case "questionHeading":
-      return `questionHeading:${target.questionId}`;
-    case "questionSubheading":
-      return `questionSubheading:${target.questionId}`;
-    case "answerText":
-      return `answerText:${target.questionId}:${target.answerId}`;
-  }
-}
+// Re-exported so existing importers (e.g. TranslatableField.tsx) don't need to
+// switch their import path — the implementation itself now lives in
+// @formbuilder/shared's contribution.ts, shared with the admin-side pending-
+// contribution hint lookup (pendingTranslationHint.tsx).
+export { targetKey };
 
 /** Builds the same `translations` Map shape `setTranslation` produces, from a
  * previously-submitted contribution's own content — used to make a pending or
@@ -82,10 +63,28 @@ interface FormContributionState {
   translations: Map<string, { target: TranslationTarget; locale: string; value: string }>;
   newQuestions: QuestionDefinition[];
   newConsents: ConsentDefinition[];
+  /** Ids of existing (base-form) questions this session proposes deleting —
+   * never includes a question the base form marks lockedFromSubsidiary (the
+   * mutator below refuses to add one). */
+  deletedQuestionIds: Set<string>;
+  /** New answer options proposed for an EXISTING question — a question added
+   * via newQuestions above carries its own answers and never appears here.
+   * `localId` is a session-only React key, discarded on submit (server
+   * reassigns real ids the same way newQuestions' ids are). */
+  newAnswersForExisting: { localId: string; questionId: string; answer: AnswerDefinition }[];
+  /** Existing answers (on an EXISTING question) this session proposes
+   * removing — keyed `${questionId}::${answerId}`. Applies regardless of the
+   * question's own lockedFromSubsidiary state. */
+  deletedAnswerIds: Set<string>;
   note: string;
   validation: ValidationResult;
   loading: boolean;
   submitting: boolean;
+  /** True while a Save Draft request (Ctrl+S or the button) is in flight — distinct
+   * from `submitting`, since the two actions can't ever race (the button pair is
+   * mutually enabled) but do need their own separate "Saving..."/"Submitting..."
+   * label. */
+  savingDraft: boolean;
   error: string | null;
   ownContributions: ContributionSummary[];
   /** True while this user has a "pending" contribution outstanding for this form —
@@ -115,6 +114,11 @@ interface FormContributionState {
    * is UX only, never the source of truth. Independent of `locked` above (a pending
    * own-contribution) — both can be true at once. */
   projectLocked: boolean;
+  /** True once this session has changed something since the last successful Save
+   * Draft/Submit (or since load) — drives the Ctrl+S shortcut's enabled state and
+   * the Save Draft button's unsaved-changes blink, same convention as
+   * formBuilderStore's own `dirty`. */
+  dirty: boolean;
 
   loadForm: (formId: string) => Promise<void>;
   setLocale: (locale: string) => void;
@@ -123,14 +127,30 @@ interface FormContributionState {
   removeQuestion: (localId: string) => void;
   addConsent: (consent: ConsentDefinition) => void;
   removeConsent: (localId: string) => void;
+  /** Toggles whether an EXISTING question is proposed for deletion. A no-op
+   * (defense in depth — the UI already hides the control) when the base
+   * form marks that question lockedFromSubsidiary. */
+  toggleQuestionDeleted: (questionId: string) => void;
+  addAnswerToQuestion: (questionId: string, answer: AnswerDefinition) => void;
+  removeNewAnswer: (localId: string) => void;
+  /** Toggles whether an EXISTING answer on an EXISTING question is proposed
+   * for removal — allowed on every question, locked or not. */
+  toggleAnswerDeleted: (questionId: string, answerId: string) => void;
   setAutoPopulateToggle: (questionId: string, enabled: boolean) => void;
   setNote: (note: string) => void;
+  /** Persists the current working copy as this user's one draft row for the form —
+   * never queues it for admin review (see saveContributionDraft in
+   * subsidiaryFormsApi.ts), and unlike submit runs no validation, since the point
+   * is being able to save incomplete work. */
+  saveDraft: () => Promise<boolean>;
   submit: () => Promise<boolean>;
   /** Called whenever this user's own contributions for the current form are
    * (re)fetched — locks editing while the latest one is still "pending" (showing
-   * its submitted content instead of the editable working copy), or, if the
-   * latest is "rejected", unlocks editing and prefills the working copy from it
-   * once so the user can correct and resubmit rather than starting over. */
+   * its submitted content instead of the editable working copy); if the latest is
+   * a saved "draft", unlocks editing and resumes it (so reopening the page later
+   * continues where Save Draft left off); if "rejected", unlocks editing and
+   * prefills the working copy from it once so the user can correct and resubmit
+   * rather than starting over. */
   syncOwnContributions: (contributions: ContributionSummary[]) => void;
   reset: () => void;
 }
@@ -141,6 +161,12 @@ function buildContent(state: FormContributionState): ContributionContent {
     newQuestions: state.newQuestions,
     newConsents: state.newConsents,
     autoPopulateToggles: Array.from(state.autoPopulateToggles, ([questionId, enabled]) => ({ questionId, enabled })),
+    deletedQuestionIds: Array.from(state.deletedQuestionIds),
+    newAnswers: state.newAnswersForExisting.map(({ questionId, answer }) => ({ questionId, answer })),
+    deletedAnswerIds: Array.from(state.deletedAnswerIds, (key) => {
+      const [questionId, answerId] = key.split("::");
+      return { questionId, answerId };
+    }),
   };
 }
 
@@ -155,6 +181,16 @@ function autoPopulateTogglesFromQuestions(questions: FormDefinition["questions"]
     }
   }
   return map;
+}
+
+/** Rebuilds the local (localId-carrying) newAnswersForExisting shape from a
+ * previously-submitted contribution's own newAnswers — same reasoning as
+ * contentTranslationsToMap: a pending/draft/rejected contribution's own
+ * submitted state should be what's shown, not reset to empty. */
+function newAnswersForExistingFromContent(
+  entries: ContributionSummary["content"]["newAnswers"],
+): { localId: string; questionId: string; answer: AnswerDefinition }[] {
+  return entries.map((entry, i) => ({ localId: `saved-a-${i}`, questionId: entry.questionId, answer: entry.answer }));
 }
 
 /** Overlays a previously-submitted contribution's own auto-populate toggles onto
@@ -184,10 +220,14 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
   translations: new Map(),
   newQuestions: [],
   newConsents: [],
+  deletedQuestionIds: new Set(),
+  newAnswersForExisting: [],
+  deletedAnswerIds: new Set(),
   note: "",
   validation: EMPTY_VALIDATION,
   loading: false,
   submitting: false,
+  savingDraft: false,
   error: null,
   ownContributions: [],
   locked: false,
@@ -195,6 +235,7 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
   prefilledFromContributionId: null,
   projectLocked: false,
   autoPopulateToggles: new Map(),
+  dirty: false,
 
   async loadForm(formId) {
     set({ loading: true, error: null });
@@ -215,10 +256,14 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
         translations: new Map(),
         newQuestions: [],
         newConsents: [],
+        deletedQuestionIds: new Set(),
+        newAnswersForExisting: [],
+        deletedAnswerIds: new Set(),
         note: "",
         loading: false,
         projectLocked: detail.projectCodeLocked ?? false,
         autoPopulateToggles: autoPopulateTogglesFromQuestions(detail.published.definition.questions),
+        dirty: false,
       });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to load form", loading: false });
@@ -235,35 +280,85 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
     const key = `${targetKey(target)}::${locale}`;
     const next = new Map(translations);
     next.set(key, { target, locale, value });
-    set({ translations: next });
+    set({ translations: next, dirty: true });
   },
 
   addQuestion(question) {
-    set((s) => ({ newQuestions: [...s.newQuestions, question] }));
+    set((s) => ({ newQuestions: [...s.newQuestions, question], dirty: true }));
   },
 
   removeQuestion(localId) {
-    set((s) => ({ newQuestions: s.newQuestions.filter((q) => q.id !== localId) }));
+    set((s) => ({ newQuestions: s.newQuestions.filter((q) => q.id !== localId), dirty: true }));
   },
 
   addConsent(consent) {
-    set((s) => ({ newConsents: [...s.newConsents, consent] }));
+    set((s) => ({ newConsents: [...s.newConsents, consent], dirty: true }));
   },
 
   removeConsent(localId) {
-    set((s) => ({ newConsents: s.newConsents.filter((c) => c.id !== localId) }));
+    set((s) => ({ newConsents: s.newConsents.filter((c) => c.id !== localId), dirty: true }));
+  },
+
+  toggleQuestionDeleted(questionId) {
+    const question = get().baseDefinition?.questions.find((q) => q.id === questionId);
+    if (question?.lockedFromSubsidiary) return;
+    set((s) => {
+      const next = new Set(s.deletedQuestionIds);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return { deletedQuestionIds: next, dirty: true };
+    });
+  },
+
+  addAnswerToQuestion(questionId, answer) {
+    set((s) => ({
+      newAnswersForExisting: [...s.newAnswersForExisting, { localId: `new-a-${Date.now()}-${Math.random()}`, questionId, answer }],
+      dirty: true,
+    }));
+  },
+
+  removeNewAnswer(localId) {
+    set((s) => ({ newAnswersForExisting: s.newAnswersForExisting.filter((a) => a.localId !== localId), dirty: true }));
+  },
+
+  toggleAnswerDeleted(questionId, answerId) {
+    const key = `${questionId}::${answerId}`;
+    set((s) => {
+      const next = new Set(s.deletedAnswerIds);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return { deletedAnswerIds: next, dirty: true };
+    });
   },
 
   setAutoPopulateToggle(questionId, enabled) {
     set((s) => {
       const next = new Map(s.autoPopulateToggles);
       next.set(questionId, enabled);
-      return { autoPopulateToggles: next };
+      return { autoPopulateToggles: next, dirty: true };
     });
   },
 
   setNote(note) {
-    set({ note });
+    set({ note, dirty: true });
+  },
+
+  async saveDraft() {
+    const state = get();
+    if (!state.formId) return false;
+    const content = buildContent(state);
+
+    set({ savingDraft: true, error: null });
+    try {
+      await apiSaveContributionDraft(state.formId, content, state.note || undefined);
+      set({ dirty: false });
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to save draft" });
+      return false;
+    } finally {
+      set({ savingDraft: false });
+    }
   },
 
   async submit() {
@@ -282,7 +377,7 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
       // syncOwnContributions (below) will lock the form and re-derive these same
       // fields from the now-pending contribution. Clearing them here first would
       // cause a visible flash back to the (English) base text in between.
-      set({ note: "" });
+      set({ note: "", dirty: false });
       return true;
     } catch (err) {
       if (err instanceof ContributionInvalidError) {
@@ -307,6 +402,9 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
         translations: contentTranslationsToMap(latest.content.translations),
         newQuestions: latest.content.newQuestions,
         newConsents: latest.content.newConsents,
+        deletedQuestionIds: new Set(latest.content.deletedQuestionIds),
+        newAnswersForExisting: newAnswersForExistingFromContent(latest.content.newAnswers),
+        deletedAnswerIds: new Set(latest.content.deletedAnswerIds.map((e) => `${e.questionId}::${e.answerId}`)),
         autoPopulateToggles: mergeAutoPopulateToggles(s.autoPopulateToggles, latest.content.autoPopulateToggles),
       }));
       return;
@@ -314,12 +412,31 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
 
     set({ locked: false, lockedContribution: null });
 
+    if (latest?.status === "draft" && get().prefilledFromContributionId !== latest.id) {
+      set((s) => ({
+        prefilledFromContributionId: latest.id,
+        note: latest.note ?? "",
+        translations: contentTranslationsToMap(latest.content.translations),
+        newQuestions: latest.content.newQuestions,
+        newConsents: latest.content.newConsents,
+        deletedQuestionIds: new Set(latest.content.deletedQuestionIds),
+        newAnswersForExisting: newAnswersForExistingFromContent(latest.content.newAnswers),
+        deletedAnswerIds: new Set(latest.content.deletedAnswerIds.map((e) => `${e.questionId}::${e.answerId}`)),
+        autoPopulateToggles: mergeAutoPopulateToggles(s.autoPopulateToggles, latest.content.autoPopulateToggles),
+        dirty: false,
+      }));
+      return;
+    }
+
     if (latest?.status === "rejected" && get().prefilledFromContributionId !== latest.id) {
       set((s) => ({
         prefilledFromContributionId: latest.id,
         translations: contentTranslationsToMap(latest.content.translations),
         newQuestions: latest.content.newQuestions,
         newConsents: latest.content.newConsents,
+        deletedQuestionIds: new Set(latest.content.deletedQuestionIds),
+        newAnswersForExisting: newAnswersForExistingFromContent(latest.content.newAnswers),
+        deletedAnswerIds: new Set(latest.content.deletedAnswerIds.map((e) => `${e.questionId}::${e.answerId}`)),
         autoPopulateToggles: mergeAutoPopulateToggles(s.autoPopulateToggles, latest.content.autoPopulateToggles),
       }));
     }
@@ -336,10 +453,14 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
       translations: new Map(),
       newQuestions: [],
       newConsents: [],
+      deletedQuestionIds: new Set(),
+      newAnswersForExisting: [],
+      deletedAnswerIds: new Set(),
       note: "",
       validation: EMPTY_VALIDATION,
       loading: false,
       submitting: false,
+      savingDraft: false,
       error: null,
       ownContributions: [],
       locked: false,
@@ -347,6 +468,7 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
       prefilledFromContributionId: null,
       projectLocked: false,
       autoPopulateToggles: new Map(),
+      dirty: false,
     });
   },
 }));

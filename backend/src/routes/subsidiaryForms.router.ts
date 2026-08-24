@@ -5,7 +5,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { requireAuth } from "../middleware/authJwt";
 import { validateBody } from "../middleware/validate";
 import { getAccessibleFormDetail, listAccessibleForms } from "../services/formAccessService";
-import { listOwnContributions, listOwnContributionsAllForms, submitContribution } from "../services/formContributionService";
+import { listOwnContributions, listOwnContributionsAllForms, saveContributionDraft, submitContribution } from "../services/formContributionService";
 import {
   createForm,
   deleteAdHocForm,
@@ -238,5 +238,34 @@ subsidiaryFormsRouter.get(
   asyncHandler(async (req, res) => {
     const contributions = await listOwnContributions(req.params.id, req.auth!.sub);
     res.json(contributions);
+  }),
+);
+
+// Save-in-progress work without queuing it for admin review (see
+// FormContribution.ts's own doc comment on the "draft" status) — the Translate &
+// Extend page's Ctrl+S/"Save Draft" button. Reuses the same body shape as submit;
+// unlike submit, this never runs validateContribution, since the whole point is
+// being able to save incomplete work.
+const saveContributionDraftSchema = z.object({
+  content: contributionContentSchema,
+  note: z.string().trim().max(2000).optional(),
+});
+
+subsidiaryFormsRouter.patch(
+  "/:id/contributions/draft",
+  validateBody(saveContributionDraftSchema),
+  asyncHandler(async (req, res) => {
+    const subsidiaryId = req.auth!.subsidiaryId;
+    if (!subsidiaryId) {
+      res.status(404).json({ error: "form not found" });
+      return;
+    }
+    const { content, note } = req.body as z.infer<typeof saveContributionDraftSchema>;
+    const result = await saveContributionDraft(req.params.id, req.auth!.sub, subsidiaryId, content, note);
+    if (result.outcome === "not_found") {
+      res.status(404).json({ error: "form not found" });
+      return;
+    }
+    res.status(200).json(result.contribution);
   }),
 );

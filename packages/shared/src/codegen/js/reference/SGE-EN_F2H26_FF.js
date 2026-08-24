@@ -79,7 +79,7 @@ $(document).ready(function ()
         $("div.top_cont h2").html(fields[language]["headingBeforeBreakFF"] + $("div.top_cont h2").html() + fields[language]["headingAfterBreakFF"]);
 
         // Campaign Subheading
-        $("div.top_cont p.top_subheading").html(fields[language]["campaignSubheading"]);
+        $("div.top_cont p.top_subheading").html(fields[language]["campaignSubheadingFF"]);
 
         // Required Field Note
         $("div.top_cont p").not(".top_subheading").html($("div.top_cont p").not(".top_subheading").html() + fields[language]["requiredField"]);

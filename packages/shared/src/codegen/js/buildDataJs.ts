@@ -1,5 +1,13 @@
 import { findCallingCodeEntry } from "../../form/callingCodes";
-import { resolveLocalizedText, type FormDefinition, type LocaleCode, type LocaleInfo, type PageCopy } from "../../form/formDefinition";
+import {
+  resolveLocalizedText,
+  resolveMobileNumberCountries,
+  type FormDefinition,
+  type LocaleCode,
+  type LocaleInfo,
+  type MobileNumberFieldMeta,
+  type PageCopy,
+} from "../../form/formDefinition";
 import { COUNTRY_SUBSIDIARY, resolveCountryName, SUBSIDIARY_DETAIL, type SubsidiaryCountryEntry } from "../../form/subsidiaryData";
 import { answerDomKey, autoPopulateParamName } from "../domIds";
 import type { FileNames } from "../fileNames";
@@ -19,12 +27,15 @@ const BUILDER_SUBSIDIARY_KEY = "BUILDER";
 const AUTO_POPULATE_CONTROL_TYPES = new Set(["radio", "checkbox", "dropdown"]);
 
 /** Synthesizes one-off `country_subsidiary`/`subsidiary_detail` tables for a builder's
- * `fields.mobileNumber.countries` list, from the generic `CALLING_CODES` table (see
+ * `fields.mobileNumber` field, from the generic `CALLING_CODES` table (see
  * `callingCodes.ts`) rather than the real, org-specific Samsung tables in
- * `subsidiaryData.ts`. Every one of the form's own locales also gets its country
- * suffix mapped to the same key, even if that country isn't in `countries` — so a
- * locale whose own country wasn't explicitly configured still resolves to a working
- * (if not country-specific) dropdown instead of an undefined-subsidiary lookup.
+ * `subsidiaryData.ts`. The shared `countries` fallback list becomes the default
+ * `"BUILDER"` entry; any locale with its own `countriesByLocale` override (see
+ * `resolveMobileNumberCountries`) gets a dedicated `"BUILDER_<locale>"` entry instead,
+ * so e.g. a dual-country subsidiary can show only Israel's calling code to he_IL
+ * visitors and only Palestine's to ar_PS visitors rather than the same combined list
+ * under both. A locale with no override, or whose own country isn't configured at
+ * all, still maps to the shared default key instead of an undefined-subsidiary lookup.
  *
  * Each country's name is resolved per-locale via `resolveCountryName` — real Samsung
  * translations (subsidiaryData.ts, sourced from Final_forms_format's master
@@ -32,32 +43,47 @@ const AUTO_POPULATE_CONTROL_TYPES = new Set(["radio", "checkbox", "dropdown"]);
  * rather than stamping the same English name under every locale key, so a locale being
  * translated into (e.g. Arabic) shows its own country names, not English ones. */
 function buildBuilderSubsidiaryTables(
-  countries: string[],
+  field: MobileNumberFieldMeta,
   locales: LocaleInfo[],
   defaultLocale: LocaleCode,
 ): { countrySubsidiary: Record<string, string>; subsidiaryDetail: Record<string, SubsidiaryCountryEntry[]> } {
   const countrySubsidiary: Record<string, string> = {};
-  const entries: SubsidiaryCountryEntry[] = [];
+  const subsidiaryDetail: Record<string, SubsidiaryCountryEntry[]> = {};
 
-  for (const code of countries) {
+  const buildEntries = (countries: string[]): SubsidiaryCountryEntry[] => {
+    const entries: SubsidiaryCountryEntry[] = [];
+    for (const code of countries) {
+      const entry = findCallingCodeEntry(code);
+      if (!entry) continue;
+      entries.push({
+        callingCode: entry.callingCode,
+        countryCode: entry.countryCode,
+        countryName: Object.fromEntries(locales.map((l) => [l.code, resolveCountryName(entry.countryCode, l.code, defaultLocale)])),
+      });
+    }
+    return entries;
+  };
+
+  subsidiaryDetail[BUILDER_SUBSIDIARY_KEY] = buildEntries(field.countries);
+  for (const code of field.countries) {
     const entry = findCallingCodeEntry(code);
-    if (!entry) continue;
-    countrySubsidiary[entry.countryCode] = BUILDER_SUBSIDIARY_KEY;
-    entries.push({
-      callingCode: entry.callingCode,
-      countryCode: entry.countryCode,
-      countryName: Object.fromEntries(locales.map((l) => [l.code, resolveCountryName(entry.countryCode, l.code, defaultLocale)])),
-    });
+    if (entry) countrySubsidiary[entry.countryCode] = BUILDER_SUBSIDIARY_KEY;
   }
 
   for (const locale of locales) {
     const localeCountry = locale.code.split("_")[1];
-    if (localeCountry && !countrySubsidiary[localeCountry]) {
+    if (!localeCountry) continue;
+    const resolved = resolveMobileNumberCountries(field, locale.code);
+    if (resolved !== field.countries) {
+      const key = `${BUILDER_SUBSIDIARY_KEY}_${locale.code}`;
+      subsidiaryDetail[key] = buildEntries(resolved);
+      countrySubsidiary[localeCountry] = key;
+    } else if (!countrySubsidiary[localeCountry]) {
       countrySubsidiary[localeCountry] = BUILDER_SUBSIDIARY_KEY;
     }
   }
 
-  return { countrySubsidiary, subsidiaryDetail: { [BUILDER_SUBSIDIARY_KEY]: entries } };
+  return { countrySubsidiary, subsidiaryDetail };
 }
 
 /** Fallback validation messages when the workbook carries no "Error Messages" section.
@@ -116,11 +142,30 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
 
     const callingCodeField = f.callingCode ?? f.mobileNumber;
 
+    // FF-suffixed keys are what the reference FF.js reads; the bare keys are what OC.js
+    // reads (see buildFfJs.ts's REFERENCE_FF_JS / buildOcJs.ts's REFERENCE_OC_JS) — both
+    // variants share this one data file, so a per-variant override has to live under a
+    // per-variant key, not a per-variant file. An *FFByLocale override falls back to the
+    // base *ByLocale value when absent, so a form that never sets one shows identical
+    // text on both variants, exactly as before these overrides existed.
     fields[locale] = {
-      headingBeforeBreakFF: f.headingBeforeBreakByLocale ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale) : "",
-      headingAfterBreakFF: f.headingAfterBreakByLocale ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale) : "",
+      headingBeforeBreakFF: f.headingBeforeBreakFFByLocale
+        ? resolveLocalizedText(f.headingBeforeBreakFFByLocale, locale, defaultLocale)
+        : f.headingBeforeBreakByLocale
+          ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale)
+          : "",
+      headingAfterBreakFF: f.headingAfterBreakFFByLocale
+        ? resolveLocalizedText(f.headingAfterBreakFFByLocale, locale, defaultLocale)
+        : f.headingAfterBreakByLocale
+          ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale)
+          : "",
       headingBeforeBreak: f.headingBeforeBreakByLocale ? resolveLocalizedText(f.headingBeforeBreakByLocale, locale, defaultLocale) : "",
       headingAfterBreak: f.headingAfterBreakByLocale ? resolveLocalizedText(f.headingAfterBreakByLocale, locale, defaultLocale) : "",
+      campaignSubheadingFF: f.campaignSubheadingFFByLocale
+        ? resolveLocalizedText(f.campaignSubheadingFFByLocale, locale, defaultLocale)
+        : f.campaignSubheadingByLocale
+          ? resolveLocalizedText(f.campaignSubheadingByLocale, locale, defaultLocale)
+          : "",
       campaignSubheading: f.campaignSubheadingByLocale ? resolveLocalizedText(f.campaignSubheadingByLocale, locale, defaultLocale) : "",
       requiredField: f.requiredFieldNoteByLocale ? resolveLocalizedText(f.requiredFieldNoteByLocale, locale, defaultLocale) : "",
       label: {
@@ -212,7 +257,7 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
   }
 
   const builderSubsidiaryTables = form.fields.mobileNumber
-    ? buildBuilderSubsidiaryTables(form.fields.mobileNumber.countries, form.locales, form.meta.defaultLocale)
+    ? buildBuilderSubsidiaryTables(form.fields.mobileNumber, form.locales, form.meta.defaultLocale)
     : null;
 
   // paramName -> questionId, for the One-Click reference script's

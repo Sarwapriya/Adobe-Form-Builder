@@ -21,16 +21,24 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import TranslateIcon from "@mui/icons-material/Translate";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import SaveIcon from "@mui/icons-material/Save";
+import SendIcon from "@mui/icons-material/Send";
+import LockIcon from "@mui/icons-material/Lock";
 import { resolveLocalizedText } from "@formbuilder/shared";
 import { useFormContributionStore } from "../store/formContributionStore";
+import { FormStatusBar, type FormStatusTone } from "../components/common/FormStatusBar";
 import { listMyContributions, CONTRIBUTION_STATUS_LABEL, type ContributionStatus } from "../api/subsidiaryFormsApi";
 import { TranslatableField } from "../components/formContribution/TranslatableField";
 import { AddQuestionDialog } from "../components/formContribution/AddQuestionDialog";
+import { AddAnswerDialog } from "../components/formContribution/AddAnswerDialog";
 import { AddConsentDialog } from "../components/formContribution/AddConsentDialog";
 import { ContributionPreviewDialog } from "../components/formContribution/ContributionPreviewDialog";
 import { autoPopulateParamName, CONTROL_TYPE_LABEL } from "../components/formBuilder/formBuilderHelpers";
+import { useSaveShortcut } from "../hooks/useSaveShortcut";
+import { unsavedChangesBlinkSx } from "../components/formBuilder/unsavedChangesBlinkSx";
 
 const STATUS_COLOR: Record<ContributionStatus, "default" | "success" | "error"> = {
+  draft: "default",
   pending: "default",
   approved: "success",
   rejected: "error",
@@ -48,8 +56,10 @@ const PROFILE_FIELDS: Array<{ key: "firstName" | "lastName" | "email" | "mobileN
  * content read-only and lets the user add/update translations for any locale the
  * admin has added to the form, including its default one, plus entirely new
  * questions/consents of their own (see formContributionStore/contribution.ts).
- * Nothing here saves directly; "Submit for review" queues a FormContribution an
- * admin must approve.
+ * "Save Draft" (or Ctrl+S) persists the working copy as this user's own scratch
+ * space without notifying an admin; "Submit for review" queues it as a
+ * FormContribution an admin must approve — see formContributionStore's own
+ * saveDraft/submit and the "draft" ContributionStatus.
  */
 export function MyFormTranslatePage() {
   const { id } = useParams<{ id: string }>();
@@ -68,11 +78,21 @@ export function MyFormTranslatePage() {
   const removeConsent = useFormContributionStore((s) => s.removeConsent);
   const autoPopulateToggles = useFormContributionStore((s) => s.autoPopulateToggles);
   const setAutoPopulateToggle = useFormContributionStore((s) => s.setAutoPopulateToggle);
+  const deletedQuestionIds = useFormContributionStore((s) => s.deletedQuestionIds);
+  const toggleQuestionDeleted = useFormContributionStore((s) => s.toggleQuestionDeleted);
+  const newAnswersForExisting = useFormContributionStore((s) => s.newAnswersForExisting);
+  const addAnswerToQuestion = useFormContributionStore((s) => s.addAnswerToQuestion);
+  const removeNewAnswer = useFormContributionStore((s) => s.removeNewAnswer);
+  const deletedAnswerIds = useFormContributionStore((s) => s.deletedAnswerIds);
+  const toggleAnswerDeleted = useFormContributionStore((s) => s.toggleAnswerDeleted);
   const note = useFormContributionStore((s) => s.note);
   const setNote = useFormContributionStore((s) => s.setNote);
   const validation = useFormContributionStore((s) => s.validation);
   const submitting = useFormContributionStore((s) => s.submitting);
   const submit = useFormContributionStore((s) => s.submit);
+  const savingDraft = useFormContributionStore((s) => s.savingDraft);
+  const saveDraft = useFormContributionStore((s) => s.saveDraft);
+  const dirty = useFormContributionStore((s) => s.dirty);
   const loadForm = useFormContributionStore((s) => s.loadForm);
   const reset = useFormContributionStore((s) => s.reset);
   const ownContributions = useFormContributionStore((s) => s.ownContributions);
@@ -82,6 +102,7 @@ export function MyFormTranslatePage() {
   const projectLocked = useFormContributionStore((s) => s.projectLocked);
 
   const [addQuestionOpen, setAddQuestionOpen] = useState(false);
+  const [addAnswerForQuestionId, setAddAnswerForQuestionId] = useState<string | null>(null);
   const [addConsentOpen, setAddConsentOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -112,6 +133,14 @@ export function MyFormTranslatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  async function handleSaveDraft() {
+    setNotice(null);
+    const ok = await saveDraft();
+    if (ok) setNotice("Draft saved.");
+  }
+
+  useSaveShortcut(() => void handleSaveDraft(), dirty && !savingDraft && !locked && !projectLocked);
+
   async function handleSubmit() {
     setNotice(null);
     const ok = await submit();
@@ -137,6 +166,43 @@ export function MyFormTranslatePage() {
 
   const defaultLocale = baseDefinition.meta.defaultLocale;
 
+  // Same precedence MyAdHocFormEditorPage's own status bar uses: a locked
+  // project blocks everything, a pending submission beats an older
+  // approved/rejected one, and with neither, the most recent contribution
+  // (if any) decides; no submission at all just reads as a plain draft.
+  const latestContribution = ownContributions[0] ?? null;
+  const statusTone: FormStatusTone = projectLocked
+    ? "locked"
+    : locked
+      ? "pending"
+      : latestContribution?.status === "approved"
+        ? "approved"
+        : latestContribution?.status === "rejected"
+          ? "rejected"
+          : "draft";
+  const statusLabel = projectLocked
+    ? "Project locked"
+    : locked
+      ? "Pending review"
+      : latestContribution?.status === "approved"
+        ? "Approved"
+        : latestContribution?.status === "rejected"
+          ? "Rejected — editing enabled"
+          : latestContribution?.status === "draft"
+            ? "Draft saved"
+            : "No submissions yet";
+  const statusDescription = projectLocked
+    ? "No further submissions can be made for this project."
+    : locked && lockedContribution
+      ? `Submitted ${new Date(lockedContribution.submittedAt).toLocaleString()}`
+      : latestContribution?.status === "rejected"
+        ? (latestContribution.reviewNote ?? "You can make changes and submit again.")
+        : latestContribution?.status === "approved"
+          ? `Reviewed ${latestContribution.reviewedAt ? new Date(latestContribution.reviewedAt).toLocaleString() : ""}`
+          : latestContribution?.status === "draft"
+            ? `Last saved ${new Date(latestContribution.submittedAt).toLocaleString()} — not yet submitted for review.`
+            : undefined;
+
   return (
     <Box>
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
@@ -153,6 +219,8 @@ export function MyFormTranslatePage() {
           Preview
         </Button>
       </Stack>
+
+      <FormStatusBar tone={statusTone} label={statusLabel} description={statusDescription} />
 
       {projectLocked && (
         <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
@@ -190,6 +258,44 @@ export function MyFormTranslatePage() {
         <>
           <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
             <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
+              Campaign heading
+            </Typography>
+            <Stack spacing={2}>
+              <TranslatableField
+                label="Campaign heading (One-Click)"
+                target={{ kind: "campaignHeading" }}
+                existingValue={resolveLocalizedText(baseDefinition.fields.headingBeforeBreakByLocale, locale, defaultLocale)}
+                byLocale={baseDefinition.fields.headingBeforeBreakByLocale}
+              />
+              <TranslatableField
+                label="Campaign subheading (One-Click)"
+                target={{ kind: "campaignSubheading" }}
+                existingValue={resolveLocalizedText(baseDefinition.fields.campaignSubheadingByLocale, locale, defaultLocale)}
+                byLocale={baseDefinition.fields.campaignSubheadingByLocale}
+              />
+              <TranslatableField
+                label="Campaign heading (Full Form override)"
+                target={{ kind: "campaignHeadingFullForm" }}
+                existingValue={resolveLocalizedText(baseDefinition.fields.headingBeforeBreakFFByLocale, locale, defaultLocale)}
+                byLocale={baseDefinition.fields.headingBeforeBreakFFByLocale}
+              />
+              <TranslatableField
+                label="Campaign subheading (Full Form override)"
+                target={{ kind: "campaignSubheadingFullForm" }}
+                existingValue={resolveLocalizedText(baseDefinition.fields.campaignSubheadingFFByLocale, locale, defaultLocale)}
+                byLocale={baseDefinition.fields.campaignSubheadingFFByLocale}
+              />
+              <TranslatableField
+                label="Submit button label"
+                target={{ kind: "submitButtonLabel" }}
+                existingValue={resolveLocalizedText(baseDefinition.fields.submitButton.labelByLocale, locale, defaultLocale)}
+                byLocale={baseDefinition.fields.submitButton.labelByLocale}
+              />
+            </Stack>
+          </Paper>
+
+          <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
+            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
               Predefined fields
             </Typography>
             <Stack spacing={2}>
@@ -199,6 +305,7 @@ export function MyFormTranslatePage() {
                   label={f.label}
                   target={{ kind: "profileLabel", field: f.key }}
                   existingValue={resolveLocalizedText(baseDefinition.fields[f.key]?.labelByLocale, locale, defaultLocale)}
+                  byLocale={baseDefinition.fields[f.key]?.labelByLocale}
                 />
               ))}
               {PROFILE_FIELDS.every((f) => !baseDefinition.fields[f.key]) && (
@@ -220,7 +327,14 @@ export function MyFormTranslatePage() {
                     label="Privacy Policy text"
                     target={{ kind: "privacyPolicyText" }}
                     existingValue={resolveLocalizedText(baseDefinition.fields.privacyPolicy.textByLocale, locale, defaultLocale)}
+                    byLocale={baseDefinition.fields.privacyPolicy.textByLocale}
                     multiline
+                  />
+                  <TranslatableField
+                    label="Privacy Policy link text"
+                    target={{ kind: "privacyPolicyLinkText" }}
+                    existingValue={resolveLocalizedText(baseDefinition.fields.privacyPolicy.linkTextByLocale, locale, defaultLocale)}
+                    byLocale={baseDefinition.fields.privacyPolicy.linkTextByLocale}
                   />
                   <TranslatableField
                     label="Privacy Policy link URL"
@@ -235,6 +349,7 @@ export function MyFormTranslatePage() {
                   label="Marketing Opt-in label"
                   target={{ kind: "profileLabel", field: "marketingOptin" }}
                   existingValue={resolveLocalizedText(baseDefinition.fields.marketingOptin.labelByLocale, locale, defaultLocale)}
+                  byLocale={baseDefinition.fields.marketingOptin.labelByLocale}
                 />
               )}
               {baseDefinition.fields.termsAndConditions && (
@@ -243,6 +358,7 @@ export function MyFormTranslatePage() {
                     label="Terms and Conditions wording"
                     target={{ kind: "termsAndConditionsText" }}
                     existingValue={resolveLocalizedText(baseDefinition.fields.termsAndConditions.textByLocale, locale, defaultLocale)}
+                    byLocale={baseDefinition.fields.termsAndConditions.textByLocale}
                     multiline
                   />
                   <TranslatableField
@@ -259,6 +375,7 @@ export function MyFormTranslatePage() {
                     label={`Consent (${consent.id}) text`}
                     target={{ kind: "consentText", consentId: consent.id }}
                     existingValue={resolveLocalizedText(consent.textByLocale, locale, defaultLocale)}
+                    byLocale={consent.textByLocale}
                     multiline
                   />
                   {consent.linkUrlByLocale && (
@@ -287,44 +404,126 @@ export function MyFormTranslatePage() {
               Questions
             </Typography>
             <Stack spacing={2} divider={<Divider />}>
-              {baseDefinition.questions.map((q) => (
-                <Stack key={q.id} spacing={1}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {q.id} · {CONTROL_TYPE_LABEL[q.controlType]}
-                  </Typography>
-                  <TranslatableField
-                    label="Heading"
-                    target={{ kind: "questionHeading", questionId: q.id }}
-                    existingValue={resolveLocalizedText(q.headingByLocale, locale, defaultLocale)}
-                  />
-                  <TranslatableField
-                    label="Subheading"
-                    target={{ kind: "questionSubheading", questionId: q.id }}
-                    existingValue={resolveLocalizedText(q.subheadingByLocale, locale, defaultLocale)}
-                  />
-                  {q.autoPopulateEligible && (
-                    <FormControlLabel
-                      control={
-                        <Switch
+              {baseDefinition.questions.map((q) => {
+                const isDeleted = deletedQuestionIds.has(q.id);
+                const pendingAnswers = newAnswersForExisting.filter((a) => a.questionId === q.id);
+                return (
+                  <Stack key={q.id} spacing={1} sx={isDeleted ? { opacity: 0.55 } : undefined}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="body2" fontWeight={600} sx={{ flexGrow: 1 }}>
+                        {q.id} · {CONTROL_TYPE_LABEL[q.controlType]}
+                      </Typography>
+                      {q.lockedFromSubsidiary ? (
+                        <Chip size="small" icon={<LockIcon fontSize="small" />} label="Locked by admin" variant="outlined" />
+                      ) : isDeleted ? (
+                        <Button size="small" onClick={() => toggleQuestionDeleted(q.id)} disabled={locked || projectLocked}>
+                          Undo
+                        </Button>
+                      ) : (
+                        <IconButton
                           size="small"
-                          checked={autoPopulateToggles.get(q.id) ?? false}
+                          onClick={() => toggleQuestionDeleted(q.id)}
                           disabled={locked || projectLocked}
-                          onChange={(e) => setAutoPopulateToggle(q.id, e.target.checked)}
-                        />
-                      }
-                      label={`Auto-populate from URL parameter "${autoPopulateParamName(q.order)}" (One-Click)`}
-                    />
-                  )}
-                  {q.answers.map((a) => (
+                          aria-label="Delete question"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Stack>
+                    {isDeleted && (
+                      <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                        This question will be removed if approved.
+                      </Alert>
+                    )}
                     <TranslatableField
-                      key={a.id}
-                      label={`Option ${a.id}`}
-                      target={{ kind: "answerText", questionId: q.id, answerId: a.id }}
-                      existingValue={resolveLocalizedText(a.textByLocale, locale, defaultLocale)}
+                      label="Heading"
+                      target={{ kind: "questionHeading", questionId: q.id }}
+                      existingValue={resolveLocalizedText(q.headingByLocale, locale, defaultLocale)}
+                      byLocale={q.headingByLocale}
                     />
-                  ))}
-                </Stack>
-              ))}
+                    <TranslatableField
+                      label="Subheading"
+                      target={{ kind: "questionSubheading", questionId: q.id }}
+                      existingValue={resolveLocalizedText(q.subheadingByLocale, locale, defaultLocale)}
+                      byLocale={q.subheadingByLocale}
+                    />
+                    {q.autoPopulateEligible && (
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={autoPopulateToggles.get(q.id) ?? false}
+                            disabled={locked || projectLocked}
+                            onChange={(e) => setAutoPopulateToggle(q.id, e.target.checked)}
+                          />
+                        }
+                        label={`Auto-populate from URL parameter "${autoPopulateParamName(q.order)}" (One-Click)`}
+                      />
+                    )}
+                    {q.answers.map((a) => {
+                      const answerKey = `${q.id}::${a.id}`;
+                      const answerDeleted = deletedAnswerIds.has(answerKey);
+                      return (
+                        <Stack key={a.id} direction="row" spacing={0.5} alignItems="center" sx={answerDeleted ? { opacity: 0.55 } : undefined}>
+                          <Box sx={{ flexGrow: 1 }}>
+                            <TranslatableField
+                              label={`Option ${a.id}`}
+                              target={{ kind: "answerText", questionId: q.id, answerId: a.id }}
+                              existingValue={resolveLocalizedText(a.textByLocale, locale, defaultLocale)}
+                              byLocale={a.textByLocale}
+                            />
+                          </Box>
+                          {answerDeleted ? (
+                            <Button size="small" onClick={() => toggleAnswerDeleted(q.id, a.id)} disabled={locked || projectLocked}>
+                              Undo
+                            </Button>
+                          ) : (
+                            <IconButton
+                              size="small"
+                              onClick={() => toggleAnswerDeleted(q.id, a.id)}
+                              disabled={locked || projectLocked}
+                              aria-label="Delete option"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </Stack>
+                      );
+                    })}
+                    {pendingAnswers.map((pending) => (
+                      <Stack key={pending.localId} direction="row" spacing={0.5} alignItems="center">
+                        <TextField
+                          size="small"
+                          fullWidth
+                          label={`New option (${locale})`}
+                          value={pending.answer.textByLocale[locale] ?? ""}
+                          disabled
+                          helperText="Added this session — visible after approval."
+                        />
+                        <IconButton
+                          size="small"
+                          onClick={() => removeNewAnswer(pending.localId)}
+                          disabled={locked || projectLocked}
+                          aria-label="Remove new option"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                    ))}
+                    {(q.controlType === "radio" || q.controlType === "checkbox" || q.controlType === "dropdown") && (
+                      <Button
+                        size="small"
+                        startIcon={<AddIcon />}
+                        onClick={() => setAddAnswerForQuestionId(q.id)}
+                        disabled={locked || projectLocked}
+                        sx={{ alignSelf: "flex-start" }}
+                      >
+                        Add option
+                      </Button>
+                    )}
+                  </Stack>
+                );
+              })}
             </Stack>
           </Paper>
         </>
@@ -420,9 +619,20 @@ export function MyFormTranslatePage() {
           onChange={(e) => setNote(e.target.value)}
           sx={{ mb: 2 }}
         />
-        <Button variant="contained" disabled={submitting || locked || projectLocked} onClick={handleSubmit}>
-          {submitting ? "Submitting..." : "Submit for review"}
-        </Button>
+        <Stack direction="row" spacing={1.5}>
+          <Button
+            variant="outlined"
+            startIcon={<SaveIcon />}
+            disabled={savingDraft || locked || projectLocked}
+            onClick={() => void handleSaveDraft()}
+            sx={unsavedChangesBlinkSx(dirty && !savingDraft && !locked && !projectLocked)}
+          >
+            {savingDraft ? "Saving..." : "Save Draft"}
+          </Button>
+          <Button variant="contained" startIcon={<SendIcon />} disabled={submitting || locked || projectLocked} onClick={handleSubmit}>
+            {submitting ? "Submitting..." : "Submit for review"}
+          </Button>
+        </Stack>
         {error && (
           <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }}>
             {error}
@@ -436,24 +646,32 @@ export function MyFormTranslatePage() {
       </Paper>
       </Box>
 
-      {ownContributions.length > 0 && (
-        <Paper sx={{ p: 2, borderRadius: 3 }}>
-          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
-            Your submissions
-          </Typography>
-          <Stack spacing={1}>
-            {ownContributions.map((c) => (
-              <Stack key={c.id} direction="row" spacing={1.5} alignItems="center">
-                <Chip label={CONTRIBUTION_STATUS_LABEL[c.status]} size="small" color={STATUS_COLOR[c.status]} />
-                <Typography variant="caption" color="text.secondary">
-                  {new Date(c.submittedAt).toLocaleString()}
-                  {c.reviewNote ? ` · ${c.reviewNote}` : ""}
-                </Typography>
+      {(() => {
+        // "draft" rows are this user's own unsent scratch space, not a real
+        // submission — never shown in this history list (see syncOwnContributions'
+        // own doc comment on why ownContributions still includes it).
+        const submittedContributions = ownContributions.filter((c) => c.status !== "draft");
+        return (
+          submittedContributions.length > 0 && (
+            <Paper sx={{ p: 2, borderRadius: 3 }}>
+              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
+                Your submissions
+              </Typography>
+              <Stack spacing={1}>
+                {submittedContributions.map((c) => (
+                  <Stack key={c.id} direction="row" spacing={1.5} alignItems="center">
+                    <Chip label={CONTRIBUTION_STATUS_LABEL[c.status]} size="small" color={STATUS_COLOR[c.status]} />
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(c.submittedAt).toLocaleString()}
+                      {c.reviewNote ? ` · ${c.reviewNote}` : ""}
+                    </Typography>
+                  </Stack>
+                ))}
               </Stack>
-            ))}
-          </Stack>
-        </Paper>
-      )}
+            </Paper>
+          )
+        );
+      })()}
 
       {formId && (
         <>
@@ -468,6 +686,15 @@ export function MyFormTranslatePage() {
             onClose={() => setAddConsentOpen(false)}
             defaultLocale={defaultLocale}
             locales={baseDefinition.locales.map((l) => l.code)}
+          />
+          <AddAnswerDialog
+            open={addAnswerForQuestionId !== null}
+            onClose={() => setAddAnswerForQuestionId(null)}
+            defaultLocale={defaultLocale}
+            locales={baseDefinition.locales.map((l) => l.code)}
+            onAdd={(answer) => {
+              if (addAnswerForQuestionId) addAnswerToQuestion(addAnswerForQuestionId, answer);
+            }}
           />
           <ContributionPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
         </>

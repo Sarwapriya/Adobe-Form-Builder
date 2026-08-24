@@ -34,7 +34,15 @@ function baseForm(overrides: Partial<FormDefinition> = {}): FormDefinition {
   };
 }
 
-const emptyContent: ContributionContent = { translations: [], newQuestions: [], newConsents: [], autoPopulateToggles: [] };
+const emptyContent: ContributionContent = {
+  translations: [],
+  newQuestions: [],
+  newConsents: [],
+  autoPopulateToggles: [],
+  deletedQuestionIds: [],
+  newAnswers: [],
+  deletedAnswerIds: [],
+};
 
 describe("applyContribution", () => {
   it("adds a non-default-locale translation without touching the default locale's text", () => {
@@ -136,6 +144,55 @@ describe("applyContribution", () => {
     const content: ContributionContent = { ...emptyContent, autoPopulateToggles: [{ questionId: "Q99", enabled: true }] };
     expect(() => applyContribution(form, content)).not.toThrow();
   });
+
+  it("deletes an unlocked existing question and renumbers what remains", () => {
+    const form = baseForm();
+    form.questions.push({
+      id: "Q2",
+      order: 2,
+      controlType: "shortText",
+      headingByLocale: { en_GB: "Second question" },
+      subheadingByLocale: {},
+      required: false,
+      answers: [],
+    });
+    const content: ContributionContent = { ...emptyContent, deletedQuestionIds: ["Q1"] };
+    const next = applyContribution(form, content);
+    expect(next.questions).toHaveLength(1);
+    expect(next.questions[0].id).toBe("Q1"); // old Q2 renumbered down to Q1
+    expect(next.questions[0].headingByLocale.en_GB).toBe("Second question");
+    expect(form.questions).toHaveLength(2); // base untouched
+  });
+
+  it("never deletes a question marked lockedFromSubsidiary, even if asked to", () => {
+    const form = baseForm();
+    form.questions[0].lockedFromSubsidiary = true;
+    const content: ContributionContent = { ...emptyContent, deletedQuestionIds: ["Q1"] };
+    const next = applyContribution(form, content);
+    expect(next.questions).toHaveLength(1);
+    expect(next.questions[0].id).toBe("Q1");
+  });
+
+  it("adds a new answer option to an existing question", () => {
+    const form = baseForm();
+    const content: ContributionContent = {
+      ...emptyContent,
+      newAnswers: [{ questionId: "Q1", answer: { id: "tmp", order: 0, textByLocale: { en_GB: "No" } } }],
+    };
+    const next = applyContribution(form, content);
+    expect(next.questions[0].answers).toHaveLength(2);
+    expect(next.questions[0].answers[1].id).toBe("A2");
+    expect(next.questions[0].answers[1].textByLocale.en_GB).toBe("No");
+    expect(form.questions[0].answers).toHaveLength(1); // base untouched
+  });
+
+  it("removes an existing answer option from a question, locked or not", () => {
+    const form = baseForm();
+    form.questions[0].lockedFromSubsidiary = true;
+    const content: ContributionContent = { ...emptyContent, deletedAnswerIds: [{ questionId: "Q1", answerId: "A1" }] };
+    const next = applyContribution(form, content);
+    expect(next.questions[0].answers).toHaveLength(0);
+  });
 });
 
 describe("validateContribution", () => {
@@ -221,5 +278,44 @@ describe("validateContribution", () => {
     const content: ContributionContent = { ...emptyContent, autoPopulateToggles: [{ questionId: "Q99", enabled: true }] };
     const result = validateContribution(form, content);
     expect(result.errors.some((e) => /isn't eligible/.test(e.message))).toBe(true);
+  });
+
+  it("passes deleting an unlocked question", () => {
+    const form = baseForm();
+    const content: ContributionContent = { ...emptyContent, deletedQuestionIds: ["Q1"] };
+    expect(validateContribution(form, content).errors).toEqual([]);
+  });
+
+  it("errors when deleting a question the admin locked", () => {
+    const form = baseForm();
+    form.questions[0].lockedFromSubsidiary = true;
+    const content: ContributionContent = { ...emptyContent, deletedQuestionIds: ["Q1"] };
+    const result = validateContribution(form, content);
+    expect(result.errors.some((e) => /locked by the admin/.test(e.message))).toBe(true);
+  });
+
+  it("errors when deleting a question id that no longer exists", () => {
+    const form = baseForm();
+    const content: ContributionContent = { ...emptyContent, deletedQuestionIds: ["Q99"] };
+    const result = validateContribution(form, content);
+    expect(result.errors.some((e) => /no longer exists/.test(e.message))).toBe(true);
+  });
+
+  it("passes adding/removing an answer on a locked question — the lock only blocks deletion", () => {
+    const form = baseForm();
+    form.questions[0].lockedFromSubsidiary = true;
+    const content: ContributionContent = {
+      ...emptyContent,
+      newAnswers: [{ questionId: "Q1", answer: { id: "tmp", order: 0, textByLocale: { en_GB: "No" } } }],
+      deletedAnswerIds: [{ questionId: "Q1", answerId: "A1" }],
+    };
+    expect(validateContribution(form, content).errors).toEqual([]);
+  });
+
+  it("errors when deleting an answer id that no longer exists", () => {
+    const form = baseForm();
+    const content: ContributionContent = { ...emptyContent, deletedAnswerIds: [{ questionId: "Q1", answerId: "A99" }] };
+    const result = validateContribution(form, content);
+    expect(result.errors.some((e) => /no longer exists/.test(e.message))).toBe(true);
   });
 });

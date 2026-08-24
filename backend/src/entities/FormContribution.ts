@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
 
-export type ContributionStatus = "pending" | "approved" | "rejected";
+export type ContributionStatus = "draft" | "pending" | "approved" | "rejected";
 
 /**
  * A subsidiary-scoped standard user's proposed translations/additions to a
@@ -12,6 +12,16 @@ export type ContributionStatus = "pending" | "approved" | "rejected";
  * "Publish" action used everywhere else (`formBuilderService.publishForm`), which
  * also stamps `publishedAt` on every contribution that publish just carried live.
  * Rejecting one leaves the form untouched.
+ *
+ * "draft" is a save-in-progress row, never admin-visible (see
+ * `listContributionsForForm`/`listOwnContributionsAllForms`, both of which filter
+ * it out) — a subsidiary user's own scratch space so Ctrl+S/"Save Draft" on the
+ * Translate & Extend page can persist work across sessions without queuing it for
+ * review. At most one draft row exists per (formId, submittedByUserId) — see
+ * `saveContributionDraft`'s upsert. `submitContribution` promotes that same row to
+ * "pending" in place (re-stamping `submittedAt`) instead of inserting a second row,
+ * so a save-then-submit session never leaves an orphaned draft behind. For a draft
+ * row, `submittedAt` means "last saved at", not a real submission time.
  */
 @Entity("FormContributions")
 export class FormContribution {

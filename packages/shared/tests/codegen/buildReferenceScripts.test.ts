@@ -487,3 +487,44 @@ describe("generated bundle (oc.html + data file + OC js) wired together", () => 
     }
   });
 });
+
+describe("campaign heading/subheading — independently configurable per output variant", () => {
+  it("renders the Full Form override in ff.html while oc.html keeps the base (One-Click) text", async () => {
+    const form = sampleFormDefinition();
+    form.fields.headingBeforeBreakByLocale = { en_GB: "One-Click heading" };
+    form.fields.campaignSubheadingByLocale = { en_GB: "One-Click subheading" };
+    form.fields.headingBeforeBreakFFByLocale = { en_GB: "Full Form heading" };
+    form.fields.campaignSubheadingFFByLocale = { en_GB: "Full Form subheading" };
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+    const dataJs = buildDataJs(form, config, fileNames);
+
+    const ffHtml = buildFfHtml(form, config, fileNames);
+    const ffJs = buildFfJs(fileNames);
+    await runGeneratedBundle(ffHtml.contents, dataJs.contents, ffJs.contents);
+    expect(document.querySelector("div.top_cont h2")?.textContent).toContain("Full Form heading");
+    expect(document.querySelector("p.top_subheading")?.textContent).toBe("Full Form subheading");
+
+    const ocHtml = buildOcHtml(form, config, fileNames);
+    const ocJs = buildOcJs(fileNames);
+    window.history.pushState({}, "", "/oc.html?id=recipient-1");
+    await runGeneratedBundle(ocHtml.contents, dataJs.contents, ocJs.contents);
+    expect(document.querySelector("div.top_cont h2")?.textContent).toContain("One-Click heading");
+    expect(document.querySelector("p.top_subheading")?.textContent).toBe("One-Click subheading");
+  });
+
+  it("falls back to the base (One-Click) text for Full Form when no override is set — zero regression for existing forms", async () => {
+    const form = sampleFormDefinition();
+    form.fields.headingBeforeBreakByLocale = { en_GB: "Shared heading" };
+    form.fields.campaignSubheadingByLocale = { en_GB: "Shared subheading" };
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+    const dataJs = buildDataJs(form, config, fileNames);
+    const ffHtml = buildFfHtml(form, config, fileNames);
+    const ffJs = buildFfJs(fileNames);
+
+    await runGeneratedBundle(ffHtml.contents, dataJs.contents, ffJs.contents);
+    expect(document.querySelector("div.top_cont h2")?.textContent).toContain("Shared heading");
+    expect(document.querySelector("p.top_subheading")?.textContent).toBe("Shared subheading");
+  });
+});

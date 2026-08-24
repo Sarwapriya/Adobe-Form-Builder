@@ -4,6 +4,7 @@ import { Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { useFormBuilderStore } from "../store/formBuilderStore";
 import { PageHeader } from "../components/common/PageHeader";
+import { FormStatusBar, type FormStatusTone } from "../components/common/FormStatusBar";
 import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
 import { SubsidiaryLocalePicker } from "../components/formBuilder/SubsidiaryLocalePicker";
 import { LocaleEditingSwitcher } from "../components/formBuilder/LocaleEditingSwitcher";
@@ -58,7 +59,9 @@ export function MyAdHocFormEditorPage() {
   const definition = useFormBuilderStore((s) => s.definition);
   const name = useFormBuilderStore((s) => s.name);
   const subsidiaryId = useFormBuilderStore((s) => s.subsidiaryId);
+  const status = useFormBuilderStore((s) => s.status);
   const pendingReview = useFormBuilderStore((s) => s.pendingReview);
+  const reviewNote = useFormBuilderStore((s) => s.reviewNote);
   const loadForm = useFormBuilderStore((s) => s.loadForm);
   const reset = useFormBuilderStore((s) => s.reset);
 
@@ -78,6 +81,17 @@ export function MyAdHocFormEditorPage() {
     );
   }
 
+  // Same status vocabulary AdHocActionBar's own sticky status chip uses —
+  // pending beats published beats a lingering rejection note (still shown
+  // once editing resumes, until the next submit) beats plain draft.
+  const statusTone: FormStatusTone = pendingReview ? "pending" : status === "published" ? "approved" : reviewNote ? "rejected" : "draft";
+  const statusLabel = pendingReview ? "Pending review" : status === "published" ? "Published" : reviewNote ? "Rejected — editing enabled" : "Draft";
+  const statusDescription = pendingReview
+    ? "An admin needs to review this before it can be published."
+    : reviewNote && !pendingReview && status !== "published"
+      ? reviewNote
+      : undefined;
+
   return (
     <Box>
       <PageHeader
@@ -88,6 +102,8 @@ export function MyAdHocFormEditorPage() {
         onBack={() => navigate("/my-forms")}
         backLabel="Back to My Forms"
       />
+
+      <FormStatusBar tone={statusTone} label={statusLabel} description={statusDescription} />
 
       <BuilderValidationPanel />
 

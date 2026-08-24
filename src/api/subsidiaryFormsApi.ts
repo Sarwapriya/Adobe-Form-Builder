@@ -55,9 +55,10 @@ export function deleteAdHocForm(formId: string): Promise<void> {
   return apiClient.delete<void>(`/api/v1/forms/adhoc/${formId}`);
 }
 
-export type ContributionStatus = "pending" | "approved" | "rejected";
+export type ContributionStatus = "draft" | "pending" | "approved" | "rejected";
 
 export const CONTRIBUTION_STATUS_LABEL: Record<ContributionStatus, string> = {
+  draft: "Draft",
   pending: "Pending Approval",
   approved: "Approved",
   rejected: "Rejected",
@@ -105,6 +106,13 @@ export async function submitContribution(formId: string, content: ContributionCo
 
 export function listMyContributions(formId: string): Promise<ContributionSummary[]> {
   return apiClient.get<ContributionSummary[]>(`/api/v1/forms/${formId}/contributions`);
+}
+
+/** Saves (or updates in place) this user's one in-progress draft for a form —
+ * never queues it for admin review, unlike submitContribution above. Powers the
+ * Translate & Extend page's Ctrl+S/"Save Draft" button. */
+export function saveContributionDraft(formId: string, content: ContributionContent, note?: string): Promise<ContributionSummary> {
+  return apiClient.patch<ContributionSummary>(`/api/v1/forms/${formId}/contributions/draft`, { content, note });
 }
 
 export interface ContributionSummaryWithForm extends ContributionSummary {

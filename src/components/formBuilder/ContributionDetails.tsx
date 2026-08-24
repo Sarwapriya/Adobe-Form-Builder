@@ -1,5 +1,5 @@
 import { Box, Stack, Typography } from "@mui/material";
-import type { ContributionContent, TranslationTarget } from "@formbuilder/shared";
+import type { ContributionContent, FormDefinition, TranslationTarget } from "@formbuilder/shared";
 import { CONTROL_TYPE_LABEL } from "./formBuilderHelpers";
 
 function describeTarget(target: TranslationTarget): string {
@@ -10,6 +10,8 @@ function describeTarget(target: TranslationTarget): string {
       return "Privacy Policy text";
     case "privacyPolicyLink":
       return "Privacy Policy link URL";
+    case "privacyPolicyLinkText":
+      return "Privacy Policy link text";
     case "termsAndConditionsText":
       return "Terms and Conditions text";
     case "termsAndConditionsUrl":
@@ -24,6 +26,16 @@ function describeTarget(target: TranslationTarget): string {
       return `Question "${target.questionId}" subheading`;
     case "answerText":
       return `Question "${target.questionId}" option "${target.answerId}"`;
+    case "campaignHeading":
+      return "Campaign heading (One-Click)";
+    case "campaignSubheading":
+      return "Campaign subheading (One-Click)";
+    case "campaignHeadingFullForm":
+      return "Campaign heading (Full Form)";
+    case "campaignSubheadingFullForm":
+      return "Campaign subheading (Full Form)";
+    case "submitButtonLabel":
+      return "Submit button label";
   }
 }
 
@@ -34,12 +46,15 @@ function describeTarget(target: TranslationTarget): string {
  * `describeContent`'s one-line count. Lets a reviewer see exactly what they're
  * approving/rejecting without opening the merge preview dialog first.
  */
-export function ContributionDetails({ content }: { content: ContributionContent }) {
+export function ContributionDetails({ content, base }: { content: ContributionContent; base?: FormDefinition | null }) {
   const hasAnything =
     content.translations.length > 0 ||
     content.newQuestions.length > 0 ||
     content.newConsents.length > 0 ||
-    content.autoPopulateToggles.length > 0;
+    content.autoPopulateToggles.length > 0 ||
+    content.deletedQuestionIds.length > 0 ||
+    content.newAnswers.length > 0 ||
+    content.deletedAnswerIds.length > 0;
   if (!hasAnything) {
     return (
       <Typography variant="caption" color="text.secondary">
@@ -90,6 +105,69 @@ export function ContributionDetails({ content }: { content: ContributionContent 
                 ))}
               </Box>
             ))}
+          </Stack>
+        </Box>
+      )}
+
+      {content.deletedQuestionIds.length > 0 && (
+        <Box>
+          <Typography variant="caption" fontWeight={700} color="error.main" sx={{ display: "block" }}>
+            Questions to remove
+          </Typography>
+          <Stack spacing={0.25}>
+            {content.deletedQuestionIds.map((id) => {
+              const question = base?.questions.find((q) => q.id === id);
+              const heading = question ? Object.values(question.headingByLocale)[0] : undefined;
+              return (
+                <Typography key={id} variant="caption" color="error.main" sx={{ display: "block", textDecoration: "line-through" }}>
+                  {id}
+                  {heading ? `: "${heading}"` : ""}
+                </Typography>
+              );
+            })}
+          </Stack>
+        </Box>
+      )}
+
+      {content.newAnswers.length > 0 && (
+        <Box>
+          <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: "block" }}>
+            New answer options
+          </Typography>
+          <Stack spacing={0.5}>
+            {content.newAnswers.map((entry, i) => (
+              <Box key={i} sx={{ pl: 1, borderLeft: "2px solid", borderColor: "divider" }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                  On {entry.questionId}:
+                </Typography>
+                <Typography variant="caption" sx={{ display: "block", pl: 1.5 }}>
+                  {Object.entries(entry.answer.textByLocale)
+                    .map(([l, text]) => `${l}: "${text}"`)
+                    .join(" · ")}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      )}
+
+      {content.deletedAnswerIds.length > 0 && (
+        <Box>
+          <Typography variant="caption" fontWeight={700} color="error.main" sx={{ display: "block" }}>
+            Answer options to remove
+          </Typography>
+          <Stack spacing={0.25}>
+            {content.deletedAnswerIds.map((entry, i) => {
+              const question = base?.questions.find((q) => q.id === entry.questionId);
+              const answer = question?.answers.find((a) => a.id === entry.answerId);
+              const text = answer ? Object.values(answer.textByLocale)[0] : undefined;
+              return (
+                <Typography key={i} variant="caption" color="error.main" sx={{ display: "block", textDecoration: "line-through" }}>
+                  {entry.questionId} · {entry.answerId}
+                  {text ? `: "${text}"` : ""}
+                </Typography>
+              );
+            })}
           </Stack>
         </Box>
       )}

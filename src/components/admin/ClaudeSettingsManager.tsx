@@ -16,22 +16,23 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { ApiError } from "../../api/apiClient";
 import {
   getClaudeSettings,
-  listClaudeModels,
+  listOtherAiModels,
   saveClaudeSettings,
   sendClaudeTestMessage,
-  type ClaudeModel,
+  type OtherAiModel,
   type ClaudeSettings,
 } from "../../api/adminApi";
 import { LoadingState } from "../common/LoadingState";
 
 const DEFAULT_MODEL = "claude-opus-5";
 
-/** Recognizes which provider an API key belongs to, from its shape alone —
- * lets the form confirm what was pasted without the admin having to say so.
- * Currently only Claude is wired up as an actual fallback provider, but the
- * check is written as a small lookup rather than an inline string compare so
- * a future provider subsection (OtherAiProvidersManager.tsx) can add its own
- * entry the same way instead of duplicating this pattern. */
+/** Recognizes which provider an API key belongs to, from its shape alone, so
+ * the interface never hardcodes a provider name up front — it only names one
+ * once a key is actually typed (or was already saved). Written as a small
+ * lookup rather than an inline string compare so it reads the same way for
+ * whatever provider is behind this panel, not specifically "Claude" — the
+ * label is data here, not UI copy. Only one entry exists today because only
+ * one provider (Claude/Anthropic) is actually wired up server-side. */
 const KEY_SHAPE = { label: "Claude (Anthropic)", test: (key: string) => key.startsWith("sk-ant-") };
 
 function describeKeyShape(key: string): { ok: boolean; label: string } | null {
@@ -41,20 +42,22 @@ function describeKeyShape(key: string): { ok: boolean; label: string } | null {
 }
 
 /**
- * One subsection of OtherAiProvidersManager — connection settings for the
- * Anthropic Claude Messages API, the fallback AI provider used automatically
- * whenever FabriX can't be reached (see backend aiProviderService.ts).
- * Simpler surface than FabriX's own settings form: one API key (DB-stored
- * encrypted server-side, see backend claudeSettingsService.ts) and one model
- * string — Claude takes exactly one `model` per request, not an array, so
- * there's no separate enable-and-reorder models manager like FabriX's; the
- * Model field is a free-text-capable Autocomplete backed by the read-only
- * ClaudeModels catalog (Anthropic's own known model ids), so a newer id not
- * yet in that list can still be typed directly.
+ * One subsection of OtherAiProvidersManager — connection settings for a
+ * fallback AI provider, used automatically whenever FabriX can't be reached
+ * (see backend aiProviderService.ts). The heading itself stays generic
+ * ("Provider") until a key identifies it, rather than being labeled ahead of
+ * time — see describeKeyShape above. Backed by the Anthropic Claude Messages
+ * API specifically (see backend claudeSettingsService.ts) — one API key
+ * (DB-stored encrypted server-side) and one model string, since Claude takes
+ * exactly one `model` per request, not an array, so there's no separate
+ * enable-and-reorder models manager like FabriX's. The Model field is a
+ * free-text-capable Autocomplete backed by the read-only OtherAiModels
+ * catalog (Anthropic's own known model ids), so a newer id not yet in that
+ * list can still be typed directly.
  */
-export function ClaudeProviderPanel() {
+export function AiProviderPanel() {
   const [settings, setSettings] = useState<ClaudeSettings | null>(null);
-  const [modelOptions, setModelOptions] = useState<ClaudeModel[]>([]);
+  const [modelOptions, setModelOptions] = useState<OtherAiModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
@@ -70,7 +73,7 @@ export function ClaudeProviderPanel() {
     setLoading(true);
     setError(null);
     try {
-      const [result, models] = await Promise.all([getClaudeSettings(), listClaudeModels()]);
+      const [result, models] = await Promise.all([getClaudeSettings(), listOtherAiModels()]);
       setSettings(result);
       setModelOptions(models);
       setModel(result.model || DEFAULT_MODEL);
@@ -122,16 +125,20 @@ export function ClaudeProviderPanel() {
   }
 
   const keyShape = describeKeyShape(apiKey);
+  // The heading names the provider only once it's known — from what's
+  // currently typed, or (if nothing's being typed right now) from the fact
+  // that a key was already saved through this panel before.
+  const identity = keyShape?.ok ? keyShape.label : settings?.hasApiKey ? KEY_SHAPE.label : null;
 
   return (
     <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
         <AutoAwesomeIcon fontSize="small" color="primary" />
-        <Typography variant="subtitle2">Claude (Anthropic)</Typography>
+        <Typography variant="subtitle2">{identity ?? "Provider"}</Typography>
         {settings?.hasApiKey && <Chip label="Configured" size="small" color="success" variant="outlined" />}
       </Stack>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
-        Only called when FabriX is unavailable.
+        Add an API key below — it's identified automatically once entered. Only called when FabriX is unavailable.
       </Typography>
 
       {error && !loading && (
@@ -170,7 +177,7 @@ export function ClaudeProviderPanel() {
                   {...params}
                   label="Model"
                   required
-                  helperText="Pick a known model, or type any Claude model id"
+                  helperText="Pick a known model, or type any model id"
                 />
               )}
               sx={{ minWidth: 300 }}

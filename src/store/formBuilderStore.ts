@@ -4,9 +4,11 @@ import {
   deleteForm as apiDeleteForm,
   FormInvalidError,
   getFormDetail,
+  listFormContributions,
   publishForm as apiPublishForm,
   unpublishForm as apiUnpublishForm,
   updateDraft as apiUpdateDraft,
+  type ContributionSummary,
   type FormDetail,
   type FormOrigin,
   type FormStatus,
@@ -55,8 +57,17 @@ interface FormBuilderState {
   saving: boolean;
   publishing: boolean;
   error: string | null;
+  /** Every FormContribution submitted against this form (admin mode only —
+   * ad-hoc forms have no FormContribution review lifecycle), newest-first.
+   * Shared between ContributionReviewPanel (the full review queue) and every
+   * editor panel's own pending-translation hint (see
+   * pendingTranslationHint.tsx), so both stay in sync off one fetch instead
+   * of drifting apart. */
+  contributions: ContributionSummary[];
+  contributionsLoading: boolean;
 
   loadForm: (formId: string, mode?: FormBuilderMode) => Promise<void>;
+  refreshContributions: () => Promise<void>;
   setActiveLocale: (locale: string) => void;
   updateDefinition: (updater: (definition: FormDefinition) => FormDefinition) => void;
   updateConfig: (patch: Partial<BuilderConfig>) => void;
@@ -115,16 +126,34 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
   saving: false,
   publishing: false,
   error: null,
+  contributions: [],
+  contributionsLoading: false,
 
   async loadForm(formId, mode = "admin") {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, contributions: [] });
     try {
       const detail = mode === "adhoc" ? await getMyAdHocFormDetail(formId) : await getFormDetail(formId);
       set(applyDetail(detail, mode));
+      if (mode === "admin") await get().refreshContributions();
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to load form" });
     } finally {
       set({ loading: false });
+    }
+  },
+
+  async refreshContributions() {
+    const { formId, mode } = get();
+    if (!formId || mode !== "admin") return;
+    set({ contributionsLoading: true });
+    try {
+      set({ contributions: await listFormContributions(formId) });
+    } catch {
+      // Non-fatal — the form itself already loaded fine; ContributionReviewPanel
+      // surfaces its own approve/reject errors separately, and simply showing no
+      // contributions/hints here is a reasonable degradation.
+    } finally {
+      set({ contributionsLoading: false });
     }
   },
 
@@ -256,6 +285,8 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
       saving: false,
       publishing: false,
       error: null,
+      contributions: [],
+      contributionsLoading: false,
     });
   },
 }));

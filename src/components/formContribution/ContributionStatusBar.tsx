@@ -54,7 +54,7 @@ export function ContributionStatusBar({ progress }: { progress: ContributionProg
               width: `${percent}%`,
               height: "100%",
               borderRadius: 4,
-              background: "linear-gradient(90deg, #ff9800 0%, #2196f3 55%, #4caf50 100%)",
+              background: "linear-gradient(90deg, rgb(255, 152, 0) 0%, rgb(33, 150, 243) 55%, rgb(76, 175, 80) 100%)",
               transition: "width 0.3s ease",
             }}
           />

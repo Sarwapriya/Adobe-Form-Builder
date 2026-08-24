@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Alert,
   Box,
@@ -23,7 +23,6 @@ import { resolveLocalizedText } from "@formbuilder/shared";
 import {
   approveContribution,
   FormInvalidError,
-  listFormContributions,
   publishForm as apiPublishForm,
   rejectContribution,
   type ContributionSummary,
@@ -81,8 +80,9 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
   const definition = useFormBuilderStore((s) => s.definition);
   const config = useFormBuilderStore((s) => s.config);
   const reloadForm = useFormBuilderStore((s) => s.loadForm);
-  const [contributions, setContributions] = useState<ContributionSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const contributions = useFormBuilderStore((s) => s.contributions);
+  const loading = useFormBuilderStore((s) => s.contributionsLoading);
+  const refresh = useFormBuilderStore((s) => s.refreshContributions);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewContribution, setPreviewContribution] = useState<ContributionSummary | null>(null);
@@ -98,23 +98,6 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
       return next;
     });
   }
-
-  async function refresh() {
-    setLoading(true);
-    setError(null);
-    try {
-      setContributions(await listFormContributions(formId));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load contributions");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formId]);
 
   async function handleApprove(id: string) {
     setBusyId(id);
@@ -239,7 +222,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
                 Note: {c.note}
               </Typography>
             )}
-            {expandedIds.has(c.id) && <ContributionDetails content={c.content} />}
+            {expandedIds.has(c.id) && <ContributionDetails content={c.content} base={definition} />}
             <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
               <Button size="small" onClick={() => toggleExpanded(c.id)}>
                 {expandedIds.has(c.id) ? "Hide details" : "Show details"}
@@ -269,7 +252,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
             <Typography variant="body2" sx={{ mb: 0.5 }}>
               {describeContent(c, defaultLocale)}
             </Typography>
-            {expandedIds.has(c.id) && <ContributionDetails content={c.content} />}
+            {expandedIds.has(c.id) && <ContributionDetails content={c.content} base={definition} />}
             <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
               <Button size="small" onClick={() => toggleExpanded(c.id)}>
                 {expandedIds.has(c.id) ? "Hide details" : "Show details"}
@@ -301,7 +284,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
                   Review note: {c.reviewNote}
                 </Typography>
               )}
-              {expandedIds.has(c.id) && <ContributionDetails content={c.content} />}
+              {expandedIds.has(c.id) && <ContributionDetails content={c.content} base={definition} />}
               <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                 <Button size="small" onClick={() => toggleExpanded(c.id)}>
                   {expandedIds.has(c.id) ? "Hide details" : "Show details"}

@@ -26,6 +26,7 @@ const fields = {
     "headingAfterBreakFF": "",
     "headingBeforeBreak": "",
     "headingAfterBreak": "",
+    "campaignSubheadingFF": "",
     "campaignSubheading": "",
     "requiredField": "",
     "label": {
@@ -73,6 +74,7 @@ const fields = {
     "headingAfterBreakFF": "",
     "headingBeforeBreak": "",
     "headingAfterBreak": "",
+    "campaignSubheadingFF": "",
     "campaignSubheading": "",
     "requiredField": "",
     "label": {
@@ -680,7 +682,6 @@ const subsidiary_detail = {
       "callingCode": "972",
       "countryCode": "IL",
       "countryName": {
-        "en_GB": "Israel",
         "he_IL": "יִשְׂרָאֵל"
       }
     },
@@ -688,7 +689,6 @@ const subsidiary_detail = {
       "callingCode": "970",
       "countryCode": "PS",
       "countryName": {
-        "en_GB": "Palestine",
         "ar_PS": "فلسطين"
       }
     }

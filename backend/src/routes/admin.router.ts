@@ -62,7 +62,7 @@ import {
 } from "../services/fabrixModelsService";
 import { getClaudeSettingsForDisplay, saveClaudeSettings } from "../services/claudeSettingsService";
 import { sendMessage as sendClaudeMessage } from "../services/claudeAIService";
-import { listClaudeModels } from "../services/claudeModelsService";
+import { listOtherAiModels } from "../services/otherAiModelsService";
 import {
   generateQuestionMaster,
   generateQuestionMasterFromUploads,
@@ -1059,12 +1059,13 @@ adminRouter.get(
   })
 );
 
-// Read-only reference catalog of known Claude model ids, for the Model
-// field's picklist in the admin UI (see claudeModelsService.ts).
+// Read-only reference catalog of known models for the fallback AI providers
+// (Configuration > AI Assistant > Other AI Providers), for the Model field's
+// picklist in the admin UI (see otherAiModelsService.ts).
 adminRouter.get(
-  "/claude-models",
+  "/other-ai-models",
   asyncHandler(async (_req, res) => {
-    res.json(await listClaudeModels());
+    res.json(await listOtherAiModels());
   })
 );
 

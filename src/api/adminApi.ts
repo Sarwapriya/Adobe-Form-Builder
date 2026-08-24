@@ -475,11 +475,13 @@ export function sendClaudeTestMessage(): Promise<{ ok: boolean; error?: string }
   return apiClient.post<{ ok: boolean; error?: string }>("/api/v1/admin/claude-settings/test");
 }
 
-/** Read-only reference catalog of known Claude model ids (see backend's
- * ClaudeModel entity) — feeds the Model field's picklist in
- * ClaudeSettingsManager. Not admin-editable the way FabrixModel is: these
- * are Anthropic's own official model ids, not tenant-specific values. */
-export interface ClaudeModel {
+/** Read-only reference catalog of known models for the fallback AI providers
+ * (see backend's OtherAiModel entity) — feeds the Model field's picklist in
+ * the "Other AI Providers" panel. Not admin-editable the way FabrixModel is:
+ * these are Anthropic's own official model ids, not tenant-specific values.
+ * Named provider-generically, like the rest of that section — see
+ * ClaudeSettingsManager.tsx's AiProviderPanel. */
+export interface OtherAiModel {
   id: string;
   name: string;
   modelId: string;
@@ -487,6 +489,6 @@ export interface ClaudeModel {
   createdAt: string;
 }
 
-export function listClaudeModels(): Promise<ClaudeModel[]> {
-  return apiClient.get<ClaudeModel[]>("/api/v1/admin/claude-models");
+export function listOtherAiModels(): Promise<OtherAiModel[]> {
+  return apiClient.get<OtherAiModel[]>("/api/v1/admin/other-ai-models");
 }

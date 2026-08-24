@@ -19,9 +19,10 @@ import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import AddIcon from "@mui/icons-material/Add";
 import { ApiError } from "../api/apiClient";
 import { createAdHocForm, deleteAdHocForm, listMyAdHocForms } from "../api/subsidiaryFormsApi";
-import type { FormListItem } from "../api/formBuilderApi";
+import type { ContributionProgress, FormListItem } from "../api/formBuilderApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
+import { ContributionStatusBar } from "../components/formContribution/ContributionStatusBar";
 
 type AdHocStatusLabel = "Draft" | "Pending review" | "Rejected" | "Published";
 
@@ -38,6 +39,31 @@ const AD_HOC_STATUS_COLOR: Record<AdHocStatusLabel, "default" | "warning" | "err
   Rejected: "error",
   Published: "success",
 };
+
+/** Same 4-stage bar MyHrFormsListPage shows (see ContributionStatusBar.tsx),
+ * built from the ad-hoc form's own status fields instead of a
+ * FormContribution row — an ad-hoc form has no separate contribution object,
+ * its lifecycle lives directly on the Form itself (submitAdHocFormForReview/
+ * approveAdHocForm/rejectAdHocForm in formBuilderService.ts). Unlike the HR
+ * contribution flow, "approved" and "published" happen in the same admin
+ * click for an ad-hoc form (approveAdHocForm publishes immediately), so
+ * `publishedAt` is set to `reviewedAt` too whenever it's actually published —
+ * the bar still jumps straight to 100% in one step, just like a
+ * simultaneously-approved-and-published contribution would. Returns null
+ * (no bar) for a plain draft that's never been submitted — nothing to show
+ * progress on yet. */
+function adHocProgress(form: FormListItem): ContributionProgress | null {
+  if (form.pendingReview) {
+    return { status: "pending", submittedAt: form.submittedForReviewAt ?? form.updatedAt, reviewedAt: null, publishedAt: null };
+  }
+  if (form.status === "published") {
+    return { status: "approved", submittedAt: form.submittedForReviewAt ?? form.updatedAt, reviewedAt: form.reviewedAt, publishedAt: form.reviewedAt };
+  }
+  if (form.reviewNote) {
+    return { status: "rejected", submittedAt: form.submittedForReviewAt ?? form.updatedAt, reviewedAt: form.reviewedAt, publishedAt: null };
+  }
+  return null;
+}
 
 /**
  * "Ad-hoc Forms" — the My Forms submenu page for brand-new forms a subsidiary
@@ -150,13 +176,11 @@ export function MyAdHocFormsListPage() {
           <Stack spacing={1}>
             {adHocForms.map((form) => {
               const statusLabel = adHocStatus(form);
+              const progress = adHocProgress(form);
               return (
                 <Box
                   key={form.id}
                   sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
                     p: 1.5,
                     border: "1px solid",
                     borderColor: "divider",
@@ -165,24 +189,31 @@ export function MyAdHocFormsListPage() {
                   }}
                   onClick={() => navigate(`/my-forms/adhoc/${form.id}`)}
                 >
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={600} noWrap>
-                      {form.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Updated {new Date(form.updatedAt).toLocaleString()}
-                      {form.projectCode ? ` · ${form.projectCode}` : ""}
-                    </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600} noWrap>
+                        {form.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Updated {new Date(form.updatedAt).toLocaleString()}
+                        {form.projectCode ? ` · ${form.projectCode}` : ""}
+                      </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Chip label={statusLabel} size="small" color={AD_HOC_STATUS_COLOR[statusLabel]} />
+                      <FormRowIconActions
+                        copyTooltip="Copy into a new ad-hoc form"
+                        onCopy={() => handleCopy(form)}
+                        onDelete={form.status === "draft" ? () => void handleDelete(form) : undefined}
+                        deleteDisabled={deletingId === form.id}
+                      />
+                    </Stack>
                   </Box>
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <Chip label={statusLabel} size="small" color={AD_HOC_STATUS_COLOR[statusLabel]} />
-                    <FormRowIconActions
-                      copyTooltip="Copy into a new ad-hoc form"
-                      onCopy={() => handleCopy(form)}
-                      onDelete={form.status === "draft" ? () => void handleDelete(form) : undefined}
-                      deleteDisabled={deletingId === form.id}
-                    />
-                  </Stack>
+                  {progress && (
+                    <Box sx={{ mt: 1.5, maxWidth: 360 }}>
+                      <ContributionStatusBar progress={progress} />
+                    </Box>
+                  )}
                 </Box>
               );
             })}

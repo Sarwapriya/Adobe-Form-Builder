@@ -8,6 +8,8 @@ import type { FormVariant } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { autoPopulateParamName, CONTROL_TYPE_LABEL, createAnswer, questionVariants, renumberAnswers } from "./formBuilderHelpers";
 import { localeDir } from "../../utils/localeDir";
+import { MISSING_TRANSLATION_HELPER_TEXT, missingTranslationSx } from "../common/missingTranslationSx";
+import { PENDING_TRANSLATION_HELPER_TEXT, pendingTranslationFor } from "./pendingTranslationHint";
 
 const CHOICE_TYPES = new Set(["radio", "checkbox", "dropdown"]);
 
@@ -28,7 +30,9 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
   // bits (required, options add/remove/reorder, variant visibility) are never
   // per-locale, so they stay untouched by this.
   const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
+  const contributions = useFormBuilderStore((s) => s.contributions);
   const localeText = (map: Record<string, string> | undefined) => map?.[activeLocale] ?? "";
+  const missing = (value: string) => value.trim() === "";
   const question = definition?.questions.find((q) => q.id === questionId);
   const dir = localeDir(activeLocale);
 
@@ -36,6 +40,8 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
 
   const heading = localeText(question.headingByLocale);
   const subheading = localeText(question.subheadingByLocale);
+  const pendingHeading = pendingTranslationFor(contributions, { kind: "questionHeading", questionId: question.id }, activeLocale);
+  const pendingSubheading = pendingTranslationFor(contributions, { kind: "questionSubheading", questionId: question.id }, activeLocale);
   const isChoiceType = CHOICE_TYPES.has(question.controlType);
   const shownIn = questionVariants(question);
 
@@ -108,6 +114,9 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
         fullWidth
         value={heading}
         inputProps={{ dir }}
+        placeholder={pendingHeading}
+        sx={missingTranslationSx(missing(heading))}
+        helperText={pendingHeading ? PENDING_TRANSLATION_HELPER_TEXT : missing(heading) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
         onChange={(e) => patchQuestion({ headingByLocale: { ...question.headingByLocale, [activeLocale]: e.target.value } })}
       />
       <TextField
@@ -116,12 +125,31 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
         fullWidth
         value={subheading}
         inputProps={{ dir }}
+        placeholder={pendingSubheading}
+        sx={missingTranslationSx(missing(subheading))}
+        helperText={pendingSubheading ? PENDING_TRANSLATION_HELPER_TEXT : missing(subheading) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
         onChange={(e) => patchQuestion({ subheadingByLocale: { ...question.subheadingByLocale, [activeLocale]: e.target.value } })}
       />
       <FormControlLabel
         control={<Switch checked={question.required} onChange={(e) => patchQuestion({ required: e.target.checked })} />}
         label="Required"
       />
+
+      <Box>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={!!question.lockedFromSubsidiary}
+              onChange={(e) => patchQuestion({ lockedFromSubsidiary: e.target.checked })}
+            />
+          }
+          label="Lock from subsidiary deletion (Translate & Extend)"
+        />
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+          When locked, a subsidiary user can't delete this question via Translate & Extend. Its heading/subheading text
+          stays translatable and its answer options stay freely addable/removable either way.
+        </Typography>
+      </Box>
 
       {isChoiceType && (
         <FormControlLabel
@@ -177,26 +205,38 @@ export function QuestionEditorPanel({ questionId }: { questionId: string }) {
             Options
           </Typography>
           <Stack spacing={1}>
-            {question.answers.map((a, i) => (
-              <Stack key={a.id} direction="row" spacing={0.5} alignItems="center">
-                <TextField
-                  size="small"
-                  fullWidth
-                  value={localeText(a.textByLocale)}
-                  inputProps={{ dir }}
-                  onChange={(e) => patchAnswerText(a.id, e.target.value)}
-                />
-                <IconButton size="small" disabled={i === 0} onClick={() => moveOption(i, -1)} aria-label="Move option up">
-                  <ArrowUpwardIcon fontSize="small" />
-                </IconButton>
-                <IconButton size="small" disabled={i === question.answers.length - 1} onClick={() => moveOption(i, 1)} aria-label="Move option down">
-                  <ArrowDownwardIcon fontSize="small" />
-                </IconButton>
-                <IconButton size="small" onClick={() => removeOption(a.id)} aria-label="Remove option">
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Stack>
-            ))}
+            {question.answers.map((a, i) => {
+              const answerText = localeText(a.textByLocale);
+              const pendingAnswerText = pendingTranslationFor(contributions, { kind: "answerText", questionId: question.id, answerId: a.id }, activeLocale);
+              return (
+                <Stack key={a.id} direction="row" spacing={0.5} alignItems="center">
+                  <TextField
+                    size="small"
+                    fullWidth
+                    value={answerText}
+                    inputProps={{ dir }}
+                    placeholder={pendingAnswerText}
+                    sx={missingTranslationSx(missing(answerText))}
+                    helperText={pendingAnswerText ? PENDING_TRANSLATION_HELPER_TEXT : missing(answerText) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
+                    onChange={(e) => patchAnswerText(a.id, e.target.value)}
+                  />
+                  <IconButton size="small" disabled={i === 0} onClick={() => moveOption(i, -1)} aria-label="Move option up">
+                    <ArrowUpwardIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    disabled={i === question.answers.length - 1}
+                    onClick={() => moveOption(i, 1)}
+                    aria-label="Move option down"
+                  >
+                    <ArrowDownwardIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => removeOption(a.id)} aria-label="Remove option">
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              );
+            })}
           </Stack>
           <Button size="small" startIcon={<AddIcon />} onClick={addOption} sx={{ mt: 1 }}>
             Add option

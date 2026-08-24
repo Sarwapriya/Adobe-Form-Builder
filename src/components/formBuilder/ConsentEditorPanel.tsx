@@ -5,6 +5,8 @@ import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { ConsentVisibilityControls } from "./ConsentVisibilityControls";
 import { consentVariants, renumberConsents } from "./formBuilderHelpers";
 import { localeDir } from "../../utils/localeDir";
+import { MISSING_TRANSLATION_HELPER_TEXT, missingTranslationSx } from "../common/missingTranslationSx";
+import { PENDING_TRANSLATION_HELPER_TEXT, pendingTranslationFor } from "./pendingTranslationHint";
 
 /** Config drawer content for one admin-added consent checkbox beyond the fixed
  * Privacy Policy / Marketing Opt-in slots — same text+optional-link shape as
@@ -16,6 +18,7 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
   const formVariants = useFormBuilderStore((s): FormVariant[] => s.config?.variants ?? ["ff", "oc"]);
   const defaultLocale = definition?.meta.defaultLocale ?? "en_GB";
   const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
+  const contributions = useFormBuilderStore((s) => s.contributions);
   const localeText = (map: Record<string, string> | undefined) => map?.[activeLocale] ?? "";
   const consent = definition?.fields.additionalConsents?.find((c) => c.id === consentId);
   const dir = localeDir(activeLocale);
@@ -24,6 +27,9 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
 
   const text = localeText(consent.textByLocale);
   const linkUrl = localeText(consent.linkUrlByLocale);
+  const missing = (value: string) => value.trim() === "";
+  const pendingText = pendingTranslationFor(contributions, { kind: "consentText", consentId: consent.id }, activeLocale);
+  const pendingLinkUrl = pendingTranslationFor(contributions, { kind: "consentLink", consentId: consent.id }, activeLocale);
 
   function patchConsent(patch: Partial<typeof consent>) {
     updateDefinition((d) => ({
@@ -72,6 +78,9 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
         minRows={2}
         value={text}
         inputProps={{ dir }}
+        placeholder={pendingText}
+        sx={missingTranslationSx(missing(text))}
+        helperText={pendingText ? PENDING_TRANSLATION_HELPER_TEXT : missing(text) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
         onChange={(e) => patchConsent({ textByLocale: { ...consent.textByLocale, [activeLocale]: e.target.value } })}
       />
       <FormControlLabel
@@ -89,6 +98,8 @@ export function ConsentEditorPanel({ consentId, onDeleted }: { consentId: string
           size="small"
           fullWidth
           value={linkUrl}
+          placeholder={pendingLinkUrl}
+          helperText={pendingLinkUrl ? PENDING_TRANSLATION_HELPER_TEXT : undefined}
           onChange={(e) => patchConsent({ linkUrlByLocale: { ...consent.linkUrlByLocale, [activeLocale]: e.target.value } })}
         />
       )}

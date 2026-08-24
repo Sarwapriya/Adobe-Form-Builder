@@ -6,6 +6,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { useSaveShortcut } from "../../hooks/useSaveShortcut";
+import { unsavedChangesBlinkSx } from "./unsavedChangesBlinkSx";
 import { ApiError } from "../../api/apiClient";
 import { deleteAdHocForm } from "../../api/subsidiaryFormsApi";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
@@ -49,6 +51,8 @@ export function AdHocActionBar() {
     if (ok) setNotice("Draft saved.");
   }
 
+  useSaveShortcut(() => void handleSave(), dirty && !saving && !pendingReview);
+
   async function handleSubmit() {
     if (!window.confirm("Submit this form for admin review? You won't be able to edit it again until it's reviewed.")) return;
     setNotice(null);
@@ -79,7 +83,14 @@ export function AdHocActionBar() {
         <Button size="small" startIcon={<VisibilityIcon />} onClick={() => setPreviewOpen(true)}>
           Preview
         </Button>
-        <Button size="small" variant="outlined" startIcon={<SaveIcon />} disabled={saving || pendingReview} onClick={handleSave}>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<SaveIcon />}
+          disabled={saving || pendingReview}
+          onClick={handleSave}
+          sx={unsavedChangesBlinkSx(dirty && !saving && !pendingReview)}
+        >
           {saving ? "Saving..." : "Save Draft"}
         </Button>
         <Button

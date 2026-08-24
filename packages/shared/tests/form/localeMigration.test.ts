@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { migrateDefaultLocale } from "../../src/form/localeMigration";
-import type { FormDefinition } from "../../src/form/formDefinition";
+import { migrateDefaultLocale, remapLocalesForCopy } from "../../src/form/localeMigration";
+import type { FormDefinition, LocaleInfo } from "../../src/form/formDefinition";
 
 function baseForm(): FormDefinition {
   return {
@@ -102,6 +102,124 @@ describe("migrateDefaultLocale", () => {
     const form = baseForm();
     const next = migrateDefaultLocale(form, "ar_AE");
     expect(next.fields.headingBeforeBreakByLocale).toBeUndefined();
+    expect(next.fields.mobileNumber).toBeUndefined();
+  });
+});
+
+/** SESAR (en_SA default + ar_SA) copied into SELV (en_JO fallback, en_LB,
+ * ar_IQ, ku_IQ) — the exact worked example from the feature request: both
+ * English targets pull from en_SA, both Arabic targets pull from ar_SA, and
+ * ku_IQ (no Kurdish source) falls back to en_SA, the source's own default. */
+function sesarForm(): FormDefinition {
+  return {
+    meta: { subsidiary: "SESAR", sourceFileName: "", defaultLocale: "en_SA" },
+    locales: [
+      { code: "en_SA", langSubtag: "en", isRtl: false, sourceColumn: "en_SA", label: "English" },
+      { code: "ar_SA", langSubtag: "ar", isRtl: true, sourceColumn: "builder", label: "Arabic" },
+    ],
+    questions: [
+      {
+        id: "Q1",
+        order: 1,
+        controlType: "radio",
+        headingByLocale: { en_SA: "Pick one", ar_SA: "اختر واحدا" },
+        subheadingByLocale: { en_SA: "(single)" },
+        required: true,
+        answers: [{ id: "A1", order: 1, textByLocale: { en_SA: "Yes", ar_SA: "نعم" } }],
+      },
+    ],
+    fields: {
+      submitButton: { labelByLocale: { en_SA: "Submit", ar_SA: "إرسال" } },
+    },
+    validationMessages: {},
+    pageError: {},
+    thankYou: {},
+  };
+}
+
+const SELV_LOCALES: LocaleInfo[] = [
+  { code: "en_JO", langSubtag: "en", isRtl: false, sourceColumn: "builder", label: "English" },
+  { code: "en_LB", langSubtag: "en", isRtl: false, sourceColumn: "builder", label: "English" },
+  { code: "ar_IQ", langSubtag: "ar", isRtl: true, sourceColumn: "builder", label: "Arabic" },
+  { code: "ku_IQ", langSubtag: "ku", isRtl: true, sourceColumn: "builder", label: "Kurdish" },
+];
+
+describe("remapLocalesForCopy", () => {
+  it("maps each new locale from the source locale sharing its language, and falls back to the source's default for a language the source doesn't have (SESAR -> SELV)", () => {
+    const form = sesarForm();
+    const next = remapLocalesForCopy(form, SELV_LOCALES, "en_JO");
+
+    expect(next.meta.defaultLocale).toBe("en_JO");
+    expect(next.locales).toEqual(SELV_LOCALES);
+
+    // en_SA => en_JO, en_SA => en_LB
+    expect(next.questions[0].headingByLocale.en_JO).toBe("Pick one");
+    expect(next.questions[0].headingByLocale.en_LB).toBe("Pick one");
+    // ar_SA => ar_IQ
+    expect(next.questions[0].headingByLocale.ar_IQ).toBe("اختر واحدا");
+    // ku_IQ has no Kurdish source, so it falls back to en_SA (the source's own default)
+    expect(next.questions[0].headingByLocale.ku_IQ).toBe("Pick one");
+
+    expect(next.questions[0].answers[0].textByLocale).toEqual({
+      en_JO: "Yes",
+      en_LB: "Yes",
+      ar_IQ: "نعم",
+      ku_IQ: "Yes",
+    });
+    expect(next.fields.submitButton.labelByLocale).toEqual({
+      en_JO: "Submit",
+      en_LB: "Submit",
+      ar_IQ: "إرسال",
+      ku_IQ: "Submit",
+    });
+  });
+
+  it("drops every old locale code entirely — they're not part of the new locale set", () => {
+    const form = sesarForm();
+    const next = remapLocalesForCopy(form, SELV_LOCALES, "en_JO");
+    expect(next.questions[0].headingByLocale.en_SA).toBeUndefined();
+    expect(next.questions[0].headingByLocale.ar_SA).toBeUndefined();
+  });
+
+  it("is pure — never mutates the input form", () => {
+    const form = sesarForm();
+    const snapshot = JSON.parse(JSON.stringify(form));
+    remapLocalesForCopy(form, SELV_LOCALES, "en_JO");
+    expect(form).toEqual(snapshot);
+  });
+
+  it("prefers the source's own default locale when more than one source locale shares a target's language", () => {
+    const form = sesarForm();
+    form.locales.push({ code: "en_US", langSubtag: "en", isRtl: false, sourceColumn: "builder", label: "English (US)" });
+    form.questions[0].headingByLocale.en_US = "Pick one (US)";
+    const next = remapLocalesForCopy(form, SELV_LOCALES, "en_JO");
+    // en_SA is the source's default, so it wins over en_US even though both are English.
+    expect(next.questions[0].headingByLocale.en_JO).toBe("Pick one");
+  });
+
+  it("rederives the mobile-number field's countries from the new locale set's own country suffixes, not the source subsidiary's", () => {
+    const form = sesarForm();
+    form.fields.mobileNumber = {
+      labelByLocale: { en_SA: "Mobile" },
+      dropdownFirstEntryByLocale: {},
+      countries: ["SA"],
+      countriesByLocale: { en_SA: ["SA"] },
+    };
+    const next = remapLocalesForCopy(form, SELV_LOCALES, "en_JO");
+    // SELV_LOCALES' own country suffixes: en_JO -> JO, en_LB -> LB, ar_IQ/ku_IQ -> IQ (deduped).
+    expect(next.fields.mobileNumber?.countries).toEqual(["JO", "LB", "IQ"]);
+    // Each new locale seeds its own single-country override; the old en_SA entry is gone.
+    expect(next.fields.mobileNumber?.countriesByLocale).toEqual({
+      en_JO: ["JO"],
+      en_LB: ["LB"],
+      ar_IQ: ["IQ"],
+      ku_IQ: ["IQ"],
+    });
+  });
+
+  it("leaves mobileNumber untouched when it wasn't set on the source form", () => {
+    const form = sesarForm();
+    const next = remapLocalesForCopy(form, SELV_LOCALES, "en_JO");
     expect(next.fields.mobileNumber).toBeUndefined();
   });
 });

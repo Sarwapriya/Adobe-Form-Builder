@@ -1,6 +1,6 @@
 import type { Issue, ValidationResult } from "../excel/types";
 import { findCallingCodeEntry } from "./callingCodes";
-import type { FormDefinition, QuestionDefinition } from "./formDefinition";
+import { resolveMobileNumberCountries, type FormDefinition, type QuestionDefinition } from "./formDefinition";
 
 const LABEL = "Form Builder";
 
@@ -51,11 +51,19 @@ export function validateFormDefinition(form: FormDefinition): ValidationResult {
   }
 
   if (form.fields.mobileNumber) {
-    const countries = form.fields.mobileNumber.countries;
-    if (countries.length === 0) {
-      errors.push(err("The Mobile Number field has no countries configured."));
+    const mobileNumber = form.fields.mobileNumber;
+    const seenCodes = new Set<string>();
+    for (const locale of form.locales) {
+      const countries = resolveMobileNumberCountries(mobileNumber, locale.code);
+      if (countries.length === 0) {
+        errors.push(err(`The Mobile Number field has no countries configured for locale "${locale.code}".`));
+      }
+      for (const code of countries) seenCodes.add(code);
     }
-    for (const code of countries) {
+    if (form.locales.length === 0) {
+      for (const code of mobileNumber.countries) seenCodes.add(code);
+    }
+    for (const code of seenCodes) {
       if (!findCallingCodeEntry(code)) {
         errors.push(err(`The Mobile Number field references an unrecognized country code "${code}".`));
       }

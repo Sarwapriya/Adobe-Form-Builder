@@ -20,7 +20,7 @@ import { AIConversation } from "../entities/AIConversation";
 import { AIConversationMessage } from "../entities/AIConversationMessage";
 import { AIAction } from "../entities/AIAction";
 import { FabrixModel } from "../entities/FabrixModel";
-import { ClaudeModel } from "../entities/ClaudeModel";
+import { OtherAiModel } from "../entities/OtherAiModel";
 import { InitSchema1700000000000 } from "../migrations/1700000000000-InitSchema";
 import { AddUsersAndVersioning1710000000000 } from "../migrations/1710000000000-AddUsersAndVersioning";
 import { SubmittedOnlyVersioning1720000000000 } from "../migrations/1720000000000-SubmittedOnlyVersioning";
@@ -50,6 +50,7 @@ import { AddAiAssistant1950000000000 } from "../migrations/1950000000000-AddAiAs
 import { WidenAdminSettingValue1960000000000 } from "../migrations/1960000000000-WidenAdminSettingValue";
 import { AddFabrixModels1970000000000 } from "../migrations/1970000000000-AddFabrixModels";
 import { AddClaudeModels1980000000000 } from "../migrations/1980000000000-AddClaudeModels";
+import { RenameClaudeModelsToOtherAiModels1990000000000 } from "../migrations/1990000000000-RenameClaudeModelsToOtherAiModels";
 
 const entities = [
   Upload,
@@ -72,7 +73,7 @@ const entities = [
   AIConversationMessage,
   AIAction,
   FabrixModel,
-  ClaudeModel,
+  OtherAiModel,
 ];
 const migrations = [
   InitSchema1700000000000,
@@ -104,6 +105,7 @@ const migrations = [
   WidenAdminSettingValue1960000000000,
   AddFabrixModels1970000000000,
   AddClaudeModels1980000000000,
+  RenameClaudeModelsToOtherAiModels1990000000000,
 ];
 
 /**

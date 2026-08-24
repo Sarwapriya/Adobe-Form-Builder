@@ -101,6 +101,38 @@ describe("buildDataJs", () => {
     expect(data.fields.ar_AE.termsAndConditions).toBe("* Terms and conditions apply.");
   });
 
+  it("projects the same campaign heading/subheading to both variants when no Full Form override is set", () => {
+    const form = sampleFormDefinition();
+    form.fields.headingBeforeBreakByLocale = { en_GB: "Register now" };
+    form.fields.campaignSubheadingByLocale = { en_GB: "Limited time offer" };
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+
+    // headingBeforeBreakFF/campaignSubheadingFF are what the reference FF.js reads;
+    // headingBeforeBreak/campaignSubheading are what OC.js reads (see buildDataJs.ts).
+    expect(data.fields.en_GB.headingBeforeBreakFF).toBe("Register now");
+    expect(data.fields.en_GB.headingBeforeBreak).toBe("Register now");
+    expect(data.fields.en_GB.campaignSubheadingFF).toBe("Limited time offer");
+    expect(data.fields.en_GB.campaignSubheading).toBe("Limited time offer");
+  });
+
+  it("uses the Full Form override for FF's keys while leaving OC's keys on the base text", () => {
+    const form = sampleFormDefinition();
+    form.fields.headingBeforeBreakByLocale = { en_GB: "One-Click heading" };
+    form.fields.headingBeforeBreakFFByLocale = { en_GB: "Full Form heading" };
+    form.fields.campaignSubheadingByLocale = { en_GB: "One-Click subheading" };
+    form.fields.campaignSubheadingFFByLocale = { en_GB: "Full Form subheading" };
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+
+    expect(data.fields.en_GB.headingBeforeBreakFF).toBe("Full Form heading");
+    expect(data.fields.en_GB.headingBeforeBreak).toBe("One-Click heading");
+    expect(data.fields.en_GB.campaignSubheadingFF).toBe("Full Form subheading");
+    expect(data.fields.en_GB.campaignSubheading).toBe("One-Click subheading");
+  });
+
   it("threads project/channel/channelDetail/source/voucherRequired from BuilderConfig into param", () => {
     const config: BuilderConfig = {
       ...defaultBuilderConfig(),

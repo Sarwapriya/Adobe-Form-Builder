@@ -1,4 +1,4 @@
-import { In } from "typeorm";
+import { In, Not } from "typeorm";
 import { AppDataSource } from "../config/data-source";
 import { Form } from "../entities/Form";
 import { FormContribution } from "../entities/FormContribution";
@@ -55,17 +55,24 @@ async function lockedByProjectCode(forms: Form[]): Promise<Map<string, boolean>>
   return new Map(rows.map((pc) => [pc.code, pc.isLocked]));
 }
 
-/** This user's own latest contribution per form, keyed by formId — "latest" by
- * submittedAt, so a form they've contributed to more than once (e.g. resubmitting
- * after a rejection) reflects the most recent outcome rather than an arbitrary one. */
+/** This user's own latest *actually submitted* contribution per form, keyed by
+ * formId — "latest" by submittedAt, so a form they've contributed to more than once
+ * (e.g. resubmitting after a rejection) reflects the most recent outcome rather than
+ * an arbitrary one. Excludes "draft" rows — an in-progress, unsent draft (see
+ * FormContribution.ts) has no place on the Submitted → Reviewed → Approved →
+ * Published progress bar `ContributionProgress` drives, and its status isn't even
+ * one of that type's members. */
 async function latestOwnContributionProgressByForm(formIds: string[], userId: string): Promise<Map<string, ContributionProgress>> {
   if (formIds.length === 0) return new Map();
   const rows = await AppDataSource.getRepository(FormContribution).find({
-    where: { formId: In(formIds), submittedByUserId: userId },
+    where: { formId: In(formIds), submittedByUserId: userId, status: Not("draft") },
     order: { submittedAt: "DESC" },
   });
   const byForm = new Map<string, ContributionProgress>();
   for (const row of rows) {
+    // The query above already excludes "draft" rows — this narrows row.status's
+    // type to match, since TypeORM's `Not()` filter can't express that at compile time.
+    if (row.status === "draft") continue;
     if (!byForm.has(row.formId)) {
       byForm.set(row.formId, { status: row.status, submittedAt: row.submittedAt, reviewedAt: row.reviewedAt, publishedAt: row.publishedAt });
     }

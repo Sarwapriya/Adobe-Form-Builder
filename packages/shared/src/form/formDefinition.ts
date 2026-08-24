@@ -67,6 +67,13 @@ export interface QuestionDefinition {
    * auto-populate on for this question. Only takes effect when
    * autoPopulateEligible is also true. */
   autoPopulateEnabled?: boolean;
+  /** Admin/form-owner-configured (Form Builder), delete-only: when true, a
+   * subsidiary user's Translate & Extend contribution may not delete this
+   * question (see form/contribution.ts's deletedQuestionIds). Heading/subheading
+   * text stays freely translatable and this question's answer options stay
+   * freely addable/removable either way — the lock only blocks whole-question
+   * deletion. */
+  lockedFromSubsidiary?: boolean;
 }
 
 export interface LocalizedFieldMeta {
@@ -85,8 +92,27 @@ export interface CallingCodeFieldMeta extends LocalizedFieldMeta {
  * dropdown and the runtime mobile-number validation via a synthesized "BUILDER"
  * subsidiary table (see buildDataJs.ts) rather than the real Samsung tables. */
 export interface MobileNumberFieldMeta extends LocalizedFieldMeta {
+  /** Default/fallback country list, used for any locale with no entry (or an empty
+   * entry) in `countriesByLocale` below. Kept as a plain flat list — rather than
+   * folding it into `countriesByLocale` itself — so a form that only ever wants one
+   * shared list across every locale (the common case) never has to configure each
+   * locale individually. */
   countries: string[];
+  /** Per-locale overrides — e.g. a dual-country subsidiary like SEIL (he_IL + ar_PS)
+   * can show only Israel's calling code to he_IL visitors and only Palestine's to
+   * ar_PS visitors, instead of the same combined list under both locales. Resolve via
+   * `resolveMobileNumberCountries`, never by reading this map directly — a missing or
+   * empty entry means "fall back to `countries`", not "no countries". */
+  countriesByLocale?: Partial<Record<LocaleCode, string[]>>;
   dropdownFirstEntryByLocale: Record<LocaleCode, string>;
+}
+
+/** Resolves the effective country list for one locale of a builder-authored
+ * `fields.mobileNumber` field — the locale's own `countriesByLocale` override when
+ * one is set and non-empty, else the field's shared `countries` fallback. */
+export function resolveMobileNumberCountries(field: MobileNumberFieldMeta, locale: LocaleCode): string[] {
+  const override = field.countriesByLocale?.[locale];
+  return override && override.length > 0 ? override : field.countries;
 }
 
 export interface PrivacyPolicyMeta {
@@ -184,11 +210,27 @@ export interface ProfileFieldSet {
   /** Varies per locale in the source (translators sometimes leave country-specific
    * notes alongside the URL), so this is a locale map, not a single string. */
   redirectAfterSuccessUrlByLocale?: Record<LocaleCode, string>;
+  /** Also doubles as the Full Form value when no *FFByLocale override below is set —
+   * the reference FF.js/OC.js scripts already read these under separate data-file keys
+   * (`headingBeforeBreakFF`/`headingAfterBreakFF` for FF vs the bare
+   * `headingBeforeBreak`/`headingAfterBreak` for OC — see buildDataJs.ts), so One-Click
+   * is effectively this field's "home" variant even though nothing here is OC-specific
+   * in name. */
   headingBeforeBreakByLocale?: Record<LocaleCode, string>;
   headingAfterBreakByLocale?: Record<LocaleCode, string>;
+  /** Full-Form-specific override for headingBeforeBreakByLocale — absent means Full
+   * Form shows the same heading as One-Click (today's only behavior, before these
+   * existed). Builder-only; never set on an Excel-sourced form. */
+  headingBeforeBreakFFByLocale?: Record<LocaleCode, string>;
+  headingAfterBreakFFByLocale?: Record<LocaleCode, string>;
   /** Builder-only campaign subheading, rendered under the page heading. Never set on
-   * an Excel-sourced form (no equivalent Excel row exists). */
+   * an Excel-sourced form (no equivalent Excel row exists). Also the Full Form
+   * fallback when campaignSubheadingFFByLocale isn't set — same convention as the
+   * heading fields above. */
   campaignSubheadingByLocale?: Record<LocaleCode, string>;
+  /** Full-Form-specific override for campaignSubheadingByLocale — absent means Full
+   * Form shows the same subheading as One-Click. Builder-only. */
+  campaignSubheadingFFByLocale?: Record<LocaleCode, string>;
   requiredFieldNoteByLocale?: Record<LocaleCode, string>;
   /** Passthrough for flat-field-key rows recognized in the sheet (non-blank column A)
    * that don't map to a dedicated field above (e.g. the source's "Rafle Draw" key) —

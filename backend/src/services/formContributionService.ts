@@ -1,4 +1,4 @@
-import { In } from "typeorm";
+import { In, Not } from "typeorm";
 import {
   applyContribution,
   validateContribution,
@@ -91,16 +91,29 @@ export async function submitContribution(
     return { outcome: "invalid", validation };
   }
 
+  // Promote an existing draft row in place (see FormContribution.ts's own doc
+  // comment) rather than inserting a second row — a save-then-submit session
+  // ends with exactly one row for this (form, user) pair.
   const repo = AppDataSource.getRepository(FormContribution);
+  const existingDraft = await repo.findOne({ where: { formId, submittedByUserId: userId, status: "draft" } });
   const row = await repo.save(
-    repo.create({
-      formId,
-      submittedByUserId: userId,
-      baseVersionId: detail.published.id,
-      status: "pending",
-      content: JSON.stringify(content),
-      note: note ?? null,
-    }),
+    existingDraft
+      ? {
+          ...existingDraft,
+          baseVersionId: detail.published.id,
+          status: "pending" as const,
+          content: JSON.stringify(content),
+          note: note ?? null,
+          submittedAt: new Date(),
+        }
+      : repo.create({
+          formId,
+          submittedByUserId: userId,
+          baseVersionId: detail.published.id,
+          status: "pending",
+          content: JSON.stringify(content),
+          note: note ?? null,
+        }),
   );
 
   const [form, submitter] = await Promise.all([
@@ -120,20 +133,66 @@ export async function submitContribution(
   return { outcome: "ok", contribution: toSummary(row), validation };
 }
 
-/** Admin-facing — every contribution for a form, regardless of status. */
+/** Admin-facing — every *actually submitted* contribution for a form, regardless of
+ * status. Excludes "draft" rows — a subsidiary user's unsent scratch space is never
+ * admin-visible. */
 export async function listContributionsForForm(formId: string): Promise<ContributionSummary[]> {
-  const rows = await AppDataSource.getRepository(FormContribution).find({ where: { formId }, order: { submittedAt: "DESC" } });
+  const rows = await AppDataSource.getRepository(FormContribution).find({
+    where: { formId, status: Not("draft") },
+    order: { submittedAt: "DESC" },
+  });
   return rows.map(toSummary);
 }
 
-/** Standard-user-facing — only the caller's own submissions for a form, so they can
- * track their own pending/approved/rejected status without seeing other users'. */
+/** Standard-user-facing — only the caller's own rows for a form (including a "draft"
+ * one, if any), so the Translate & Extend page can both track pending/approved/
+ * rejected status and resume an in-progress draft, without seeing other users'. */
 export async function listOwnContributions(formId: string, userId: string): Promise<ContributionSummary[]> {
   const rows = await AppDataSource.getRepository(FormContribution).find({
     where: { formId, submittedByUserId: userId },
     order: { submittedAt: "DESC" },
   });
   return rows.map(toSummary);
+}
+
+/** Saves (or updates in place) this user's one draft row for a form — never queues
+ * it for admin review, and unlike `submitContribution` runs no validation, since the
+ * whole point is being able to save incomplete/in-progress work. `getAccessibleFormDetail`
+ * still gates it the same way submit does, so a user can't save a draft against a
+ * form they can no longer see. */
+export type SaveContributionDraftOutcome = "ok" | "not_found";
+
+export interface SaveContributionDraftResult {
+  outcome: SaveContributionDraftOutcome;
+  contribution?: ContributionSummary;
+}
+
+export async function saveContributionDraft(
+  formId: string,
+  userId: string,
+  subsidiaryId: string,
+  content: ContributionContent,
+  note?: string,
+): Promise<SaveContributionDraftResult> {
+  const detail = await getAccessibleFormDetail(formId, subsidiaryId);
+  if (!detail?.published) return { outcome: "not_found" };
+
+  const repo = AppDataSource.getRepository(FormContribution);
+  const existingDraft = await repo.findOne({ where: { formId, submittedByUserId: userId, status: "draft" } });
+  const row = await repo.save(
+    existingDraft
+      ? { ...existingDraft, baseVersionId: detail.published.id, content: JSON.stringify(content), note: note ?? null, submittedAt: new Date() }
+      : repo.create({
+          formId,
+          submittedByUserId: userId,
+          baseVersionId: detail.published.id,
+          status: "draft",
+          content: JSON.stringify(content),
+          note: note ?? null,
+        }),
+  );
+
+  return { outcome: "ok", contribution: toSummary(row) };
 }
 
 export interface ContributionSummaryWithForm extends ContributionSummary {
@@ -148,7 +207,7 @@ export interface ContributionSummaryWithForm extends ContributionSummary {
  * ContributionSummary alone only carries a formId. */
 export async function listOwnContributionsAllForms(userId: string): Promise<ContributionSummaryWithForm[]> {
   const rows = await AppDataSource.getRepository(FormContribution).find({
-    where: { submittedByUserId: userId },
+    where: { submittedByUserId: userId, status: Not("draft") },
     order: { submittedAt: "DESC" },
   });
   if (rows.length === 0) return [];

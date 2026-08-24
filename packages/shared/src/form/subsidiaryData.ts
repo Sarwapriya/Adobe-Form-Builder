@@ -501,7 +501,6 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "972",
       "countryCode": "IL",
       "countryName": {
-        "en_GB": "Israel",
         "he_IL": "יִשְׂרָאֵל"
       }
     },
@@ -509,7 +508,6 @@ const REFERENCE_SUBSIDIARY_DETAIL: Readonly<Record<string, readonly SubsidiaryCo
       "callingCode": "970",
       "countryCode": "PS",
       "countryName": {
-        "en_GB": "Palestine",
         "ar_PS": "فلسطين"
       }
     }

@@ -7,6 +7,8 @@ import PublishIcon from "@mui/icons-material/Publish";
 import UnpublishedIcon from "@mui/icons-material/Unpublished";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { useSaveShortcut } from "../../hooks/useSaveShortcut";
+import { unsavedChangesBlinkSx } from "./unsavedChangesBlinkSx";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
 
 const STATUS_COLOR = { draft: "default", published: "success", unpublished: "warning" } as const;
@@ -47,6 +49,8 @@ export function BuilderActionBar() {
     if (ok) setNotice("Draft saved.");
   }
 
+  useSaveShortcut(() => void handleSave(), dirty && !saving);
+
   async function handlePublish() {
     setNotice(null);
     const result = await publish();
@@ -77,7 +81,14 @@ export function BuilderActionBar() {
         <Button size="small" startIcon={<VisibilityIcon />} onClick={() => setPreviewOpen(true)}>
           Preview
         </Button>
-        <Button size="small" variant="outlined" startIcon={<SaveIcon />} disabled={saving} onClick={handleSave}>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<SaveIcon />}
+          disabled={saving}
+          onClick={handleSave}
+          sx={unsavedChangesBlinkSx(dirty && !saving)}
+        >
           {saving ? "Saving..." : "Save Draft"}
         </Button>
         <Button

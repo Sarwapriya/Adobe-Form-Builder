@@ -383,18 +383,21 @@ INSERT INTO FabrixModels (name, modelId, isEnabled, sortOrder) VALUES
     ('gpt-4o',                 '019a774a-c6ad-7518-b37c-d651c2696c66', 1, 7),
     ('gpt-4',                  '019a774a-c6ad-7518-b37c-d651c2696c66', 1, 8);
 
--- Reference catalog of known Claude models (Configuration > AI Assistant >
--- Claude Settings) — unlike FabrixModels, no isEnabled flag: the Messages
--- API takes exactly one model per request, tracked separately in
--- AdminSettings ("claudeModel"), not per catalog row.
-CREATE TABLE ClaudeModels (
+-- Reference catalog of known models for the fallback AI providers
+-- (Configuration > AI Assistant > Other AI Providers) — table/entity name
+-- stays provider-generic to match that section's interface, even though
+-- every row today is a Claude/Anthropic model id (no other provider is
+-- actually wired up server-side yet). Unlike FabrixModels, no isEnabled
+-- flag: the Messages API takes exactly one model per request, tracked
+-- separately in AdminSettings ("claudeModel"), not per catalog row.
+CREATE TABLE OtherAiModels (
     id          UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
     name        NVARCHAR(100) NOT NULL,
     modelId     NVARCHAR(100) NOT NULL,
     sortOrder   INT NOT NULL DEFAULT 0,
     createdAt   DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
-INSERT INTO ClaudeModels (name, modelId, sortOrder) VALUES
+INSERT INTO OtherAiModels (name, modelId, sortOrder) VALUES
     ('Claude Fable 5',    'claude-fable-5',    0),
     ('Claude Opus 5',     'claude-opus-5',     1),
     ('Claude Opus 4.8',   'claude-opus-4-8',   2),

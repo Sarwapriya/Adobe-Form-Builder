@@ -22,6 +22,9 @@ export function ContributionPreviewDialog({ open, onClose }: { open: boolean; on
   const newQuestions = useFormContributionStore((s) => s.newQuestions);
   const newConsents = useFormContributionStore((s) => s.newConsents);
   const autoPopulateToggles = useFormContributionStore((s) => s.autoPopulateToggles);
+  const deletedQuestionIds = useFormContributionStore((s) => s.deletedQuestionIds);
+  const newAnswersForExisting = useFormContributionStore((s) => s.newAnswersForExisting);
+  const deletedAnswerIds = useFormContributionStore((s) => s.deletedAnswerIds);
   const workingLocale = useFormContributionStore((s) => s.locale);
 
   const [variant, setVariant] = useState<FormVariant>("ff");
@@ -37,9 +40,15 @@ export function ContributionPreviewDialog({ open, onClose }: { open: boolean; on
       newQuestions,
       newConsents,
       autoPopulateToggles: Array.from(autoPopulateToggles, ([questionId, enabled]) => ({ questionId, enabled })),
+      deletedQuestionIds: Array.from(deletedQuestionIds),
+      newAnswers: newAnswersForExisting.map(({ questionId, answer }) => ({ questionId, answer })),
+      deletedAnswerIds: Array.from(deletedAnswerIds, (key) => {
+        const [questionId, answerId] = key.split("::");
+        return { questionId, answerId };
+      }),
     };
     return applyContribution(baseDefinition, content);
-  }, [baseDefinition, translations, newQuestions, newConsents, autoPopulateToggles]);
+  }, [baseDefinition, translations, newQuestions, newConsents, autoPopulateToggles, deletedQuestionIds, newAnswersForExisting, deletedAnswerIds]);
 
   // Default to a locale that actually has one of this session's in-progress
   // translations whenever the dialog opens — preferring the "Translating into"

@@ -34,6 +34,7 @@ export const questionDefinitionSchema = z.object({
   visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
   autoPopulateEligible: z.boolean().optional(),
   autoPopulateEnabled: z.boolean().optional(),
+  lockedFromSubsidiary: z.boolean().optional(),
 });
 
 const localizedFieldMetaSchema = z.object({
@@ -47,6 +48,7 @@ const callingCodeFieldMetaSchema = localizedFieldMetaSchema.extend({
 
 const mobileNumberFieldMetaSchema = localizedFieldMetaSchema.extend({
   countries: z.array(z.string()),
+  countriesByLocale: z.record(z.string(), z.array(z.string())).optional(),
   dropdownFirstEntryByLocale: localeTextMap,
 });
 
@@ -92,7 +94,10 @@ export const profileFieldSetSchema = z.object({
   redirectAfterSuccessUrlByLocale: localeTextMap.optional(),
   headingBeforeBreakByLocale: localeTextMap.optional(),
   headingAfterBreakByLocale: localeTextMap.optional(),
+  headingBeforeBreakFFByLocale: localeTextMap.optional(),
+  headingAfterBreakFFByLocale: localeTextMap.optional(),
   campaignSubheadingByLocale: localeTextMap.optional(),
+  campaignSubheadingFFByLocale: localeTextMap.optional(),
   requiredFieldNoteByLocale: localeTextMap.optional(),
   extraFieldsByLocale: z.record(z.string(), localeTextMap).optional(),
 });

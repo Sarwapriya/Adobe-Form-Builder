@@ -40,6 +40,7 @@ export const CALLING_CODES: readonly CallingCodeEntry[] = [
   { countryCode: "DE", callingCode: "49", countryName: "Germany", mobileDigits: 10 },
   { countryCode: "IN", callingCode: "91", countryName: "India", mobileDigits: 10 },
   { countryCode: "PK", callingCode: "92", countryName: "Pakistan", mobileDigits: 10 },
+  { countryCode: "IR", callingCode: "98", countryName: "Iran", mobileDigits: 10 },
 ];
 
 export function findCallingCodeEntry(countryCode: string): CallingCodeEntry | undefined {

@@ -1,10 +1,12 @@
 import { Alert, Autocomplete, Chip, Stack, TextField, Typography } from "@mui/material";
-import type { FormVariant } from "@formbuilder/shared";
-import { CALLING_CODES, resolveCountryName, subsidiaryCountryCodes } from "@formbuilder/shared";
+import type { FormVariant, TranslationTarget } from "@formbuilder/shared";
+import { CALLING_CODES, resolveCountryName, resolveMobileNumberCountries, subsidiaryCountryCodes } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { ConsentVisibilityControls } from "./ConsentVisibilityControls";
 import { consentVariants } from "./formBuilderHelpers";
 import { localeDir } from "../../utils/localeDir";
+import { MISSING_TRANSLATION_HELPER_TEXT, missingTranslationSx } from "../common/missingTranslationSx";
+import { PENDING_TRANSLATION_HELPER_TEXT, pendingTranslationFor } from "./pendingTranslationHint";
 
 export type ProfileFieldKey =
   | "firstName"
@@ -45,6 +47,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   const formVariants = useFormBuilderStore((s): FormVariant[] => s.config?.variants ?? ["ff", "oc"]);
   const defaultLocale = definition?.meta.defaultLocale ?? "en_GB";
   const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
+  const contributions = useFormBuilderStore((s) => s.contributions);
   const field = fieldKey === "submitButton" ? definition?.fields.submitButton : definition?.fields[fieldKey];
 
   if (!field) return null;
@@ -60,6 +63,11 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   // resolveLocalizedText calls — this only affects what the builder itself
   // displays while editing.)
   const localeText = (map: Record<string, string> | undefined) => map?.[activeLocale] ?? "";
+  // Since localeText above already reads only the active locale's own text (no
+  // fallback), "missing" is simply "empty" here — no defaultLocale comparison
+  // needed, unlike TranslatableField's fallback-aware version of this check.
+  const missing = (value: string) => value.trim() === "";
+  const pending = (target: TranslationTarget) => pendingTranslationFor(contributions, target, activeLocale);
   const dir = localeDir(activeLocale);
 
   const localeHint = activeLocale !== defaultLocale && (
@@ -83,6 +91,8 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           fullWidth
           value={label}
           inputProps={{ dir }}
+          sx={missingTranslationSx(missing(label))}
+          helperText={missing(label) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -99,6 +109,9 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
     const text = localeText(privacyPolicy.textByLocale);
     const linkUrl = localeText(privacyPolicy.linkUrlByLocale);
     const linkText = localeText(privacyPolicy.linkTextByLocale);
+    const pendingText = pending({ kind: "privacyPolicyText" });
+    const pendingLinkUrl = pending({ kind: "privacyPolicyLink" });
+    const pendingLinkText = pending({ kind: "privacyPolicyLinkText" });
 
     function toggleVariant(variant: FormVariant, checked: boolean) {
       const current = consentVariants(definition!.fields.privacyPolicy!);
@@ -125,7 +138,15 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           minRows={2}
           value={text}
           inputProps={{ dir }}
-          helperText={'Shown next to the checkbox, e.g. "I agree to the"'}
+          placeholder={pendingText}
+          sx={missingTranslationSx(missing(text))}
+          helperText={
+            pendingText
+              ? PENDING_TRANSLATION_HELPER_TEXT
+              : missing(text)
+                ? MISSING_TRANSLATION_HELPER_TEXT
+                : 'Shown next to the checkbox, e.g. "I agree to the"'
+          }
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -142,7 +163,15 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           fullWidth
           value={linkText}
           inputProps={{ dir }}
-          helperText={'The link\'s own clickable text, e.g. "Samsung Privacy Policy" — separate from the consent text above.'}
+          placeholder={pendingLinkText}
+          sx={missingTranslationSx(missing(linkText))}
+          helperText={
+            pendingLinkText
+              ? PENDING_TRANSLATION_HELPER_TEXT
+              : missing(linkText)
+                ? MISSING_TRANSLATION_HELPER_TEXT
+                : 'The link\'s own clickable text, e.g. "Samsung Privacy Policy" — separate from the consent text above.'
+          }
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -161,7 +190,8 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           size="small"
           fullWidth
           value={linkUrl}
-          helperText="The Privacy Policy / Terms page this checkbox links to."
+          placeholder={pendingLinkUrl}
+          helperText={pendingLinkUrl ? PENDING_TRANSLATION_HELPER_TEXT : "The Privacy Policy / Terms page this checkbox links to."}
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -192,6 +222,8 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
     const termsAndConditions = definition!.fields.termsAndConditions!;
     const text = localeText(termsAndConditions.textByLocale);
     const url = localeText(termsAndConditions.urlByLocale);
+    const pendingText = pending({ kind: "termsAndConditionsText" });
+    const pendingUrl = pending({ kind: "termsAndConditionsUrl" });
 
     return (
       <Stack spacing={2}>
@@ -212,7 +244,11 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           minRows={2}
           value={text}
           inputProps={{ dir }}
-          helperText='e.g. "* Terms and conditions apply."'
+          placeholder={pendingText}
+          sx={missingTranslationSx(missing(text))}
+          helperText={
+            pendingText ? PENDING_TRANSLATION_HELPER_TEXT : missing(text) ? MISSING_TRANSLATION_HELPER_TEXT : 'e.g. "* Terms and conditions apply."'
+          }
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -231,7 +267,8 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           size="small"
           fullWidth
           value={url}
-          helperText="The Terms and Conditions page this link points to."
+          placeholder={pendingUrl}
+          helperText={pendingUrl ? PENDING_TRANSLATION_HELPER_TEXT : "The Terms and Conditions page this link points to."}
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -252,6 +289,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   if (fieldKey === "marketingOptin") {
     const marketingOptin = definition!.fields.marketingOptin!;
     const label = localeText(marketingOptin.labelByLocale);
+    const pendingLabel = pending({ kind: "profileLabel", field: "marketingOptin" });
 
     function toggleVariant(variant: FormVariant, checked: boolean) {
       const current = consentVariants(definition!.fields.marketingOptin!);
@@ -274,6 +312,9 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           fullWidth
           value={label}
           inputProps={{ dir }}
+          placeholder={pendingLabel}
+          sx={missingTranslationSx(missing(label))}
+          helperText={pendingLabel ? PENDING_TRANSLATION_HELPER_TEXT : missing(label) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
           onChange={(e) =>
             updateDefinition((d) => ({
               ...d,
@@ -299,6 +340,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   // labelByLocale. TS can't correlate that with the earlier `fieldKey` checks on
   // their own (different variable), hence the assertion.
   const label = localeText((field as { labelByLocale: Record<string, string> }).labelByLocale);
+  const pendingLabel = pending({ kind: "profileLabel", field: fieldKey });
 
   function patchLabel(value: string) {
     updateDefinition((d) => {
@@ -319,7 +361,17 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
         {FIELD_LABEL[fieldKey]}
       </Typography>
       {localeHint}
-      <TextField label="Label" size="small" fullWidth value={label} inputProps={{ dir }} onChange={(e) => patchLabel(e.target.value)} />
+      <TextField
+        label="Label"
+        size="small"
+        fullWidth
+        value={label}
+        inputProps={{ dir }}
+        placeholder={pendingLabel}
+        sx={missingTranslationSx(missing(label))}
+        helperText={pendingLabel ? PENDING_TRANSLATION_HELPER_TEXT : missing(label) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
+        onChange={(e) => patchLabel(e.target.value)}
+      />
 
       {fieldKey === "mobileNumber" && definition?.fields.mobileNumber && (
         <Autocomplete
@@ -327,12 +379,21 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
           size="small"
           options={countryOptions}
           getOptionLabel={(code) => resolveCountryName(code, activeLocale, defaultLocale)}
-          value={definition.fields.mobileNumber.countries}
+          value={resolveMobileNumberCountries(definition.fields.mobileNumber, activeLocale)}
           onChange={(_e, next) =>
-            updateDefinition((d) => ({
-              ...d,
-              fields: { ...d.fields, mobileNumber: { ...d.fields.mobileNumber!, countries: next } },
-            }))
+            updateDefinition((d) => {
+              const current = d.fields.mobileNumber!;
+              if (activeLocale === d.meta.defaultLocale) {
+                return { ...d, fields: { ...d.fields, mobileNumber: { ...current, countries: next } } };
+              }
+              return {
+                ...d,
+                fields: {
+                  ...d.fields,
+                  mobileNumber: { ...current, countriesByLocale: { ...current.countriesByLocale, [activeLocale]: next } },
+                },
+              };
+            })
           }
           renderTags={(value, getTagProps) =>
             value.map((code, index) => {
@@ -340,7 +401,18 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
               return <Chip key={key} label={resolveCountryName(code, activeLocale, defaultLocale)} size="small" {...rest} />;
             })
           }
-          renderInput={(params) => <TextField {...params} label="Countries" placeholder="Add a country" helperText={`Restricted to ${definition.meta.subsidiary}'s own countries when available.`} />}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Countries"
+              placeholder="Add a country"
+              helperText={
+                activeLocale === defaultLocale
+                  ? `Shared default for every locale without its own override. Restricted to ${definition.meta.subsidiary}'s own countries when available.`
+                  : `Override for ${activeLocale} only — clear it to fall back to the default locale's list.`
+              }
+            />
+          )}
         />
       )}
     </Stack>

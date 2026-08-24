@@ -38,16 +38,16 @@ export type {
   TermsAndConditionsMeta,
   ValidationMessageSet,
 } from "./form/formDefinition";
-export { resolveLocalizedText } from "./form/formDefinition";
+export { resolveLocalizedText, resolveMobileNumberCountries } from "./form/formDefinition";
 export { formDefinitionSchema } from "./form/formDefinitionZod";
-export { migrateDefaultLocale, type MigrateDefaultLocaleOptions } from "./form/localeMigration";
+export { migrateDefaultLocale, remapLocalesForCopy, type MigrateDefaultLocaleOptions } from "./form/localeMigration";
 
 // Schema-authored (builder) form validation — the non-Excel counterpart to validateWorkbook
 export { validateFormDefinition } from "./form/formDefinitionValidator";
 
 // Subsidiary-user contributions (translations + additive questions/consents) to a
 // published form — see contribution.ts's own doc comment.
-export { applyContribution, validateContribution, type ContributionContent, type TranslationEntry, type TranslationTarget } from "./form/contribution";
+export { applyContribution, validateContribution, targetKey, type ContributionContent, type TranslationEntry, type TranslationTarget } from "./form/contribution";
 export { contributionContentSchema, translationEntrySchema, translationTargetSchema } from "./form/contributionZod";
 
 // Country/calling-code lookup — needed by a builder UI's own Mobile Number field
