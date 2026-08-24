@@ -22,8 +22,6 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DescriptionIcon from "@mui/icons-material/Description";
 import LogoutIcon from "@mui/icons-material/Logout";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import HistoryIcon from "@mui/icons-material/History";
 import SettingsIcon from "@mui/icons-material/Settings";
 import PeopleIcon from "@mui/icons-material/People";
@@ -140,21 +138,14 @@ export function AppLayout() {
   }
 
   /** Every nav item lives inside a labeled section — admin and subsidiary users
-   * each get their own set, mirroring the same three-part shape: an "Excel
-   * Upload" group for the workbook-upload lifecycle, a "Form Configuration"
-   * group for the form-builder side, and a general "Configuration"/
-   * "Administration" group for everything else. Admins never have
-   * subsidiaryId set, so exactly one branch below applies to a given user. */
+   * each get their own set: a "Form Configuration" group for the form-builder
+   * side, and a general "Configuration"/"Administration" group for everything
+   * else. The Excel-upload workflow (UploadHistoryPage, AdminDashboardPage,
+   * AdminHistoryPage) is intentionally hidden from navigation for both roles —
+   * its routes/components are untouched, just not linked here. Admins never
+   * have subsidiaryId set, so exactly one branch below applies to a given user. */
   const sections: NavSection[] = isAdminRole(user?.role)
     ? [
-        {
-          label: "Excel Upload",
-          items: [
-            { to: "/", label: "Upload History", icon: <UploadFileIcon />, exact: true },
-            { to: "/admin", label: "Admin Dashboard", icon: <AdminPanelSettingsIcon />, exact: true },
-            { to: "/admin/history", label: "All History", icon: <HistoryIcon />, exact: true },
-          ],
-        },
         {
           label: "Form Configuration",
           items: [
@@ -191,10 +182,6 @@ export function AppLayout() {
         },
       ]
     : [
-        {
-          label: "Excel Upload",
-          items: [{ to: "/", label: "Upload History", icon: <UploadFileIcon />, exact: true }],
-        },
         ...(user?.subsidiaryId
           ? [
               {

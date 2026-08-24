@@ -13,7 +13,6 @@ import { AdminHistoryPage } from "./pages/AdminHistoryPage.tsx";
 import { ConfigurationPage } from "./pages/ConfigurationPage.tsx";
 import { UserManagementPage } from "./pages/UserManagementPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
-import { UploadHistoryPage } from "./pages/UploadHistoryPage.tsx";
 import { HrFormInitiatorListPage } from "./pages/HrFormInitiatorListPage.tsx";
 import { AdHocFormInitiatorListPage } from "./pages/AdHocFormInitiatorListPage.tsx";
 import { FormBuilderEditorPage } from "./pages/FormBuilderEditorPage.tsx";
@@ -24,6 +23,16 @@ import { MyAdHocFormEditorPage } from "./pages/MyAdHocFormEditorPage.tsx";
 import { MySubmissionsPage } from "./pages/MySubmissionsPage.tsx";
 import { MySubsidiaryPage } from "./pages/MySubsidiaryPage.tsx";
 import { QuestionMasterPage } from "./pages/QuestionMasterPage.tsx";
+
+/** Post-login/index landing page — the Excel-upload workflow (formerly here)
+ * is hidden from navigation for both roles, so this picks the first page each
+ * role's own nav now actually leads to instead. */
+function DefaultLanding() {
+  const user = useAuthStore((s) => s.user);
+  if (isAdminRole(user?.role)) return <Navigate to="/admin/form-builder" replace />;
+  if (user?.subsidiaryId) return <Navigate to="/my-forms" replace />;
+  return <Navigate to="/my-submissions" replace />;
+}
 
 export default function App() {
   const silentRefresh = useAuthStore((s) => s.silentRefresh);
@@ -57,7 +66,7 @@ export default function App() {
 
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
-                <Route index element={<UploadHistoryPage />} />
+                <Route index element={<DefaultLanding />} />
                 <Route path="my-forms" element={<Navigate to="/my-forms/hr" replace />} />
                 <Route path="my-forms/hr" element={<MyHrFormsListPage />} />
                 <Route path="my-forms/adhoc" element={<MyAdHocFormsListPage />} />
