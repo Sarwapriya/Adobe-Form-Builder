@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Alert, Box, Button, IconButton, Paper, Stack, Switch, TextField, Tooltip, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import ModelTrainingIcon from "@mui/icons-material/ModelTraining";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
@@ -157,13 +158,13 @@ export function FabrixModelManager() {
               direction="row"
               spacing={1}
               alignItems="center"
-              sx={{
+              sx={(t) => ({
                 px: 1.5,
                 py: 1,
                 borderRadius: 2,
-                bgcolor: "rgba(20, 22, 33, 0.03)",
+                bgcolor: alpha(t.palette.text.primary, 0.03),
                 opacity: model.isEnabled ? 1 : 0.55,
-              }}
+              })}
             >
               <Stack direction="column" spacing={0}>
                 <Tooltip title="Move up">

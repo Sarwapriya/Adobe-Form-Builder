@@ -1,4 +1,5 @@
 import { Alert, Box, Paper, Stack, Switch, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import type { FormVariant } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 
@@ -13,15 +14,15 @@ interface VariantCardProps {
 function VariantCard({ title, description, checked, onToggle, warning }: VariantCardProps) {
   return (
     <Box
-      sx={{
+      sx={(t) => ({
         flex: "1 1 240px",
         minWidth: 220,
         p: 1.5,
         borderRadius: 2,
         border: "1px solid",
-        borderColor: checked ? "primary.main" : "rgba(20, 22, 33, 0.12)",
-        bgcolor: checked ? "rgba(20, 40, 160, 0.04)" : "transparent",
-      }}
+        borderColor: checked ? "primary.main" : alpha(t.palette.text.primary, 0.12),
+        bgcolor: checked ? alpha(t.palette.primary.main, 0.12) : "transparent",
+      })}
     >
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
         <Box>

@@ -92,8 +92,32 @@ export function HrFormInitiatorListPage() {
   useEffect(() => {
     if (!createOpen) return;
     listSubsidiaries().then(setSubsidiaries).catch(() => undefined);
-    listOpenProjectCodes().then(setProjectCodes).catch(() => undefined);
   }, [createOpen]);
+
+  // Project codes are scoped to whichever subsidiary is currently selected —
+  // listOpenProjectCodes(subsidiaryId) excludes any code an admin has
+  // disabled for that specific subsidiary (SubsidiaryProjectCodeAccessManager
+  // on the Configuration page), on top of the global open/closed state. Empty
+  // until a subsidiary is picked, matching "select subsidiary first, then its
+  // available project codes load" — same cascade UploadHistoryPage's own
+  // upload form uses.
+  useEffect(() => {
+    if (!createOpen || !newSubsidiaryId) {
+      setProjectCodes([]);
+      return;
+    }
+    let cancelled = false;
+    listOpenProjectCodes(newSubsidiaryId)
+      .then((codes) => {
+        if (cancelled) return;
+        setProjectCodes(codes);
+        setNewProjectCode((current) => (codes.some((c) => c.code === current) ? current : ""));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, newSubsidiaryId]);
 
   function closeCreateDialog() {
     setCreateOpen(false);
@@ -273,6 +297,14 @@ export function HrFormInitiatorListPage() {
                 value={newProjectCode}
                 onChange={(e) => setNewProjectCode(e.target.value)}
                 InputLabelProps={{ shrink: true }}
+                disabled={!newSubsidiaryId}
+                helperText={
+                  !newSubsidiaryId
+                    ? "Choose a subsidiary first"
+                    : projectCodes.length === 0
+                      ? "No project codes open for this subsidiary"
+                      : undefined
+                }
               >
                 <MenuItem value="">None</MenuItem>
                 {projectCodes.map((pc) => (

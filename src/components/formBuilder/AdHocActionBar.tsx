@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert, Button, Chip, Paper, Stack, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
@@ -76,11 +77,24 @@ export function AdHocActionBar() {
   }
 
   return (
-    <Paper sx={{ p: 2, borderRadius: 3, position: "sticky", bottom: 16 }}>
+    <Paper
+      elevation={8}
+      sx={(t) => ({
+        p: 2,
+        borderRadius: 3,
+        position: "sticky",
+        bottom: 16,
+        // Same reasoning as BuilderActionBar.tsx's own sticky toolbar: the
+        // page's cards use a flat elevation-0 Paper by default (theme.ts), so
+        // this bar needs a real drop shadow + accent-tinted border to read as
+        // a distinct, floating action bar rather than blending into the page.
+        border: `1px solid ${alpha(t.palette.primary.main, 0.4)}`,
+      })}
+    >
       <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
         <Chip label={statusLabel} color={statusColor} size="small" />
         {dirty && <Chip label="Unsaved changes" size="small" variant="outlined" />}
-        <Button size="small" startIcon={<VisibilityIcon />} onClick={() => setPreviewOpen(true)}>
+        <Button size="small" variant="outlined" startIcon={<VisibilityIcon />} onClick={() => setPreviewOpen(true)}>
           Preview
         </Button>
         <Button

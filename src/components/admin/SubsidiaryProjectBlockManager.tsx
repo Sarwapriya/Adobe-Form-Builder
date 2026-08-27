@@ -12,6 +12,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import BlockIcon from "@mui/icons-material/Block";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { ApiError } from "../../api/apiClient";
@@ -179,7 +180,7 @@ export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal
               direction="row"
               alignItems="center"
               justifyContent="space-between"
-              sx={{ px: 1.5, py: 0.75, borderRadius: 2, bgcolor: "rgba(20, 22, 33, 0.04)" }}
+              sx={(t) => ({ px: 1.5, py: 0.75, borderRadius: 2, bgcolor: alpha(t.palette.text.primary, 0.04) })}
             >
               <Typography variant="body2">
                 <strong>{b.subsidiaryName}</strong> may not upload <strong>{b.projectCode}</strong>

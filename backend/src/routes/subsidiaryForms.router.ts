@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { contributionContentSchema, formDefinitionSchema, type BuilderConfig } from "@formbuilder/shared";
+import { contributionContentSchema, formDefinitionSchema, type BuilderConfig, type QuestionDefinition } from "@formbuilder/shared";
 import { asyncHandler } from "../utils/asyncHandler";
 import { requireAuth } from "../middleware/authJwt";
 import { validateBody } from "../middleware/validate";
@@ -69,6 +69,23 @@ const createAdHocFormSchema = z.object({
   copyFromFormId: z.string().trim().min(1).optional(),
 });
 
+const createAdHocFormWithQuestionsSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  questions: z.array(z.object({
+    id: z.string(),
+    order: z.number(),
+    headingByLocale: z.record(z.string(), z.string()),
+    subheadingByLocale: z.record(z.string(), z.string()).optional(),
+    controlType: z.enum(["radio", "checkbox", "text", "shortText", "dropdown"]),
+    required: z.boolean(),
+    answers: z.array(z.object({
+      id: z.string(),
+      order: z.number(),
+      textByLocale: z.record(z.string(), z.string()),
+    })).optional(),
+  })),
+});
+
 subsidiaryFormsRouter.post(
   "/adhoc",
   validateBody(createAdHocFormSchema),
@@ -87,6 +104,21 @@ subsidiaryFormsRouter.post(
       }
     }
     const form = await createForm({ name, subsidiaryId, userId: req.auth!.sub, origin: "adhoc", copyFromFormId });
+    res.status(201).json(form);
+  }),
+);
+
+subsidiaryFormsRouter.post(
+  "/adhoc/with-questions",
+  validateBody(createAdHocFormWithQuestionsSchema),
+  asyncHandler(async (req, res) => {
+    const subsidiaryId = req.auth!.subsidiaryId;
+    if (!subsidiaryId) {
+      res.status(403).json({ error: "This account has no subsidiary assigned" });
+      return;
+    }
+    const { name, questions } = req.body as z.infer<typeof createAdHocFormWithQuestionsSchema>;
+    const form = await createForm({ name, subsidiaryId, userId: req.auth!.sub, origin: "adhoc", questions: questions as unknown as QuestionDefinition[] });
     res.status(201).json(form);
   }),
 );

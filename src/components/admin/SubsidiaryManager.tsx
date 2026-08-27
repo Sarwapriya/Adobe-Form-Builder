@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Alert, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -318,7 +319,7 @@ function SubsidiaryNotificationRow({
           {subsidiary.name}
         </Typography>
       }
-      containerSx={{ px: 1.5, py: 1, borderRadius: 2, bgcolor: "rgba(20, 22, 33, 0.03)" }}
+      containerSx={(t) => ({ px: 1.5, py: 1, borderRadius: 2, bgcolor: alpha(t.palette.text.primary, 0.03) })}
     />
   );
 }

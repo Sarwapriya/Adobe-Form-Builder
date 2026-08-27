@@ -1,6 +1,6 @@
 import type { BuilderConfig, ContributionContent, FormDefinition, ValidationResult } from "@formbuilder/shared";
 import { apiClient, ApiError } from "./apiClient";
-import type { FormDetail, FormListItem } from "./formBuilderApi";
+import type { FormDetail, FormListItem, QuestionSeed } from "./formBuilderApi";
 
 /**
  * Standard-user-facing counterpart to formBuilderApi.ts — `/api/v1/forms`
@@ -30,6 +30,15 @@ export function getMyFormDetail(formId: string): Promise<FormDetail> {
  * subsidiary's own ad-hoc forms. */
 export function createAdHocForm(name: string, copyFromFormId?: string): Promise<FormListItem> {
   return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name, copyFromFormId });
+}
+
+export type { QuestionSeed } from "./formBuilderApi";
+
+export function createAdHocFormWithQuestions(
+  name: string,
+  questions: QuestionSeed[],
+): Promise<FormListItem> {
+  return apiClient.post<FormListItem>("/api/v1/forms/adhoc/with-questions", { name, questions });
 }
 
 export function listMyAdHocForms(): Promise<FormListItem[]> {

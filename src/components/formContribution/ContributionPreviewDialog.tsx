@@ -4,6 +4,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { applyContribution, generateSolution, resolveFileNames, type ContributionContent, type FormVariant } from "@formbuilder/shared";
 import { buildPreviewDocument } from "../../codegen/previewDocument";
 import { useFormContributionStore } from "../../store/formContributionStore";
+import { useThemeModeStore } from "../../store/themeModeStore";
 
 /**
  * Client-side preview of the published form with this session's in-progress
@@ -26,6 +27,7 @@ export function ContributionPreviewDialog({ open, onClose }: { open: boolean; on
   const newAnswersForExisting = useFormContributionStore((s) => s.newAnswersForExisting);
   const deletedAnswerIds = useFormContributionStore((s) => s.deletedAnswerIds);
   const workingLocale = useFormContributionStore((s) => s.locale);
+  const previewColorScheme = useThemeModeStore((s) => s.mode);
 
   const [variant, setVariant] = useState<FormVariant>("ff");
   const [locale, setLocale] = useState<string>("");
@@ -80,13 +82,13 @@ export function ContributionPreviewDialog({ open, onClose }: { open: boolean; on
     const previewConfig = { ...baseConfig, variants: [variant] };
     const files = generateSolution(definition, previewConfig);
     const fileNames = resolveFileNames(definition, previewConfig);
-    const doc = buildPreviewDocument(files, variant, locale, fileNames);
+    const doc = buildPreviewDocument(files, variant, locale, fileNames, previewColorScheme);
     const blob = new Blob([doc], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     setIframeUrl(url);
     return () => URL.revokeObjectURL(url);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, definition, baseConfig, variant, locale]);
+  }, [open, definition, baseConfig, variant, locale, previewColorScheme]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>

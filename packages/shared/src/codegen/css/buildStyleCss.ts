@@ -137,6 +137,26 @@ const RTL_OVERRIDES = `
 `;
 
 /**
+ * The reference stylesheet sets `body, html { color: #000; }` but never an explicit
+ * `background-color` — relying on the browser's default white canvas. Modern browsers'
+ * UA stylesheets opt the page into `color-scheme: light dark` by default, so a viewer
+ * whose OS/browser is set to dark mode gets that canvas painted black instead, leaving
+ * the reference's explicit black text invisible against it (this is what the preview
+ * iframe reproduces when the admin/subsidiary app itself is in dark mode — the iframe is
+ * its own document, but inherits the same OS-level dark preference). This campaign form
+ * is meant to render identically regardless of the viewer's OS/browser theme, so pin
+ * both explicitly rather than relying on the UA default.
+ */
+const COLOR_SCHEME_OVERRIDE = `
+/* --- Fixed light appearance (not present in the reference stylesheet) --- */
+html,
+body {
+  background-color: #fff;
+  color-scheme: light;
+}
+`;
+
+/**
  * `.top_subheading` (the builder's campaign-subheading field, see pageTemplate.ts) is
  * new markup with no reference-CSS counterpart — it otherwise inherits `.top_cont p`'s
  * existing font rules (already matches by tag+ancestor), this just adds the spacing
@@ -156,6 +176,6 @@ const SUBHEADING_OVERRIDES = `
 export function buildStyleCss(fileNames: FileNames): GeneratedFile {
   return {
     path: fileNames.css,
-    contents: `${referenceCss}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}\n${SUBHEADING_OVERRIDES}`,
+    contents: `${referenceCss}\n${COLOR_SCHEME_OVERRIDE}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}\n${SUBHEADING_OVERRIDES}`,
   };
 }

@@ -212,12 +212,18 @@ CREATE TABLE SubsidiaryProjectBlocks (
 CREATE UNIQUE INDEX UQ_SubsidiaryProjectBlocks_pair ON SubsidiaryProjectBlocks(subsidiaryName, projectCode);
 
 -- One QA automation run (admin-triggered, Playwright-driven) against one
--- generated form variant of one upload — see qaRunService.ts. status starts
+-- generated form variant of either an upload, a published Configuration
+-- form, an ad-hoc form awaiting review, or a pending subsidiary contribution
+-- merged onto its form's draft — see qaRunService.ts. Exactly one of
+-- uploadId/formId is set (CK_QaRuns_owner); contributionId is only set for a
+-- contribution-based run (formId is still set alongside it). status starts
 -- 'pending', flips to 'running', lands on 'passed'/'failed' (test outcome) or
 -- 'error' (the run itself couldn't complete).
 CREATE TABLE QaRuns (
     id                UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    uploadId          UNIQUEIDENTIFIER NOT NULL REFERENCES Uploads(id),
+    uploadId          UNIQUEIDENTIFIER NULL REFERENCES Uploads(id),
+    formId            UNIQUEIDENTIFIER NULL REFERENCES Forms(id),
+    contributionId    UNIQUEIDENTIFIER NULL REFERENCES FormContributions(id),
     variant           NVARCHAR(10) NOT NULL,
     status            NVARCHAR(20) NOT NULL DEFAULT 'pending',
     triggeredByUserId UNIQUEIDENTIFIER NOT NULL REFERENCES Users(id),
@@ -228,9 +234,11 @@ CREATE TABLE QaRuns (
     reportPath        NVARCHAR(2000) NULL,
     createdAt         DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET(),
     startedAt         DATETIMEOFFSET(7) NULL,
-    completedAt       DATETIMEOFFSET(7) NULL
+    completedAt       DATETIMEOFFSET(7) NULL,
+    CONSTRAINT CK_QaRuns_owner CHECK ((uploadId IS NOT NULL AND formId IS NULL) OR (uploadId IS NULL AND formId IS NOT NULL))
 );
 CREATE INDEX IX_QaRuns_uploadId ON QaRuns(uploadId);
+CREATE INDEX IX_QaRuns_formId ON QaRuns(formId);
 
 -- One individual assertion within a QaRun — fieldId (when set) is the
 -- generated form's own DOM id for the field the check concerns, which is

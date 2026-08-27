@@ -1,5 +1,33 @@
 import type { FileNames, FormVariant, GeneratedFile } from "@formbuilder/shared";
 
+export type PreviewColorScheme = "light" | "dark";
+
+/**
+ * Only used for the in-app preview iframe when the app itself is in dark mode
+ * (see useThemeModeStore.ts) — the actual generated/downloaded form always
+ * renders light (see buildStyleCss.ts's `color-scheme: light` override),
+ * since a real campaign visitor's own OS/browser theme shouldn't change what
+ * the live campaign looks like. This block never ships in the downloaded
+ * zip; it exists only in this preview-only inlining glue, purely so the
+ * in-app preview is comfortable to read while the rest of the app is dark.
+ *
+ * Uses the classic `invert(1) hue-rotate(180deg)` trick rather than
+ * hand-writing a dark reskin of every rule in the (large, third-party
+ * reference) stylesheet: on a page with an explicit white background/black
+ * text, `invert()` flips lightness exactly (white<->black, so body text
+ * stays readable against the now-dark background), and `hue-rotate(180deg)`
+ * cancels out the hue shift `invert()` introduces on saturated colors, so
+ * accent colors (buttons, links) stay roughly their original hue instead of
+ * turning into their literal color-wheel opposite. `<img>` tags (real
+ * uploaded answer images, not CSS icon backgrounds) get a second inversion
+ * to cancel the first, so actual photo content isn't affected by the trick.
+ */
+const DARK_PREVIEW_OVERRIDE = `<style>
+html { filter: invert(1) hue-rotate(180deg); background: #fff; }
+img { filter: invert(1) hue-rotate(180deg); }
+</style>
+</head>`;
+
 /**
  * Inlines the generated CSS/data-JS/behavior-JS into a single self-contained HTML
  * document for the live preview iframe. The iframe can't fetch same-directory
@@ -29,6 +57,7 @@ export function buildPreviewDocument(
   variant: FormVariant,
   previewLocale: string,
   fileNames: FileNames,
+  colorScheme: PreviewColorScheme = "light",
 ): string {
   const htmlPath = variant === "ff" ? fileNames.ffHtml : fileNames.ocHtml;
   const jsPath = variant === "ff" ? fileNames.ffJs : fileNames.ocJs;
@@ -50,8 +79,10 @@ export function buildPreviewDocument(
     `p.get=function(n){return n==="lang"?L:n==="id"&&I?I:g(n)};return p};` +
     `window.URLSearchParams.prototype=O.prototype})();</script>\n`;
 
-  return html
+  const withInlinedAssets = html
     .replace(`<link rel="stylesheet" href="${fileNames.css}">`, `<style>${css}</style>`)
     .replace(`<script src="${fileNames.dataJs}"></script>`, `<script>${dataJs}</script>`)
     .replace(`<script src="${jsPath}"></script>`, `${paramOverride}<script>${behaviorJs}</script>`);
+
+  return colorScheme === "dark" ? withInlinedAssets.replace("</head>", DARK_PREVIEW_OVERRIDE) : withInlinedAssets;
 }

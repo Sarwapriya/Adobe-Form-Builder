@@ -18,7 +18,8 @@ import {
 } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CancelIcon from "@mui/icons-material/Cancel";
-import PublishIcon from "@mui/icons-material/Publish";
+import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { resolveLocalizedText } from "@formbuilder/shared";
 import {
   approveContribution,
@@ -31,6 +32,7 @@ import { ApiError } from "../../api/apiClient";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { ContributionMergePreviewDialog } from "./ContributionMergePreviewDialog";
 import { ContributionDetails } from "./ContributionDetails";
+import { QaRunDialog } from "../admin/QaRunDialog";
 
 type RowStatus = "pending" | "awaitingPublish" | "published" | "rejected";
 
@@ -69,16 +71,28 @@ function describeContent(c: ContributionSummary, defaultLocale: string): string 
 /**
  * Admin-facing review queue for a form's subsidiary-submitted contributions
  * (translations + additive questions/consents — see formContributionService.ts's
- * own doc comment). Approve and Publish are deliberately separate actions:
+ * own doc comment). Approve and Deploy are deliberately separate actions:
  * Approve just merges the contribution onto the current draft, so an admin can
- * approve several submissions before going live with all of them in one Publish —
- * the same "Publish" action used everywhere else in the builder, which also
- * stamps every now-live approved contribution's `publishedAt`. Rejecting leaves
- * the form untouched. Lives on FormBuilderEditorPage, below the main editor.
+ * approve several submissions before going live with all of them in one Deploy —
+ * which calls the exact same `publishForm` API BuilderActionBar's own "Publish"
+ * button uses (just below this panel), and also stamps every now-live approved
+ * contribution's `publishedAt`. Rejecting leaves the form untouched. Lives on
+ * FormBuilderEditorPage, below the main editor.
+ *
+ * This shortcut button is always labeled "Deploy" (never "Publish") — it only
+ * ever renders once there's at least one approved-but-not-live contribution
+ * (see the `awaitingPublish.length > 0` gate below) AND the admin hasn't made
+ * any edits of their own since (`!dirty`); BuilderActionBar's own "Publish"
+ * button (just below this panel) is disabled under that same first condition
+ * and re-enabled the moment this one hides, so exactly one of the two is ever
+ * the active call-to-action — see BuilderActionBar's own doc comment for the
+ * full reasoning. The informational "N approved contributions not live yet"
+ * banner itself still shows either way; only the button hides.
  */
 export function ContributionReviewPanel({ formId }: { formId: string }) {
   const definition = useFormBuilderStore((s) => s.definition);
   const config = useFormBuilderStore((s) => s.config);
+  const dirty = useFormBuilderStore((s) => s.dirty);
   const reloadForm = useFormBuilderStore((s) => s.loadForm);
   const contributions = useFormBuilderStore((s) => s.contributions);
   const loading = useFormBuilderStore((s) => s.contributionsLoading);
@@ -86,6 +100,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewContribution, setPreviewContribution] = useState<ContributionSummary | null>(null);
+  const [qaContribution, setQaContribution] = useState<ContributionSummary | null>(null);
   const [rejectTarget, setRejectTarget] = useState<ContributionSummary | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -112,7 +127,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
     }
   }
 
-  async function handlePublish() {
+  async function handleDeploy() {
     setBusyId("__publish__");
     setError(null);
     try {
@@ -120,9 +135,9 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
       await Promise.all([refresh(), reloadForm(formId)]);
     } catch (err) {
       if (err instanceof FormInvalidError) {
-        setError("Publish failed — the current draft has validation errors (see the panel above). Fix them and try again.");
+        setError("Deploy failed — the current draft has validation errors (see the panel above). Fix them and try again.");
       } else {
-        setError(err instanceof ApiError ? err.message : "Failed to publish");
+        setError(err instanceof ApiError ? err.message : "Failed to deploy");
       }
     } finally {
       setBusyId(null);
@@ -175,7 +190,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: "block" }}>
         Translations and additions submitted by subsidiary users. Approve merges a submission onto the current draft;
-        nothing goes live until you separately Publish — approve as many as you like first, then publish them all at
+        nothing goes live until you separately Deploy — approve as many as you like first, then deploy them all at
         once.
       </Typography>
 
@@ -190,18 +205,21 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
           severity="info"
           sx={{ mb: 1.5, borderRadius: 2 }}
           action={
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<PublishIcon />}
-              disabled={busyId === "__publish__"}
-              onClick={handlePublish}
-            >
-              {busyId === "__publish__" ? "Publishing..." : "Publish"}
-            </Button>
+            !dirty && (
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<RocketLaunchIcon />}
+                disabled={busyId === "__publish__"}
+                onClick={handleDeploy}
+              >
+                {busyId === "__publish__" ? "Deploying..." : "Deploy"}
+              </Button>
+            )
           }
         >
           {awaitingPublish.length} approved contribution{awaitingPublish.length === 1 ? "" : "s"} not live yet.
+          {dirty && " You've made further edits — use Publish below to push everything live."}
         </Alert>
       )}
 
@@ -229,6 +247,9 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
               </Button>
               <Button size="small" startIcon={<VisibilityIcon />} onClick={() => setPreviewContribution(c)}>
                 Preview
+              </Button>
+              <Button size="small" startIcon={<PlayArrowIcon />} onClick={() => setQaContribution(c)}>
+                Run QA
               </Button>
               <Button size="small" variant="contained" disabled={busyId === c.id} onClick={() => handleApprove(c.id)}>
                 {busyId === c.id ? "Approving..." : "Approve"}
@@ -305,6 +326,15 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
         baseDefinition={definition}
         baseConfig={config}
       />
+
+      {qaContribution && (
+        <QaRunDialog
+          subject={{ kind: "contribution", contributionId: qaContribution.id, formId }}
+          availableVariants={config?.variants ?? ["ff"]}
+          open={!!qaContribution}
+          onClose={() => setQaContribution(null)}
+        />
+      )}
 
       <Dialog open={!!rejectTarget} onClose={() => setRejectTarget(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>

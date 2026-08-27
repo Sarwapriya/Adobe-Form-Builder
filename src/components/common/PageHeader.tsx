@@ -39,7 +39,7 @@ export function PageHeader({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          bgcolor: "primary.main",
+          backgroundImage: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.secondary.main} 100%)`,
           color: "primary.contrastText",
           flexShrink: 0,
         }}

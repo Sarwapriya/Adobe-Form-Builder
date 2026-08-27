@@ -32,10 +32,12 @@ export async function deleteSubsidiaryProjectBlock(id: string): Promise<boolean>
 
 /**
  * Called from uploadService.createUpload before anything is written to disk,
- * alongside and independently of projectCodeService's own open check: throws
- * SubsidiaryProjectBlockedError if an admin has specifically blocked this
- * project code for this subsidiary. A no-op (resolves) otherwise — this is a
- * blocklist, not a picklist, so an unknown pair is simply not blocked.
+ * and from formBuilderService.createForm/approveAdHocForm before a
+ * Configuration form is created/approved, alongside and independently of
+ * projectCodeService's own open check: throws SubsidiaryProjectBlockedError
+ * if an admin has specifically blocked this project code for this
+ * subsidiary. A no-op (resolves) otherwise — this is a blocklist, not a
+ * picklist, so an unknown pair is simply not blocked.
  */
 export async function assertNotBlocked(subsidiaryName: string, projectCode: string): Promise<void> {
   const blocked = await AppDataSource.getRepository(SubsidiaryProjectBlock).findOne({
@@ -43,7 +45,7 @@ export async function assertNotBlocked(subsidiaryName: string, projectCode: stri
   });
   if (blocked) {
     throw new SubsidiaryProjectBlockedError(
-      `Project code "${projectCode}" is closed for new uploads from subsidiary "${subsidiaryName}"`,
+      `Project code "${projectCode}" is blocked for subsidiary "${subsidiaryName}"`,
     );
   }
 }

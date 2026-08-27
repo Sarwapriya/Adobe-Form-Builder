@@ -49,7 +49,6 @@ import { getAccessibleFormDetail } from "./formAccessService";
  */
 
 const HISTORY_LIMIT = 20;
-const FALLBACK_MESSAGE = "The AI service is temporarily unavailable. Please try again.";
 
 function toCallerContext(auth: AccessTokenPayload): aiCampaignTools.AiToolCallerContext {
   return { userId: auth.sub, role: auth.role, subsidiaryId: auth.subsidiaryId };
@@ -134,8 +133,22 @@ function extractToolCall(replyText: string): { call: AIToolCall; remainderText: 
   return { call: parsed.data, remainderText: replyText.replace(extracted.matchedBlock, "").trim() };
 }
 
-function buildBaseTurns(campaignContextJson: string | null, historyRows: AIConversationMessage[]): AiChatTurn[] {
-  const turns: AiChatTurn[] = [{ role: "system", content: buildSystemPrompt() }];
+function buildUserContext(auth: AccessTokenPayload): string {
+  const parts = [`role: ${auth.role}`];
+  if (auth.subsidiaryId) parts.push(`subsidiaryId: ${auth.subsidiaryId}`);
+  return parts.join(", ");
+}
+
+function buildBaseTurns(
+  campaignContextJson: string | null,
+  historyRows: AIConversationMessage[],
+  auth: AccessTokenPayload,
+): AiChatTurn[] {
+  const userCtx = buildUserContext(auth);
+  const systemContent =
+    buildSystemPrompt() +
+    `\n\nThe currently logged-in user context: ${userCtx}. When the user asks you to create a campaign and no subsidiary is mentioned, use their own subsidiaryId from the context above.`;
+  const turns: AiChatTurn[] = [{ role: "system", content: systemContent }];
   if (campaignContextJson) {
     turns.push({ role: "system", content: section("CAMPAIGN DATA", campaignContextJson) });
   }
@@ -233,6 +246,12 @@ async function generateSuggestedQuestions(
   const instruction = section(
     "USER MESSAGE",
     `Generate exactly ${args.count} new survey question(s) about "${args.topic}", written in the "${locale}" locale. ` +
+      `Remember the campaign-terminology rule from your system instructions: "${args.topic}" may be an internal marketing/CRM ` +
+      `program name rather than a literal description — do not derive question content from the literal words in the name. ` +
+      `If it's a recognized survey/campaign concept (e.g. an NPS or satisfaction-style survey) generate genuinely relevant, ` +
+      `professional questions for that kind of campaign; if the name gives you no real signal of what the campaign is actually ` +
+      `about, generate general-purpose customer-feedback/engagement questions suitable for any professional campaign rather ` +
+      `than inventing a literal interpretation of the name. ` +
       `Reply with ONLY a single fenced json code block, no other text, in this exact shape:\n` +
       `\`\`\`json\n{"questions": [{"heading": "...", "controlType": "radio", "required": true, "answers": ["...", "..."]}]}\n\`\`\`\n` +
       `"controlType" must be one of radio, checkbox, text, shortText, dropdown. Omit "answers" entirely for controlType "text"/"shortText".`,
@@ -351,7 +370,7 @@ export async function sendChatMessage(auth: AccessTokenPayload, request: AIChatR
       if (campaign) campaignContextJson = JSON.stringify(campaign);
     }
 
-    const baseTurns = buildBaseTurns(campaignContextJson, priorHistory);
+    const baseTurns = buildBaseTurns(campaignContextJson, priorHistory, auth);
     const userTurn: AiChatTurn = { role: "user", content: section("USER MESSAGE", request.message) };
     const initial = await sendAiMessage({ messages: [...baseTurns, userTurn] });
 
@@ -383,9 +402,11 @@ export async function sendChatMessage(auth: AccessTokenPayload, request: AIChatR
 
     return await handleMutatingTool(conversation, ctx, auth, formId, call, remainderText);
   } catch (err) {
+    const detail = err instanceof Error ? err.message : "Unknown error";
     console.error("[aiAssistantService] sendChatMessage failed", err);
-    await persistMessage(conversation.id, "assistant", FALLBACK_MESSAGE);
-    return { conversationId: conversation.id, message: FALLBACK_MESSAGE, actions: [], references: [] };
+    const message = `Something went wrong while processing your request: ${detail}`;
+    await persistMessage(conversation.id, "assistant", message);
+    return { conversationId: conversation.id, message, actions: [], references: [] };
   }
 }
 
@@ -408,7 +429,7 @@ async function handleReadOnlyTool(
   ];
   const final = await sendAiMessage({ messages: followUpTurns });
 
-  const message = final.ok ? final.replyText : FALLBACK_MESSAGE;
+  const message = final.ok ? final.replyText : `I couldn't complete your request: ${final.error}`;
   await persistMessage(conversation.id, "assistant", message, final.ok ? { tokenUsage: final.tokenUsage, model: final.model, requestId: final.requestId } : undefined);
 
   let references: AIChatResponse["references"] = [];

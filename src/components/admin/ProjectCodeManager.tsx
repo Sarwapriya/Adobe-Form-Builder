@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Alert, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import EditOffIcon from "@mui/icons-material/EditOff";
@@ -269,7 +270,7 @@ function ProjectCodeRow({
   const isCodeDirty = codeValue.trim() !== code.code && codeValue.trim().length > 0;
 
   return (
-    <Box sx={{ px: 1.5, py: 1.25, borderRadius: 2, bgcolor: "rgba(20, 22, 33, 0.03)" }}>
+    <Box sx={(t) => ({ px: 1.5, py: 1.25, borderRadius: 2, bgcolor: alpha(t.palette.text.primary, 0.03) })}>
       <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
         <TextField
           label="Project code"

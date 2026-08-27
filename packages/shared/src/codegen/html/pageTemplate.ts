@@ -1,4 +1,4 @@
-import type { FormDefinition, LocaleInfo } from "../../form/formDefinition";
+import type { FormDefinition } from "../../form/formDefinition";
 import type { FileNames } from "../fileNames";
 import type { BuilderConfig, FormVariant } from "../types";
 import { escapeHtml } from "../js/escaping";
@@ -49,24 +49,20 @@ const termsLink = (form: FormDefinition, extraClass: string) =>
  * heading is present, and the submit-button container (inline `.form_bottom_group` vs.
  * OC's floating `.form_bottom_bar`).
  *
- * `targetLocale` is which of the form's own locales this particular page represents
- * for `<html lang>`/`dir` — defaults to the form's own default locale (today's only
- * behavior, for the single shared HTML/JS pair every form still gets). A multi-locale
- * form's *additional* per-locale HTML pages (see fileNames.ts's `localeVariants` and
- * generate.ts) pass their own locale here instead — the page markup itself doesn't
- * otherwise vary by locale (every piece of text is an empty node filled at runtime by
- * the shared data.js/behavior JS), so this is the only thing that needs to change.
+ * The page's `<html lang>`/`dir` are seeded from the form's own default locale, but
+ * that's only a static starting point: the generated behavior JS resolves `var language
+ * = frameUrlParam.get("lang") || param["fallbackLanguage"]` at runtime and re-sets
+ * `dir` itself from whichever locale that resolves to (see the reference script's own
+ * "HTML Direction (RTL/LTR)" block) — so this same one page correctly renders every
+ * locale the form has, switched via a `?lang=<localeCode>` URL param, not a separate
+ * HTML file per locale (see generate.ts's own doc comment for why there's no longer
+ * one). Every piece of visible text is likewise an empty node filled at runtime from
+ * the shared data.js/behavior JS, so the markup itself never varies by locale at all.
  */
-export function renderPage(
-  form: FormDefinition,
-  config: BuilderConfig,
-  variant: FormVariant,
-  fileNames: FileNames,
-  targetLocale?: LocaleInfo,
-): string {
+export function renderPage(form: FormDefinition, config: BuilderConfig, variant: FormVariant, fileNames: FileNames): string {
   const isOc = variant === "oc";
   const analyticsScript = config.analytics?.enabled ? ADOBE_LAUNCH_SCRIPT : "";
-  const localeInfo = targetLocale ?? form.locales.find((l) => l.code === form.meta.defaultLocale);
+  const localeInfo = form.locales.find((l) => l.code === form.meta.defaultLocale);
   const langSubtag = localeInfo?.langSubtag ?? "en";
   const dir = localeInfo?.isRtl ? "rtl" : "ltr";
 

@@ -219,7 +219,7 @@ export function UploadConfigurePanel({ file, subsidiaryId, projectCode, onCancel
           <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
             Every question defaults to required — turn any off to make it optional in the generated form.
           </Typography>
-          <Box sx={{ maxHeight: 280, overflowY: "auto", border: "1px solid rgba(20, 22, 33, 0.08)", borderRadius: 2 }}>
+          <Box sx={{ maxHeight: 280, overflowY: "auto", border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
             {form.questions.map((q, i) => (
               <Box key={q.id}>
                 {i > 0 && <Divider />}

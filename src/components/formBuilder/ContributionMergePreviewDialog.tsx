@@ -4,6 +4,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { applyContribution, generateSolution, resolveFileNames, type BuilderConfig, type FormDefinition, type FormVariant } from "@formbuilder/shared";
 import { buildPreviewDocument } from "../../codegen/previewDocument";
 import type { ContributionSummary } from "../../api/formBuilderApi";
+import { useThemeModeStore } from "../../store/themeModeStore";
 
 /**
  * Admin-facing preview of a single subsidiary contribution merged onto the
@@ -32,6 +33,7 @@ export function ContributionMergePreviewDialog({
   const [variant, setVariant] = useState<FormVariant>("ff");
   const [locale, setLocale] = useState<string>("");
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+  const previewColorScheme = useThemeModeStore((s) => s.mode);
 
   const availableVariants = baseConfig?.variants ?? ["ff"];
 
@@ -58,13 +60,13 @@ export function ContributionMergePreviewDialog({
     const previewConfig = { ...baseConfig, variants: [variant] };
     const files = generateSolution(definition, previewConfig);
     const fileNames = resolveFileNames(definition, previewConfig);
-    const doc = buildPreviewDocument(files, variant, locale, fileNames);
+    const doc = buildPreviewDocument(files, variant, locale, fileNames, previewColorScheme);
     const blob = new Blob([doc], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     setIframeUrl(url);
     return () => URL.revokeObjectURL(url);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, definition, baseConfig, variant, locale]);
+  }, [open, definition, baseConfig, variant, locale, previewColorScheme]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>

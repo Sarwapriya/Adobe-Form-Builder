@@ -37,8 +37,11 @@ function isConsentId(key: string): boolean {
  * (restricted to this subsidiary's admin-managed master locale list, no free
  * text) and AdHocActionBar instead of BuilderActionBar (Submit for Review, not
  * Publish — an admin publishes it via AdHocReviewPanel after picking a Project
- * Code, never asked here). CampaignHeaderPanel is reused as-is for the
- * heading/subheading/submit-button-label copy. SubsidiaryLocalePicker stays
+ * Code, never asked here). CampaignHeaderPanel is reused for the
+ * heading/subheading copy, with its own submit-button-label field hidden
+ * here (hideSubmitButtonLabel) since "Predefined fields" > "Submit Button"
+ * (ProfileFieldEditorPanel) already edits that same data — having both
+ * visible was two places to change one thing. SubsidiaryLocalePicker stays
  * enable/disable-only (which locales the form includes); LocaleEditingSwitcher,
  * shown once more than one locale is enabled, is the separate control for
  * which locale's text every field below (heading, questions, profile fields,
@@ -111,7 +114,7 @@ export function MyAdHocFormEditorPage() {
         <Box sx={{ flex: "1 1 auto", minWidth: 0, width: "100%" }}>
           <SubsidiaryLocalePicker subsidiaryName={subsidiaryId} />
           <LocaleEditingSwitcher />
-          <CampaignHeaderPanel />
+          <CampaignHeaderPanel hideSubmitButtonLabel />
           <PredefinedFieldToggles selectedField={selected} onSelectField={pendingReview ? () => {} : setSelected} />
           <BuilderCanvas
             selectedQuestionId={PROFILE_FIELD_KEYS.has(selected ?? "") || isConsentId(selected ?? "") ? null : selected}

@@ -25,8 +25,18 @@ import { PENDING_TRANSLATION_HELPER_TEXT, pendingTranslationFor } from "./pendin
  * the ad-hoc builder, which has no separate CampaignHeaderPanel of its own.
  * No fallback to another locale for display — see ProfileFieldEditorPanel's
  * own localeText for why (an untranslated field must show blank, not another
- * locale's text, or editing it looks like it copies that locale's text over). */
-export function CampaignHeaderPanel() {
+ * locale's text, or editing it looks like it copies that locale's text over).
+ *
+ * `hideSubmitButtonLabel` — the submit button's label is also editable from
+ * the "Predefined fields" > "Submit Button" entry (ProfileFieldEditorPanel's
+ * own submitButton branch), which edits the exact same
+ * `fields.submitButton.labelByLocale` data. Having both visible at once on
+ * the ad-hoc builder was confusing (two places to change the same thing) —
+ * MyAdHocFormEditorPage passes `true` to hide this panel's own copy there,
+ * leaving ProfileFieldEditorPanel as the one place to edit it for that flow.
+ * Admin's FormBuilderEditorPage keeps both (unchanged), since that's not
+ * what was reported as confusing. */
+export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSubmitButtonLabel?: boolean } = {}) {
   const definition = useFormBuilderStore((s) => s.definition);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
   const name = useFormBuilderStore((s) => s.name);
@@ -147,25 +157,27 @@ export function CampaignHeaderPanel() {
           }
         />
 
-        <TextField
-          label="Submit button label"
-          size="small"
-          fullWidth
-          value={submitLabel}
-          inputProps={{ dir }}
-          placeholder={pendingSubmitLabel}
-          sx={missingTranslationSx(missing(submitLabel))}
-          helperText={pendingSubmitLabel ? PENDING_TRANSLATION_HELPER_TEXT : missing(submitLabel) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
-          onChange={(e) =>
-            updateDefinition((d) => ({
-              ...d,
-              fields: {
-                ...d.fields,
-                submitButton: { ...d.fields.submitButton, labelByLocale: { ...d.fields.submitButton.labelByLocale, [activeLocale]: e.target.value } },
-              },
-            }))
-          }
-        />
+        {!hideSubmitButtonLabel && (
+          <TextField
+            label="Submit button label"
+            size="small"
+            fullWidth
+            value={submitLabel}
+            inputProps={{ dir }}
+            placeholder={pendingSubmitLabel}
+            sx={missingTranslationSx(missing(submitLabel))}
+            helperText={pendingSubmitLabel ? PENDING_TRANSLATION_HELPER_TEXT : missing(submitLabel) ? MISSING_TRANSLATION_HELPER_TEXT : undefined}
+            onChange={(e) =>
+              updateDefinition((d) => ({
+                ...d,
+                fields: {
+                  ...d.fields,
+                  submitButton: { ...d.fields.submitButton, labelByLocale: { ...d.fields.submitButton.labelByLocale, [activeLocale]: e.target.value } },
+                },
+              }))
+            }
+          />
+        )}
       </Stack>
     </Paper>
   );

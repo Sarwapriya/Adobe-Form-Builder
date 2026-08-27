@@ -16,9 +16,11 @@ export class Subsidiary {
   @Column({ type: "nvarchar", length: 100, unique: true })
   name!: string;
 
-  /** Whether this subsidiary may currently be selected for a new upload or a
-   * new user — see subsidiaryService.assertSubsidiaryActiveForUpload,
-   * checked on every POST /api/v1/uploads. Independent of, and layered
+  /** Whether this subsidiary may currently be selected for a new upload, a
+   * new Form Initiator form, or a new user — see
+   * subsidiaryService.assertSubsidiaryActive, checked on every
+   * POST /api/v1/uploads and on Form Initiator create/ad-hoc-approve.
+   * Independent of, and layered
    * "above", SubsidiaryProjectBlock.ts's per-project restriction: disabling
    * a subsidiary here blocks *every* project for it in one step, rather than
    * requiring a block row per project code. Toggled by an admin; disabling

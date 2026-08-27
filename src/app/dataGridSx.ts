@@ -8,12 +8,16 @@ import type { SxProps, Theme } from "@mui/material";
 export const ADMIN_GRID_ACTIONS_WIDTH = 150;
 
 /** Shared DataGrid header/hover styling — was previously duplicated
- * byte-for-byte between AdminDashboardPage and AdminHistoryPage. */
-export const adminDataGridSx: SxProps<Theme> = {
+ * byte-for-byte between AdminDashboardPage and AdminHistoryPage. A theme
+ * callback (not a plain object) since every color here needs to track
+ * `palette.mode` — DataGrid isn't covered by the MuiTableHead/MuiTableRow
+ * overrides in theme.ts, so this is the one table styling surface that has
+ * to read the theme explicitly rather than getting it for free. */
+export const adminDataGridSx: SxProps<Theme> = (theme) => ({
   border: "none",
   "& .MuiDataGrid-columnHeaders": {
-    bgcolor: "#f8f9fc",
-    borderBottom: "1px solid rgba(20, 22, 33, 0.08)",
+    bgcolor: alpha(theme.palette.text.primary, 0.04),
+    borderBottom: `1px solid ${theme.palette.divider}`,
   },
   "& .MuiDataGrid-columnHeaderTitle": {
     fontWeight: 700,
@@ -22,6 +26,6 @@ export const adminDataGridSx: SxProps<Theme> = {
     letterSpacing: 0.4,
     color: "text.secondary",
   },
-  "& .MuiDataGrid-cell": { borderColor: "rgba(20, 22, 33, 0.06)" },
-  "& .MuiDataGrid-row:hover": { bgcolor: alpha("#1428a0", 0.04) },
-};
+  "& .MuiDataGrid-cell": { borderColor: theme.palette.divider },
+  "& .MuiDataGrid-row:hover": { bgcolor: alpha(theme.palette.primary.main, 0.08) },
+});

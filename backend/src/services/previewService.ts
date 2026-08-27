@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
+import type { FileNames, GeneratedFile as SharedGeneratedFile } from "@formbuilder/shared";
 import { AppDataSource } from "../config/data-source";
 import { Upload } from "../entities/Upload";
 import { Form } from "../entities/Form";
 import { GeneratedFile as GeneratedFileEntity } from "../entities/GeneratedFile";
 import { absoluteFilePath } from "./fileService";
+import { classifyFileType } from "./generationService";
 
 export type PreviewVariant = "ff" | "oc";
 export type PreviewOutcome = "not_found" | "no_files" | "ok";
@@ -88,6 +90,32 @@ export async function buildUploadPreview(
   const inlined = inlineScript(inlineScript(inlineLink(html, cssFile, css), dataJsFile, dataJs), jsFile, behaviorJs);
 
   return { outcome: "ok", html: inlined };
+}
+
+/**
+ * Same self-contained-HTML inlining as buildUploadPreview/buildFormVersionPreview
+ * above, but sourced directly from an in-memory `generateSolution()` output rather
+ * than on-disk GeneratedFiles rows — for QA runs against content that has no
+ * GeneratedFiles rows to read yet (a pending subsidiary contribution merged onto a
+ * form's current draft, or an ad-hoc form's own draft while it awaits admin review;
+ * see qaRunService.createContributionQaRun/createAdHocReviewQaRun). Returns null if
+ * the requested variant's HTML wasn't in `files` (e.g. it wasn't in the config's own
+ * `variants` list), mirroring the two functions above's `no_files` outcome.
+ */
+export function inlineGeneratedFiles(files: SharedGeneratedFile[], fileNames: FileNames, variant: PreviewVariant): string | null {
+  const suffix = variant === "ff" ? "_FF" : "_OC";
+  const htmlFile = files.find((f) => classifyFileType(f.path, fileNames) === "html" && f.path.endsWith(`${suffix}.html`));
+  if (!htmlFile) return null;
+
+  const cssFile = files.find((f) => classifyFileType(f.path, fileNames) === "css");
+  const dataJsFile = files.find((f) => classifyFileType(f.path, fileNames) === "data-js");
+  const jsFile = files.find((f) => classifyFileType(f.path, fileNames) === "js" && f.path.endsWith(`${suffix}.js`));
+
+  let html = htmlFile.contents;
+  if (cssFile) html = html.replace(`<link rel="stylesheet" href="${cssFile.path}">`, `<style>${cssFile.contents}</style>`);
+  if (dataJsFile) html = html.replace(`<script src="${dataJsFile.path}"></script>`, `<script>${dataJsFile.contents}</script>`);
+  if (jsFile) html = html.replace(`<script src="${jsFile.path}"></script>`, `<script>${jsFile.contents}</script>`);
+  return html;
 }
 
 /**

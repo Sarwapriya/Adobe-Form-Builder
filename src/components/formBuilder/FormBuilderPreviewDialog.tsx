@@ -4,6 +4,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { generateSolution, resolveFileNames, type FormVariant } from "@formbuilder/shared";
 import { buildPreviewDocument } from "../../codegen/previewDocument";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { useThemeModeStore } from "../../store/themeModeStore";
 
 /**
  * Client-side preview, entirely in-memory against the current draft — reuses
@@ -15,6 +16,7 @@ import { useFormBuilderStore } from "../../store/formBuilderStore";
 export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const definition = useFormBuilderStore((s) => s.definition);
   const config = useFormBuilderStore((s) => s.config);
+  const previewColorScheme = useThemeModeStore((s) => s.mode);
   const [variant, setVariant] = useState<FormVariant>("ff");
   const [locale, setLocale] = useState<string>(definition?.meta.defaultLocale ?? "en_GB");
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
       const previewConfig = { ...config, variants: [variant] };
       const files = generateSolution(definition, previewConfig);
       const fileNames = resolveFileNames(definition, previewConfig);
-      const doc = buildPreviewDocument(files, variant, locale, fileNames);
+      const doc = buildPreviewDocument(files, variant, locale, fileNames, previewColorScheme);
       const blob = new Blob([doc], { type: "text/html" });
       const url = URL.createObjectURL(blob);
       setIframeUrl(url);
@@ -64,7 +66,7 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
       setGenError(err instanceof Error ? err.message : "Failed to build the preview.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, definition, config, variant, locale]);
+  }, [open, definition, config, variant, locale, previewColorScheme]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>
@@ -77,10 +79,10 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
           </TextField>
         )}
         {(definition?.locales.length ?? 0) > 1 && (
-          <TextField select size="small" label="Locale" value={locale} onChange={(e) => setLocale(e.target.value)} sx={{ minWidth: 140 }}>
+          <TextField select size="small" label="Locale" value={locale} onChange={(e) => setLocale(e.target.value)} sx={{ minWidth: 180 }}>
             {definition!.locales.map((l) => (
               <MenuItem key={l.code} value={l.code}>
-                {l.label}
+                {l.label} ({l.code})
               </MenuItem>
             ))}
           </TextField>

@@ -30,6 +30,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
@@ -113,18 +114,18 @@ function QuestionRow({ question, index, total, selected, formVariants, onSelect,
     <Box
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      sx={{
+      sx={(t) => ({
         display: "flex",
         alignItems: "center",
         gap: 1,
         px: 1.5,
         py: 1,
         borderRadius: 2,
-        bgcolor: selected ? "rgba(20, 40, 160, 0.06)" : isDragging ? "rgba(20, 40, 160, 0.03)" : "transparent",
+        bgcolor: selected ? alpha(t.palette.primary.main, 0.16) : isDragging ? alpha(t.palette.primary.main, 0.08) : "transparent",
         border: "1px solid",
-        borderColor: selected ? "primary.main" : "rgba(20, 22, 33, 0.08)",
+        borderColor: selected ? "primary.main" : "divider",
         cursor: "pointer",
-      }}
+      })}
       onClick={onSelect}
     >
       <IconButton size="small" {...attributes} {...listeners} aria-label="Drag to reorder" sx={{ cursor: "grab" }}>
@@ -133,7 +134,12 @@ function QuestionRow({ question, index, total, selected, formVariants, onSelect,
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography variant="body2" fontWeight={600} noWrap>
           {question.id}. {resolveLocalizedText(question.headingByLocale, defaultLocale, defaultLocale) || "(no heading)"}
-          {question.required && <span style={{ color: "#c00" }}> *</span>}
+          {question.required && (
+            <Box component="span" sx={{ color: "error.main" }}>
+              {" "}
+              *
+            </Box>
+          )}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           {CONTROL_TYPE_LABEL[question.controlType]}

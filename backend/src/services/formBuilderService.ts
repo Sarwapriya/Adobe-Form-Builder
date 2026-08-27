@@ -9,6 +9,7 @@ import {
   type FileNames,
   type FormDefinition,
   type GeneratedFile,
+  type QuestionDefinition,
   type ValidationResult,
 } from "@formbuilder/shared";
 import { AppDataSource } from "../config/data-source";
@@ -22,6 +23,9 @@ import { classifyFileType } from "./generationService";
 import { listSubsidiaryLocales } from "./subsidiaryLocaleService";
 import { buildZip, type ZipEntry } from "./zipService";
 import { sendAdHocReviewSubmittedNotification } from "./emailService";
+import { assertProjectCodeOpen } from "./projectCodeService";
+import { assertSubsidiaryActive } from "./subsidiaryService";
+import { assertNotBlocked } from "./subsidiaryProjectBlockService";
 
 /**
  * Builder-authored counterpart to generationService.generateFromWorkbook, minus the
@@ -168,6 +172,11 @@ export interface CreateFormInput {
    * the two router call sites) — a source that can't be found here just
    * falls back to a blank form rather than failing the whole creation. */
   copyFromFormId?: string;
+  /** Optional list of questions to seed the draft with — used when creating a
+   * form from AI-suggested questions (see aiAssistantService.ts's
+   * designFormWithQuestions). Merged into the definition's question list
+   * alongside any copied content. */
+  questions?: QuestionDefinition[];
 }
 
 /** Creates a new builder form: a draft FormVersion (blank, or cloned from an
@@ -177,7 +186,18 @@ export interface CreateFormInput {
  * enforces that) — a copied one might already be publish-ready, which is the
  * point. */
 export async function createForm(input: CreateFormInput): Promise<FormListItem> {
-  const { name, subsidiaryId, projectCode, userId, origin = "admin", copyFromFormId } = input;
+  const { name, subsidiaryId, projectCode, userId, origin = "admin", copyFromFormId, questions: seedQuestions } = input;
+
+  // Same governance gates uploadService.createUpload applies before accepting
+  // an Excel upload — see projectCodeService.assertProjectCodeOpen's own doc
+  // comment. An ad-hoc form has no projectCode yet at creation time (that's
+  // only chosen at admin approval, see approveAdHocForm below), so only the
+  // subsidiary-active check applies here for that origin.
+  await assertSubsidiaryActive(subsidiaryId);
+  if (projectCode) {
+    await assertProjectCodeOpen(projectCode);
+    await assertNotBlocked(subsidiaryId, projectCode);
+  }
 
   const copySource = copyFromFormId ? await getFormDetail(copyFromFormId) : null;
   const sourceContent = copySource?.draft ?? copySource?.published ?? null;
@@ -213,6 +233,13 @@ export async function createForm(input: CreateFormInput): Promise<FormListItem> 
   } else {
     definition = emptyFormDefinition(subsidiaryId);
   }
+
+  // Merge AI-suggested questions into the draft — prepended before any
+  // existing questions so the user sees them first when the editor opens.
+  if (seedQuestions && seedQuestions.length > 0) {
+    definition = { ...definition, questions: [...seedQuestions, ...definition.questions] };
+  }
+
   const config: BuilderConfig = enforceVariantsForOrigin(origin, sourceContent ? sourceContent.config : defaultConfig(origin));
 
   return AppDataSource.transaction(async (manager) => {
@@ -540,12 +567,25 @@ export interface ApproveAdHocResult {
  * path admin's own Publish button uses everywhere else. If the draft turns out to
  * be invalid, pendingReview is left cleared (not put back to pending) — the
  * subsidiary sees an ordinary editable draft again and can fix it and resubmit,
- * same recovery shape a reject gives them. */
+ * same recovery shape a reject gives them.
+ *
+ * Applies the same governance gates as uploadService.createUpload/createForm above
+ * against the *chosen* project code (and the form's own subsidiary, defensively —
+ * it could have been disabled since the ad-hoc form was created) before attaching
+ * it: this is the ad-hoc flow's equivalent "intake" moment, since an ad-hoc form has
+ * no project code until this point. Thrown as exceptions (not a typed outcome, unlike
+ * the checks above) so they propagate the same 404/409 responses the Excel-upload
+ * flow's identical checks already produce — the admin review UI's existing generic
+ * ApiError-message handling surfaces them with no further changes needed. */
 export async function approveAdHocForm(formId: string, projectCode: string, userId: string): Promise<ApproveAdHocResult> {
   const form = await AppDataSource.getRepository(Form).findOne({ where: { id: formId, isDeleted: false } });
   if (!form) return { outcome: "not_found" };
   if (form.origin !== "adhoc") return { outcome: "not_adhoc" };
   if (!form.pendingReview) return { outcome: "not_pending" };
+
+  await assertSubsidiaryActive(form.subsidiaryId);
+  await assertProjectCodeOpen(projectCode);
+  await assertNotBlocked(form.subsidiaryId, projectCode);
 
   await AppDataSource.getRepository(Form).update(formId, {
     projectCode,

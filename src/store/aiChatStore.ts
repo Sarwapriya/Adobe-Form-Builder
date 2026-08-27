@@ -13,6 +13,9 @@ import {
 import * as aiChatApi from "../api/aiChatApi";
 import { useFormBuilderStore } from "./formBuilderStore";
 import { renumberQuestions } from "../components/formBuilder/formBuilderHelpers";
+import { createFormWithQuestions, type QuestionSeed } from "../api/formBuilderApi";
+import { createAdHocFormWithQuestions } from "../api/subsidiaryFormsApi";
+import { useAuthStore } from "../auth/authStore";
 
 /** Mirrors AppLayout.tsx's sidebarCollapsed convention exactly: the
  * localStorage value records whether the panel is *collapsed* (a plain
@@ -39,6 +42,9 @@ interface AiChatState {
   conversationId: string | null;
   messages: AiChatMessage[];
   pendingActions: AIActionSummary[];
+  /** Questions confirmed via chat when no form is open — accumulated until the
+   * user clicks "Design Form" to create a new form seeded with them. */
+  stagedQuestions: QuestionSeed[];
   loading: boolean;
   error: string | null;
 
@@ -60,6 +66,15 @@ interface AiChatState {
    */
   confirmAction: (actionId: string) => Promise<AIConfirmActionResponse | null>;
   rejectAction: (actionId: string) => Promise<void>;
+  /** Creates a new form seeded with staged questions and returns the form id +
+   * route for navigation. Clears the staged list on success. */
+  designForm: (name: string) => Promise<{ formId: string; route: string } | null>;
+  /** Clears every per-user field (conversation/messages/pending actions/
+   * error) — called from authStore on logout and after a successful login,
+   * so a chat transcript can never survive a user switch in the same browser
+   * tab. Deliberately leaves `open` untouched, since that's a UI preference,
+   * not user-specific data. */
+  reset: () => void;
 }
 
 /** The one integration point between aiChatStore and formBuilderStore —
@@ -128,6 +143,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
   conversationId: null,
   messages: [],
   pendingActions: [],
+  stagedQuestions: [],
   loading: false,
   error: null,
 
@@ -141,7 +157,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
 
   setFormId(formId) {
     if (get().formId === formId) return;
-    set({ formId, conversationId: null, messages: [], pendingActions: [], error: null });
+    set({ formId, conversationId: null, messages: [], pendingActions: [], stagedQuestions: [], error: null });
   },
 
   async sendMessage(text) {
@@ -177,12 +193,54 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
 
   async confirmAction(actionId) {
     const action = get().pendingActions.find((a) => a.id === actionId);
+    const { formId, stagedQuestions } = get();
     set({ error: null });
     try {
+      // If this is a CREATE_CAMPAIGN and there are staged questions, create
+      // the form with those questions directly instead of an empty shell.
+      if (action?.actionType === "CREATE_CAMPAIGN" && stagedQuestions.length > 0) {
+        const auth = useAuthStore.getState().user;
+        const args = (action.data as { name?: string; subsidiaryId?: string; projectCode?: string }) ?? {};
+        const name = args.name || "Untitled Form";
+        const subsidiaryId = args.subsidiaryId || "SESAR";
+        const projectCode = args.projectCode;
+
+        let created: { id: string };
+        if (auth?.role === "admin" || auth?.role === "superadmin") {
+          created = await createFormWithQuestions(name, subsidiaryId, stagedQuestions, projectCode);
+        } else {
+          created = await createAdHocFormWithQuestions(name, stagedQuestions);
+        }
+
+        set((s) => ({
+          pendingActions: s.pendingActions.filter((a) => a.id !== actionId),
+          stagedQuestions: [],
+          formId: created.id,
+          conversationId: null,
+        }));
+        return { actionId, actionType: "CREATE_CAMPAIGN", executed: true, formId: created.id } as AIConfirmActionResponse;
+      }
+
       const response = await aiChatApi.confirmAction(actionId);
       set((s) => ({ pendingActions: s.pendingActions.filter((a) => a.id !== actionId) }));
       if (action && !isServerExecutedAiTool(action.actionType)) {
         applyClientAction(action.actionType, response.data);
+      }
+      // If no form is open and this was an ADD_QUESTION, stage it for later
+      // form creation — the user can click "Design Form" to create a new
+      // form seeded with all staged questions.
+      if (!formId && action?.actionType === "ADD_QUESTION") {
+        const { question } = response.data as AddQuestionArgs;
+        const seed: QuestionSeed = {
+          id: question.id,
+          order: question.order,
+          headingByLocale: question.headingByLocale,
+          subheadingByLocale: question.subheadingByLocale,
+          controlType: question.controlType,
+          required: question.required,
+          answers: question.answers?.map((a) => ({ id: a.id, order: a.order, textByLocale: a.textByLocale })),
+        };
+        set((s) => ({ stagedQuestions: [...s.stagedQuestions, seed] }));
       }
       return response;
     } catch (err) {
@@ -198,5 +256,47 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to reject action" });
     }
+  },
+
+  async designForm(name) {
+    const { stagedQuestions } = get();
+    if (stagedQuestions.length === 0) return null;
+
+    set({ error: null, loading: true });
+    try {
+      const auth = useAuthStore.getState().user;
+      const trimmedName = name.trim() || "Untitled Form";
+
+      let formId: string;
+      let route: string;
+      if (auth?.role === "admin" || auth?.role === "superadmin") {
+        const subsidiaryId = stagedQuestions[0]?.headingByLocale
+          ? Object.keys(stagedQuestions[0].headingByLocale)[0]
+          : "SESAR";
+        const form = await createFormWithQuestions(trimmedName, subsidiaryId, stagedQuestions);
+        formId = form.id;
+        route = `/admin/form-builder/${formId}`;
+      } else {
+        const form = await createAdHocFormWithQuestions(trimmedName, stagedQuestions);
+        formId = form.id;
+        route = `/my-forms/adhoc/${formId}`;
+      }
+
+      set({
+        stagedQuestions: [],
+        formId,
+        conversationId: null,
+        pendingActions: [],
+      });
+      set({ loading: false });
+      return { formId, route };
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to create form", loading: false });
+      return null;
+    }
+  },
+
+  reset() {
+    set({ formId: null, conversationId: null, messages: [], pendingActions: [], stagedQuestions: [], loading: false, error: null });
   },
 }));

@@ -1,17 +1,31 @@
 import path from "node:path";
 import fsp from "node:fs/promises";
+import {
+  applyContribution,
+  generateSolution,
+  resolveFileNames,
+  validateFormDefinition,
+  type BuilderConfig,
+  type ContributionContent,
+  type FormDefinition,
+  type ValidationResult,
+} from "@formbuilder/shared";
 import { AppDataSource } from "../config/data-source";
 import { QaRun, type QaRunVariant } from "../entities/QaRun";
 import { QaTestCaseResult } from "../entities/QaTestCaseResult";
 import { Upload } from "../entities/Upload";
-import { buildUploadPreview } from "./previewService";
+import { Form } from "../entities/Form";
+import { FormVersion } from "../entities/FormVersion";
+import { FormContribution } from "../entities/FormContribution";
+import { buildUploadPreview, inlineGeneratedFiles } from "./previewService";
 import { runQaSuite } from "./qa/qaTestRunner";
 import type { QaCheckResult } from "./qa/types";
-import { absoluteFilePath, uploadStorageDir } from "./fileService";
+import { absoluteFilePath, formQaStorageDir, uploadStorageDir } from "./fileService";
 
 export type CreateQaRunOutcome =
   | { outcome: "not_found" }
   | { outcome: "no_files" }
+  | { outcome: "invalid"; validation: ValidationResult }
   | { outcome: "ok"; qaRun: QaRun };
 
 /**
@@ -37,9 +51,101 @@ export async function createQaRun(uploadId: string, variant: QaRunVariant, trigg
   if (preview.outcome === "no_files") return { outcome: "no_files" };
 
   const repo = AppDataSource.getRepository(QaRun);
-  const qaRun = await repo.save(repo.create({ uploadId, variant, status: "pending", triggeredByUserId }));
+  const qaRun = await repo.save(repo.create({ uploadId, formId: null, contributionId: null, variant, status: "pending", triggeredByUserId }));
 
   void runQaJob(qaRun.id, preview.html!);
+
+  return { outcome: "ok", qaRun };
+}
+
+/** Validates+generates `definition`/`config` in memory (never touching disk/
+ * GeneratedFiles) and inlines it into one self-contained HTML document for
+ * `variant` — the shared core of createContributionQaRun/createAdHocReviewQaRun
+ * below, since both need the exact same "merge or take the draft as-is, then
+ * generate+inline, never persist" shape. */
+function buildPendingFormHtml(
+  definition: FormDefinition,
+  config: BuilderConfig,
+  variant: QaRunVariant,
+): { outcome: "invalid"; validation: ValidationResult } | { outcome: "no_files" } | { outcome: "ok"; html: string } {
+  if (!config.variants.includes(variant)) return { outcome: "no_files" };
+
+  const validation = validateFormDefinition(definition);
+  if (validation.errors.length > 0) return { outcome: "invalid", validation };
+
+  const files = generateSolution(definition, config);
+  const fileNames = resolveFileNames(definition, config);
+  const html = inlineGeneratedFiles(files, fileNames, variant);
+  if (!html) return { outcome: "no_files" };
+
+  return { outcome: "ok", html };
+}
+
+/**
+ * Kicks off a QA run for one *pending* subsidiary Translate & Extend
+ * contribution — before it's ever approved or published. Merges the
+ * contribution onto the form's *current draft* via `applyContribution` (the
+ * exact same merge target `formContributionService.approveContribution` and
+ * the admin's own "Preview" button (`ContributionMergePreviewDialog`) use),
+ * generates and inlines the result entirely in memory, and never writes a
+ * FormVersion/GeneratedFiles row for it — approving is still the only way
+ * this content actually joins the form's persisted draft.
+ */
+export async function createContributionQaRun(contributionId: string, variant: QaRunVariant, triggeredByUserId: string): Promise<CreateQaRunOutcome> {
+  const contribution = await AppDataSource.getRepository(FormContribution).findOne({ where: { id: contributionId } });
+  if (!contribution || contribution.status !== "pending") return { outcome: "not_found" };
+
+  const form = await AppDataSource.getRepository(Form).findOne({ where: { id: contribution.formId, isDeleted: false } });
+  if (!form || !form.currentDraftVersionId) return { outcome: "not_found" };
+
+  const draftVersion = await AppDataSource.getRepository(FormVersion).findOne({ where: { id: form.currentDraftVersionId } });
+  if (!draftVersion) return { outcome: "not_found" };
+
+  const draftDefinition = JSON.parse(draftVersion.definition) as FormDefinition;
+  const draftConfig = JSON.parse(draftVersion.config) as BuilderConfig;
+  const content = JSON.parse(contribution.content) as ContributionContent;
+  const merged = applyContribution(draftDefinition, content);
+
+  const built = buildPendingFormHtml(merged, draftConfig, variant);
+  if (built.outcome !== "ok") return built;
+
+  const repo = AppDataSource.getRepository(QaRun);
+  const qaRun = await repo.save(
+    repo.create({ uploadId: null, formId: form.id, contributionId, variant, status: "pending", triggeredByUserId }),
+  );
+
+  void runQaJob(qaRun.id, built.html);
+
+  return { outcome: "ok", qaRun };
+}
+
+/**
+ * Kicks off a QA run for an ad-hoc form's own draft while it's awaiting
+ * admin review (`Form.pendingReview`) — before Approve (which publishes it,
+ * see formBuilderService.approveAdHocForm). There's no separate contribution
+ * row for an ad-hoc submission; the draft itself *is* what was submitted, so
+ * this generates straight from it, same in-memory/never-persisted approach
+ * as createContributionQaRun above.
+ */
+export async function createAdHocReviewQaRun(formId: string, variant: QaRunVariant, triggeredByUserId: string): Promise<CreateQaRunOutcome> {
+  const form = await AppDataSource.getRepository(Form).findOne({ where: { id: formId, isDeleted: false } });
+  if (!form || form.origin !== "adhoc" || !form.pendingReview || !form.currentDraftVersionId) return { outcome: "not_found" };
+
+  const draftVersion = await AppDataSource.getRepository(FormVersion).findOne({ where: { id: form.currentDraftVersionId } });
+  if (!draftVersion) return { outcome: "not_found" };
+
+  const definition = JSON.parse(draftVersion.definition) as FormDefinition;
+  const config = JSON.parse(draftVersion.config) as BuilderConfig;
+
+  const built = buildPendingFormHtml(definition, config, variant);
+  if (built.outcome !== "ok") return built;
+
+  const repo = AppDataSource.getRepository(QaRun);
+  const qaRun = await repo.save(
+    repo.create({ uploadId: null, formId: form.id, contributionId: null, variant, status: "pending", triggeredByUserId }),
+  );
+
+  void runQaJob(qaRun.id, built.html);
 
   return { outcome: "ok", qaRun };
 }
@@ -86,8 +192,8 @@ async function runQaJob(qaRunId: string, html: string): Promise<void> {
     const failedTests = results.length - passedTests;
 
     const qaRun = await qaRunRepo.findOneOrFail({ where: { id: qaRunId } });
-    const upload = await AppDataSource.getRepository(Upload).findOneOrFail({ where: { id: qaRun.uploadId } });
-    const reportPath = await writeQaReport(upload.subsidiaryId, qaRun, results);
+    const { subsidiaryId, subjectLabel } = await resolveQaRunSubject(qaRun);
+    const reportPath = await writeQaReport(subsidiaryId, subjectLabel, qaRun, results);
 
     await qaRunRepo.update(qaRunId, {
       status: failedTests > 0 ? "failed" : "passed",
@@ -112,6 +218,29 @@ export function getQaRun(id: string): Promise<QaRun | null> {
 
 export function listQaRunsForUpload(uploadId: string): Promise<QaRun[]> {
   return AppDataSource.getRepository(QaRun).find({ where: { uploadId }, order: { createdAt: "DESC" } });
+}
+
+/** Every QA run ever triggered for one Configuration form, newest first —
+ * covers both contribution-based runs and ad-hoc pending-review runs alike,
+ * since both set `formId` (see createContributionQaRun/createAdHocReviewQaRun). */
+export function listQaRunsForForm(formId: string): Promise<QaRun[]> {
+  return AppDataSource.getRepository(QaRun).find({ where: { formId }, order: { createdAt: "DESC" } });
+}
+
+/** Resolves the subsidiaryId (for report storage) and a human-readable label
+ * (for the report's own header) for either subject kind a QaRun can have —
+ * looked up once per completed run rather than carried on the row itself,
+ * since a form's name can change after the run without needing to update it. */
+async function resolveQaRunSubject(qaRun: QaRun): Promise<{ subsidiaryId: string; subjectLabel: string }> {
+  if (qaRun.uploadId) {
+    const upload = await AppDataSource.getRepository(Upload).findOneOrFail({ where: { id: qaRun.uploadId } });
+    return { subsidiaryId: upload.subsidiaryId, subjectLabel: `Upload ${upload.fileName} (${upload.id})` };
+  }
+  const form = await AppDataSource.getRepository(Form).findOneOrFail({ where: { id: qaRun.formId! } });
+  const subjectLabel = qaRun.contributionId
+    ? `Form "${form.name}" · pending contribution ${qaRun.contributionId}`
+    : `Ad-hoc form "${form.name}" · awaiting review`;
+  return { subsidiaryId: form.subsidiaryId, subjectLabel };
 }
 
 export interface QaRunDetail {
@@ -145,10 +274,12 @@ const CATEGORY_LABELS: Record<string, string> = {
  * (no external assets) grouped by category, so an admin can open it directly
  * or send it to whoever owns fixing a failing field. Written to disk under
  * the same upload storage directory GeneratedFiles already use (see
- * fileService.uploadStorageDir), not the database — reports can run to a few
- * hundred rows and there's no reason to carry that in every QaRun query.
+ * fileService.uploadStorageDir) for an upload-based run, or the parallel
+ * per-form QA directory (fileService.formQaStorageDir) for a Configuration-form
+ * run — not the database, since reports can run to a few hundred rows and
+ * there's no reason to carry that in every QaRun query.
  */
-async function writeQaReport(subsidiaryId: string, qaRun: QaRun, results: QaCheckResult[]): Promise<string> {
+async function writeQaReport(subsidiaryId: string, subjectLabel: string, qaRun: QaRun, results: QaCheckResult[]): Promise<string> {
   const byCategory = new Map<string, QaCheckResult[]>();
   for (const r of results) {
     const list = byCategory.get(r.category) ?? [];
@@ -201,7 +332,7 @@ async function writeQaReport(subsidiaryId: string, qaRun: QaRun, results: QaChec
 </head>
 <body>
 <h1>QA report — ${escapeHtml(qaRun.variant.toUpperCase())} variant</h1>
-<p>Upload ${escapeHtml(qaRun.uploadId)} · Run ${escapeHtml(qaRun.id)} · ${new Date().toLocaleString()}</p>
+<p>${escapeHtml(subjectLabel)} · Run ${escapeHtml(qaRun.id)} · ${new Date().toLocaleString()}</p>
 <div class="summary">
   <div class="tile total">${results.length} total</div>
   <div class="tile passed">${passed} passed</div>
@@ -212,7 +343,10 @@ ${sections}
 </html>
 `;
 
-  const relativePath = path.join(uploadStorageDir(subsidiaryId, qaRun.uploadId), "qa", `${qaRun.id}.html`);
+  const relativePath = path.join(
+    qaRun.uploadId ? path.join(uploadStorageDir(subsidiaryId, qaRun.uploadId), "qa") : formQaStorageDir(subsidiaryId, qaRun.formId!),
+    `${qaRun.id}.html`,
+  );
   const absolutePath = absoluteFilePath(relativePath);
   await fsp.mkdir(path.dirname(absolutePath), { recursive: true });
   await fsp.writeFile(absolutePath, html, "utf-8");

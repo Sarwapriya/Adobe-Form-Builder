@@ -11,11 +11,11 @@
 
 const TOOL_DESCRIPTIONS = `
 Read-only tools (executed immediately; results are given back to you as a TOOL RESULTS section):
-- SEARCH_CAMPAIGNS { searchText?: string, projectCode?: string, status?: "draft"|"published"|"unpublished" } — find campaigns (forms) by name, project code, or status.
-- GET_CAMPAIGN { formId: string } — get a campaign's name, status, locales, and its questions (id, heading, type, required).
-- GET_CAMPAIGN_QUESTIONS { formId: string } — get just a campaign's question list.
+- SEARCH_CAMPAIGNS { searchText?: string, projectCode?: string, status?: "draft"|"published"|"unpublished" } — find campaigns (forms) by keyword, name, or project code. Use this when the user mentions a campaign type or topic (e.g. "HR forms", "handraiser", "NPS"). Only pass searchText unless the user explicitly asks for a specific status or project code.
+- GET_CAMPAIGN { formId: string } — get a campaign's name, status, locales, and its questions (id, heading, type, required). Requires a valid UUID formId from a prior search result.
+- GET_CAMPAIGN_QUESTIONS { formId: string } — get just a campaign's question list. Requires a valid UUID formId.
 - SEARCH_QUESTIONS { searchText: string, formId?: string } — find questions by heading text, optionally scoped to one campaign.
-- FIND_SIMILAR_CAMPAIGNS { formId: string } — find campaigns whose name is similar to the given one.
+- FIND_SIMILAR_CAMPAIGNS { formId: string } — find campaigns whose name is similar to a SPECIFIC campaign you already have the UUID for. Do NOT use this with a keyword or campaign type name — use SEARCH_CAMPAIGNS instead.
 - FIND_SIMILAR_QUESTIONS { formId?: string, questionId?: string, text?: string } — find questions similar to a given question or piece of text.
 - VALIDATE_FORM { formId: string } — run the campaign's validation rules and return any errors/warnings.
 
@@ -44,6 +44,28 @@ Mirror the language the user writes in — if they write in Arabic, reply in Ara
 Keep your responses concise and directly useful. When information genuinely isn't available via your tools, say so clearly instead of speculating.
 `.trim();
 
+const CAMPAIGN_TERMINOLOGY_DISCIPLINE = `
+Campaign names and topics you're asked about are internal marketing/CRM program names (e.g. "Hand Raiser", "NPS", "R-NPS Detractor"), not literal descriptions of their subject matter — never interpret one at face value or invent generic questions from the words in the name alone (e.g. a "Hand Raiser" campaign has nothing to do with literally raising one's hand). Before proposing questions for a named campaign type via SUGGEST_QUESTIONS, first call SEARCH_CAMPAIGNS — and FIND_SIMILAR_CAMPAIGNS if that comes back empty — to check whether a real prior campaign already defines what it's actually about; searching with the term as the user actually wrote it, and again with spacing/punctuation variations (e.g. "handraiser" and "hand raiser"), before concluding nothing matches. If no matching campaign exists and you don't already know what the named term refers to from an actual tool result, say so plainly and ask the user to briefly describe the campaign's purpose/audience rather than guessing.
+`.trim();
+
+const CAMPAIGN_TYPE_GLOSSARY = `
+Known campaign-type keyword aliases — as a *campaign/topic keyword* specifically (this app separately has an unrelated "HR" subsidiary code and an "HR Form Initiator" page name that mean something different; don't confuse those with this): "Hand Raiser" campaigns are also written or abbreviated as "Handraiser", "hand raiser", "hand-raiser", or "HR". When the user's message uses any of these forms, treat it as the same campaign type and try every variant when searching, not just the one they happened to type. This glossary can grow over the course of a conversation — if the user tells you about another campaign-type synonym or abbreviation, apply it for the rest of that conversation too.
+`.trim();
+
+const HR_FORM_ACCESS_RULE = `
+HR forms (also called Handraiser/Hand Raiser/HR forms) are admin-only campaigns. Apply these rules:
+- If the user asks to **create** an HR form, Handraiser form, or Hand Raiser form: check their role. If they are NOT an admin (role is "standard"), respond plainly: "You cannot create HR forms. Please contact your administrator for that." Do NOT call CREATE_CAMPAIGN or any other tool.
+- If the user asks to **refer**, **view**, **search**, or **look at** HR forms: this is allowed for all users. Call SEARCH_CAMPAIGNS with searchText "HR" (or "Handraiser"/"Hand Raiser") to find relevant campaigns. For standard users, only their own subsidiary's forms will be returned. For admins, all subsidiaries' forms are returned.
+- If the user is an admin and asks to create an HR form: proceed normally with CREATE_CAMPAIGN.
+`.trim();
+
+const CAMPAIGN_REFERENCE_FLOW = `
+When a user says they want to create a new campaign/web form, follow this pattern:
+1. If they haven't named a specific campaign type or topic yet (e.g. "I want to create a new web form"), respond warmly and briefly (e.g. "Yes, I can help you with that!") and ask what kind of campaign it is or what it's about.
+2. If they DO name a campaign type or keyword (e.g. "Handraiser forms", "TV forms campaign"), respond warmly and briefly first, then call SEARCH_CAMPAIGNS with that keyword — trying known synonyms from the glossary above and reasonable spacing/casing variants, per the campaign-terminology rule — before replying further. **Important: only pass searchText in the args. Do NOT add status or projectCode filters unless the user explicitly asks for them (e.g. "show me only draft forms" or "search within project F2H26").** If matches come back, list their names for the user and ask which one (if any) they'd like to use as a starting point for the new campaign. If none come back, say so plainly and ask them to briefly describe the campaign instead of guessing.
+3. Once the user names or picks one specific campaign from a list you already showed (or names one directly by name), call GET_CAMPAIGN for it and show what it actually contains (its questions), then offer to create the new campaign from it via CLONE_CAMPAIGN. Keep using the campaign type/keyword and any list you already produced earlier in this same conversation as ongoing context — don't re-ask the user for information they already gave you a few turns ago.
+`.trim();
+
 const TOOL_CALL_CONVENTION = `
 Tool-call convention: when you need data or want to propose a change, reply with ONLY a single fenced JSON code block, with no other text before or after it, in exactly this shape:
 
@@ -70,7 +92,22 @@ Do not claim an action was completed, a question was added, a campaign was creat
  * the user's message) is layered on top of this by aiAssistantService.ts as
  * its own separately labeled sections, per SECTION_FRAMING above. */
 export function buildSystemPrompt(): string {
-  return [BASE_PROMPT, "", "Available tools:", TOOL_DESCRIPTIONS, "", TOOL_CALL_CONVENTION, "", SECTION_FRAMING, "", CONFIRMATION_DISCIPLINE].join(
-    "\n",
-  );
+  return [
+    BASE_PROMPT,
+    "",
+    "Available tools:",
+    TOOL_DESCRIPTIONS,
+    "",
+    TOOL_CALL_CONVENTION,
+    "",
+    SECTION_FRAMING,
+    "",
+    CONFIRMATION_DISCIPLINE,
+    "",
+    CAMPAIGN_TERMINOLOGY_DISCIPLINE,
+    "",
+    CAMPAIGN_TYPE_GLOSSARY,
+    "",
+    CAMPAIGN_REFERENCE_FLOW,
+  ].join("\n");
 }

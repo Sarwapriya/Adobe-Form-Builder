@@ -41,4 +41,17 @@ describe("buildPreviewDocument", () => {
     const ffDoc = buildPreviewDocument(files, "ff", "en_GB", fileNames);
     expect(ffDoc).toContain('var I=""');
   });
+
+  it("only injects the dark-preview color-invert override when explicitly asked for", () => {
+    const form = sampleFormDefinition();
+    const config = { ...defaultBuilderConfig(), variants: ["ff"] as FormVariant[] };
+    const files = generateSolution(form, config);
+    const fileNames = resolveFileNames(form, config);
+
+    const lightDoc = buildPreviewDocument(files, "ff", "en_GB", fileNames);
+    expect(lightDoc).not.toContain("invert(1) hue-rotate(180deg)");
+
+    const darkDoc = buildPreviewDocument(files, "ff", "en_GB", fileNames, "dark");
+    expect(darkDoc).toContain("invert(1) hue-rotate(180deg)");
+  });
 });

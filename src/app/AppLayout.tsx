@@ -29,12 +29,17 @@ import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import TranslateIcon from "@mui/icons-material/Translate";
 import DomainIcon from "@mui/icons-material/Domain";
 import ListAltIcon from "@mui/icons-material/ListAlt";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { alpha } from "@mui/material/styles";
 import type { ReactNode } from "react";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
 import { useAiChatStore } from "../store/aiChatStore";
+import { useThemeModeStore } from "../store/themeModeStore";
 import { AIChatButton } from "../components/ai/AIChatButton";
 import { AIChatPanel } from "../components/ai/AIChatPanel";
+import { PALETTES } from "./theme";
 
 const EXPANDED_WIDTH = 260;
 const COLLAPSED_WIDTH = 76;
@@ -102,12 +107,55 @@ export function AppLayout() {
 
   const isAdmin = isAdminRole(user?.role);
   const panelLabel = isAdmin ? "Admin Panel" : "Subsidiary Panel";
-  /** Deep red/maroon for the admin panel vs. the original Samsung blue for the
-   * subsidiary panel — a strong, unmissable color cue so which side of the app
-   * you're in is obvious at a glance, not just from the nav item labels. */
-  const sidebarGradient = isAdmin
-    ? "linear-gradient(180deg, #7a1428 0%, #3d0a14 100%)"
-    : "linear-gradient(180deg, #1428a0 0%, #16227a 100%)";
+  /** Sidebar background matches the page's own light/dark mode for both
+   * roles (near-black in dark mode, near-white in light mode — see theme.ts
+   * and the toggle next to "Log out" below), with a soft role-colored glow
+   * bleeding in from the top — plus the solid accent rail on the drawer's
+   * own edge (below), the logo badge tint, the "Admin/Subsidiary Panel"
+   * label chip, and the active nav item's gradient pill — several
+   * persistent, low-effort cues rather than one single strong one, so which
+   * side of the app you're in is still obvious even without an active nav
+   * item to look at. */
+  const roleAccent = isAdmin ? PALETTES.admin : PALETTES.subsidiary;
+  const roleAccentGradient = `linear-gradient(135deg, ${roleAccent.main} 0%, ${roleAccent.secondary} 100%)`;
+
+  // Light/dark is a user toggle (the switch next to "Log out" below),
+  // independent of which role is signed in — every hardcoded white-on-dark
+  // value the sidebar used when the app was dark-only lives here instead, so
+  // toggling actually flips the sidebar too, not just the page content.
+  const mode = useThemeModeStore((s) => s.mode);
+  const toggleMode = useThemeModeStore((s) => s.toggleMode);
+  const isDarkMode = mode === "dark";
+  const sidebarGradient = isDarkMode
+    ? `radial-gradient(ellipse 480px 260px at 50% -10%, ${alpha(roleAccent.main, 0.35)} 0%, transparent 60%), linear-gradient(180deg, #0e0e15 0%, #08080c 100%)`
+    : `radial-gradient(ellipse 480px 260px at 50% -10%, ${alpha(roleAccent.main, 0.14)} 0%, transparent 60%), linear-gradient(180deg, #ffffff 0%, #f1f2f7 100%)`;
+  const sidebarTokens = isDarkMode
+    ? {
+        text: "rgba(255,255,255,0.85)",
+        textChild: "rgba(255,255,255,0.75)",
+        textMuted: "rgba(255,255,255,0.5)",
+        hoverBg: "rgba(255,255,255,0.08)",
+        divider: "rgba(255,255,255,0.12)",
+        chipBg: "rgba(255,255,255,0.10)",
+        avatarBg: "rgba(255,255,255,0.18)",
+        avatarBgStrong: "rgba(255,255,255,0.25)",
+        contrastText: "#fff",
+        logoBadgeBg: alpha(roleAccent.main, 0.25),
+        logoIcon: roleAccent.light,
+      }
+    : {
+        text: "rgba(20,22,33,0.78)",
+        textChild: "rgba(20,22,33,0.65)",
+        textMuted: "rgba(20,22,33,0.5)",
+        hoverBg: "rgba(20,22,33,0.06)",
+        divider: "rgba(20,22,33,0.12)",
+        chipBg: "rgba(20,22,33,0.06)",
+        avatarBg: alpha(roleAccent.main, 0.16),
+        avatarBgStrong: alpha(roleAccent.main, 0.22),
+        contrastText: "#14161f",
+        logoBadgeBg: alpha(roleAccent.main, 0.14),
+        logoIcon: roleAccent.dark,
+      };
 
   useEffect(() => {
     document.title = `Form Builder · ${panelLabel}`;
@@ -241,13 +289,13 @@ export function AppLayout() {
           mb: 0.5,
           minHeight: 44,
           justifyContent: collapsed ? "center" : "flex-start",
-          color: "rgba(255,255,255,0.85)",
+          color: sidebarTokens.text,
           "&.Mui-selected": {
-            bgcolor: "rgba(255,255,255,0.16)",
+            backgroundImage: roleAccentGradient,
             color: "#fff",
           },
-          "&.Mui-selected:hover": { bgcolor: "rgba(255,255,255,0.20)" },
-          "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+          "&.Mui-selected:hover": { backgroundImage: roleAccentGradient, filter: "brightness(1.1)" },
+          "&:hover": { bgcolor: sidebarTokens.hoverBg },
         }}
       >
         <ListItemIcon sx={{ minWidth: 0, mr: collapsed ? 0 : 1.5, justifyContent: "center", color: "inherit" }}>
@@ -285,10 +333,10 @@ export function AppLayout() {
                       mb: 0.5,
                       ml: 2,
                       minHeight: 36,
-                      color: "rgba(255,255,255,0.75)",
-                      "&.Mui-selected": { bgcolor: "rgba(255,255,255,0.16)", color: "#fff" },
-                      "&.Mui-selected:hover": { bgcolor: "rgba(255,255,255,0.20)" },
-                      "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+                      color: sidebarTokens.textChild,
+                      "&.Mui-selected": { backgroundImage: roleAccentGradient, color: "#fff" },
+                      "&.Mui-selected:hover": { backgroundImage: roleAccentGradient, filter: "brightness(1.1)" },
+                      "&:hover": { bgcolor: sidebarTokens.hoverBg },
                     }}
                   >
                     <ListItemText
@@ -319,8 +367,9 @@ export function AppLayout() {
             overflowX: "hidden",
             boxSizing: "border-box",
             border: "none",
+            borderRight: `3px solid ${roleAccent.main}`,
             backgroundImage: sidebarGradient,
-            color: "#fff",
+            color: sidebarTokens.contrastText,
             transition: (t) => t.transitions.create("width", { duration: t.transitions.duration.shortest }),
           },
         }}
@@ -336,7 +385,8 @@ export function AppLayout() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                bgcolor: "rgba(255,255,255,0.14)",
+                bgcolor: sidebarTokens.logoBadgeBg,
+                color: sidebarTokens.logoIcon,
               }}
             >
               <DescriptionIcon fontSize="small" />
@@ -358,7 +408,7 @@ export function AppLayout() {
                   letterSpacing: 0.4,
                   textTransform: "uppercase",
                   color: "#fff",
-                  bgcolor: isAdmin ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.16)",
+                  backgroundImage: roleAccentGradient,
                   "& .MuiChip-label": { px: 0.75 },
                 }}
               />
@@ -366,7 +416,7 @@ export function AppLayout() {
           )}
         </Box>
 
-        <Divider sx={{ borderColor: "rgba(255,255,255,0.12)" }} />
+        <Divider sx={{ borderColor: sidebarTokens.divider }} />
 
         <List sx={{ px: 1.25, py: 1.5, flexGrow: 1 }}>
           {sections.map((section, i) => {
@@ -384,13 +434,13 @@ export function AppLayout() {
                       py: 0.5,
                       cursor: "pointer",
                       borderRadius: 1,
-                      "&:hover": { bgcolor: "rgba(255,255,255,0.06)" },
+                      "&:hover": { bgcolor: sidebarTokens.hoverBg },
                     }}
                   >
                     <Typography
                       variant="caption"
                       sx={{
-                        color: "rgba(255,255,255,0.5)",
+                        color: sidebarTokens.textMuted,
                         fontWeight: 700,
                         letterSpacing: 0.6,
                         textTransform: "uppercase",
@@ -399,13 +449,13 @@ export function AppLayout() {
                       {section.label}
                     </Typography>
                     {sectionOpen ? (
-                      <ExpandLessIcon sx={{ fontSize: 16, color: "rgba(255,255,255,0.5)" }} />
+                      <ExpandLessIcon sx={{ fontSize: 16, color: sidebarTokens.textMuted }} />
                     ) : (
-                      <ExpandMoreIcon sx={{ fontSize: 16, color: "rgba(255,255,255,0.5)" }} />
+                      <ExpandMoreIcon sx={{ fontSize: 16, color: sidebarTokens.textMuted }} />
                     )}
                   </Box>
                 ) : (
-                  i > 0 && <Divider sx={{ borderColor: "rgba(255,255,255,0.12)", my: 1 }} />
+                  i > 0 && <Divider sx={{ borderColor: sidebarTokens.divider, my: 1 }} />
                 )}
                 {collapsed ? (
                   section.items.map((item) => renderNavItem(item))
@@ -419,19 +469,19 @@ export function AppLayout() {
           })}
         </List>
 
-        <Divider sx={{ borderColor: "rgba(255,255,255,0.12)" }} />
+        <Divider sx={{ borderColor: sidebarTokens.divider }} />
 
         <Box sx={{ p: 1.25 }}>
           {collapsed ? (
             <Tooltip title={`${user?.username} · ${user?.role}`} placement="right">
-              <Avatar sx={{ bgcolor: "rgba(255,255,255,0.18)", color: "#fff", mx: "auto", mb: 1 }}>
+              <Avatar sx={{ bgcolor: sidebarTokens.avatarBg, color: sidebarTokens.contrastText, mx: "auto", mb: 1 }}>
                 {user?.username?.[0]?.toUpperCase() ?? "?"}
               </Avatar>
             </Tooltip>
           ) : (
             <Chip
               avatar={
-                <Avatar sx={{ bgcolor: "rgba(255,255,255,0.25)", color: "#fff" }}>
+                <Avatar sx={{ bgcolor: sidebarTokens.avatarBgStrong, color: sidebarTokens.contrastText }}>
                   {user?.username?.[0]?.toUpperCase() ?? "?"}
                 </Avatar>
               }
@@ -439,13 +489,52 @@ export function AppLayout() {
               sx={{
                 width: "100%",
                 justifyContent: "flex-start",
-                color: "#fff",
-                bgcolor: "rgba(255,255,255,0.10)",
+                color: sidebarTokens.contrastText,
+                bgcolor: sidebarTokens.chipBg,
                 mb: 1,
                 "& .MuiChip-avatar": { ml: 0.5 },
                 "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" },
               }}
             />
+          )}
+
+          {/* Light/dark toggle — sits right next to Log out per request, and
+              applies globally (both admin and subsidiary panels use this same
+              layout), not just to this sidebar. */}
+          {collapsed ? (
+            <Tooltip title={isDarkMode ? "Switch to light theme" : "Switch to dark theme"} placement="right">
+              <ListItemButton
+                onClick={toggleMode}
+                sx={{
+                  borderRadius: 2,
+                  mb: 0.5,
+                  minHeight: 40,
+                  justifyContent: "center",
+                  color: sidebarTokens.text,
+                  "&:hover": { bgcolor: sidebarTokens.hoverBg },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 0, justifyContent: "center", color: "inherit" }}>
+                  {isDarkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+                </ListItemIcon>
+              </ListItemButton>
+            </Tooltip>
+          ) : (
+            <ListItemButton
+              onClick={toggleMode}
+              sx={{
+                borderRadius: 2,
+                mb: 0.5,
+                minHeight: 40,
+                color: sidebarTokens.text,
+                "&:hover": { bgcolor: sidebarTokens.hoverBg },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 0, mr: 1.5, justifyContent: "center", color: "inherit" }}>
+                {isDarkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+              </ListItemIcon>
+              <ListItemText primary={isDarkMode ? "Light mode" : "Dark mode"} />
+            </ListItemButton>
           )}
 
           <ListItemButton
@@ -454,8 +543,8 @@ export function AppLayout() {
               borderRadius: 2,
               minHeight: 40,
               justifyContent: collapsed ? "center" : "flex-start",
-              color: "rgba(255,255,255,0.85)",
-              "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+              color: sidebarTokens.text,
+              "&:hover": { bgcolor: sidebarTokens.hoverBg },
             }}
           >
             <ListItemIcon sx={{ minWidth: 0, mr: collapsed ? 0 : 1.5, justifyContent: "center", color: "inherit" }}>
@@ -471,8 +560,8 @@ export function AppLayout() {
               display: "flex",
               mx: "auto",
               mt: 1,
-              color: "rgba(255,255,255,0.7)",
-              "&:hover": { bgcolor: "rgba(255,255,255,0.08)", color: "#fff" },
+              color: sidebarTokens.textChild,
+              "&:hover": { bgcolor: sidebarTokens.hoverBg, color: sidebarTokens.contrastText },
             }}
             aria-label={collapsed ? "Expand menu" : "Collapse menu"}
           >

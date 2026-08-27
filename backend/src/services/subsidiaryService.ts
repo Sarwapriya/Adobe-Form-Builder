@@ -124,18 +124,20 @@ export async function deleteSubsidiary(id: string): Promise<boolean> {
 /**
  * Called from uploadService.createUpload before anything is written to disk,
  * alongside the project code's own open check and the per-project
- * SubsidiaryProjectBlock check: throws NotFoundError if no subsidiary
- * matches (an admin never created it, or it was mistyped client-side — the
- * dropdown should prevent this, but the server never trusts the client
- * alone) or SubsidiaryInactiveError if an admin has since disabled it. A
- * no-op (resolves) if it's active.
+ * SubsidiaryProjectBlock check, and from formBuilderService.createForm/
+ * approveAdHocForm before a Configuration form is created/approved for a
+ * subsidiary: throws NotFoundError if no subsidiary matches (an admin never
+ * created it, or it was mistyped client-side — the dropdown should prevent
+ * this, but the server never trusts the client alone) or
+ * SubsidiaryInactiveError if an admin has since disabled it. A no-op
+ * (resolves) if it's active.
  */
-export async function assertSubsidiaryActiveForUpload(name: string): Promise<void> {
+export async function assertSubsidiaryActive(name: string): Promise<void> {
   const subsidiary = await AppDataSource.getRepository(Subsidiary).findOne({ where: { name } });
   if (!subsidiary) {
     throw new NotFoundError(`Unknown subsidiary "${name}"`);
   }
   if (!subsidiary.isActive) {
-    throw new SubsidiaryInactiveError(`Subsidiary "${name}" is disabled for new uploads`);
+    throw new SubsidiaryInactiveError(`Subsidiary "${name}" is disabled`);
   }
 }

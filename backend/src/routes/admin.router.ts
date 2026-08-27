@@ -48,7 +48,15 @@ import {
   listAllSubsidiaryLocales,
   removeSubsidiaryLocale,
 } from "../services/subsidiaryLocaleService";
-import { buildQaReportDownload, createQaRun, getQaRunDetail, listQaRunsForUpload } from "../services/qaRunService";
+import {
+  buildQaReportDownload,
+  createAdHocReviewQaRun,
+  createContributionQaRun,
+  createQaRun,
+  getQaRunDetail,
+  listQaRunsForForm,
+  listQaRunsForUpload,
+} from "../services/qaRunService";
 import { sendTestEmail } from "../services/emailService";
 import { getSmtpSettingsForDisplay, saveSmtpSettings } from "../services/smtpSettingsService";
 import { getFabrixSettingsForDisplay, saveFabrixSettings } from "../services/fabrixSettingsService";
@@ -252,11 +260,13 @@ const updateProjectCodeSchema = z.object({
   cutoffDate: dateStringSchema.nullable().optional(),
 });
 
-// Closing a project code here blocks new uploads against it for everyone — see
-// uploadService.createUpload's call to assertProjectCodeOpenForUpload. Locking it
-// (isLocked) is a separate, more permanent freeze that only blocks non-admin
-// uploads/contributions — see ProjectCode.isLocked's own doc comment. Neither affects
-// uploads already made under that code. startDate/endDate are purely descriptive (see
+// Closing a project code here blocks new uploads and new Form Initiator forms
+// against it for everyone — see uploadService.createUpload's and
+// formBuilderService.createForm/approveAdHocForm's calls to
+// assertProjectCodeOpen. Locking it (isLocked) is a separate, more permanent
+// freeze that only blocks non-admin uploads/contributions — see
+// ProjectCode.isLocked's own doc comment. Neither affects uploads/forms
+// already made under that code. startDate/endDate are purely descriptive (see
 // ProjectCode entity) and every field here is applied independently — any of them
 // can be sent alone (e.g. the "click a chip to toggle" UI only ever sends isOpen or
 // isLocked; the date-range editor only ever sends the dates; the rename field only
@@ -325,10 +335,11 @@ const updateSubsidiarySchema = z.object({
 });
 
 // Disabling a subsidiary here is the reversible way to block *every* project
-// for it in one step — see uploadService.createUpload's call to
-// assertSubsidiaryActiveForUpload. Independent of, and layered above,
+// for it in one step — see uploadService.createUpload's and
+// formBuilderService.createForm/approveAdHocForm's calls to
+// assertSubsidiaryActive. Independent of, and layered above,
 // /subsidiary-project-blocks below (a single project-scoped restriction). It
-// does not affect uploads already made under that subsidiary. isActive and
+// does not affect uploads/forms already made under that subsidiary. isActive and
 // the notification emails are applied independently — either can be sent
 // alone (the "click a chip to toggle" UI only ever sends isActive; the
 // notification-email editor only ever sends those two fields) or together.
@@ -652,47 +663,71 @@ adminRouter.patch(
   })
 );
 
-const createQaRunSchema = z.object({
-  uploadId: z.string().trim().min(1),
-  variant: z.enum(["ff", "oc"]),
-});
+// Exactly one of uploadId/contributionId/formId identifies the QA subject —
+// uploadId for a submitted Excel upload (existing flow), contributionId for a
+// pending Translate & Extend contribution (merged onto its form's draft
+// in-memory, never persisted — see qaRunService.createContributionQaRun), or
+// formId alone for an ad-hoc form's own draft while it awaits admin review
+// (qaRunService.createAdHocReviewQaRun).
+const createQaRunSchema = z
+  .object({
+    uploadId: z.string().trim().min(1).optional(),
+    contributionId: z.string().trim().min(1).optional(),
+    formId: z.string().trim().min(1).optional(),
+    variant: z.enum(["ff", "oc"]),
+  })
+  .refine((v) => [v.uploadId, v.contributionId, v.formId].filter((x) => x !== undefined).length === 1, {
+    message: "Exactly one of uploadId, contributionId, or formId is required",
+  });
 
-// Kicks off a Playwright QA run for one upload's generated variant — see
-// qaRunService.createQaRun. Returns immediately with a "pending" run; the
-// actual browser automation happens in the background (no job queue, just a
-// fire-and-forget async call in this same process — see runQaJob's own doc
-// comment for why that's an acceptable tradeoff here). The frontend polls
-// GET /qa-runs/:id until status leaves "pending"/"running".
+// Kicks off a Playwright QA run for one generated variant of an upload, a
+// pending contribution, or an ad-hoc form awaiting review — see
+// qaRunService.createQaRun/createContributionQaRun/createAdHocReviewQaRun.
+// Returns immediately with a "pending" run; the actual browser automation
+// happens in the background (no job queue, just a fire-and-forget async call
+// in this same process — see runQaJob's own doc comment for why that's an
+// acceptable tradeoff here). The frontend polls GET /qa-runs/:id until status
+// leaves "pending"/"running".
 adminRouter.post(
   "/qa-runs",
   validateBody(createQaRunSchema),
   asyncHandler(async (req, res) => {
-    const { uploadId, variant } = req.body as z.infer<typeof createQaRunSchema>;
-    const result = await createQaRun(uploadId, variant, req.auth!.sub);
+    const { uploadId, contributionId, formId, variant } = req.body as z.infer<typeof createQaRunSchema>;
+    const result = uploadId
+      ? await createQaRun(uploadId, variant, req.auth!.sub)
+      : contributionId
+        ? await createContributionQaRun(contributionId, variant, req.auth!.sub)
+        : await createAdHocReviewQaRun(formId!, variant, req.auth!.sub);
 
     if (result.outcome === "not_found") {
-      res.status(404).json({ error: "upload not found" });
+      res.status(404).json({ error: "upload, form, or pending contribution not found" });
       return;
     }
     if (result.outcome === "no_files") {
-      res.status(409).json({ error: "this upload has no generated files for that variant yet" });
+      res.status(409).json({ error: "no generated output for that variant yet" });
+      return;
+    }
+    if (result.outcome === "invalid") {
+      res.status(422).json({ error: "this form has blocking validation errors — fix them before running QA", validation: result.validation });
       return;
     }
     res.status(201).json(result.qaRun);
   })
 );
 
-// Every QA run ever triggered for one upload, newest first — the admin
-// dashboard's QA panel history for that upload.
+// Every QA run ever triggered for one upload (?uploadId=) or one
+// Configuration form (?formId= — covers both contribution-based and ad-hoc
+// pending-review runs, since both set QaRun.formId), newest first.
 adminRouter.get(
   "/qa-runs",
   asyncHandler(async (req, res) => {
     const uploadId = typeof req.query.uploadId === "string" ? req.query.uploadId : undefined;
-    if (!uploadId) {
-      res.status(400).json({ error: "uploadId query param is required" });
+    const formId = typeof req.query.formId === "string" ? req.query.formId : undefined;
+    if (!uploadId && !formId) {
+      res.status(400).json({ error: "uploadId or formId query param is required" });
       return;
     }
-    const runs = await listQaRunsForUpload(uploadId);
+    const runs = uploadId ? await listQaRunsForUpload(uploadId) : await listQaRunsForForm(formId!);
     res.json(runs);
   })
 );

@@ -16,6 +16,8 @@ import type {
 } from "@formbuilder/shared";
 import type { UserRole } from "../entities/User";
 import { isAdminRole } from "../entities/User";
+import { AppDataSource } from "../config/data-source";
+import { Form } from "../entities/Form";
 import { findOwnedAdHocForm, getFormDetail, listForms, listMyAdHocForms, type FormDetail, type FormListItem } from "./formBuilderService";
 import { getAccessibleFormDetail, listAccessibleForms } from "./formAccessService";
 
@@ -118,12 +120,39 @@ async function listCallerForms(
   }
 
   if (!ctx.subsidiaryId) return [];
-  const [accessible, myAdHoc] = await Promise.all([
+  const [accessible, myAdHoc, drafts] = await Promise.all([
     listAccessibleForms(ctx.subsidiaryId, ctx.userId),
     listMyAdHocForms(ctx.subsidiaryId),
+    // Include draft forms so the AI can reference previously designed
+    // campaigns that haven't been published yet.
+    AppDataSource.getRepository(Form).find({
+      where: { subsidiaryId: ctx.subsidiaryId, status: "draft", isDeleted: false },
+      order: { updatedAt: "DESC" },
+    }),
   ]);
   const byId = new Map(accessible.map((f) => [f.id, f]));
   for (const f of myAdHoc) if (!byId.has(f.id)) byId.set(f.id, f);
+  for (const f of drafts) {
+    if (!byId.has(f.id)) {
+      const li: FormListItem = {
+        id: f.id,
+        name: f.name,
+        subsidiaryId: f.subsidiaryId,
+        projectCode: f.projectCode,
+        status: f.status,
+        createdByUserId: f.createdByUserId,
+        createdAt: f.createdAt,
+        updatedAt: f.updatedAt,
+        publishedVersionNumber: null,
+        origin: f.origin,
+        pendingReview: f.pendingReview,
+        submittedForReviewAt: f.submittedForReviewAt,
+        reviewedAt: f.reviewedAt,
+        reviewNote: f.reviewNote,
+      };
+      byId.set(f.id, li);
+    }
+  }
   let forms = [...byId.values()];
 
   if (filters.status) forms = forms.filter((f) => f.status === filters.status);
@@ -185,8 +214,42 @@ function toCompactCampaign(formId: string, name: string, status: string, detail:
   };
 }
 
+/** Alphanumeric-only, lowercased — collapses whitespace/punctuation entirely
+ * so "Hand Raiser" and "handraiser" compare equal. A looser cousin of
+ * tokenize() below: this collapses word boundaries entirely (for "same
+ * words, different spacing/case" mismatches), while tokenize() keeps them
+ * (for genuinely different phrasings scored by shared-word overlap) — see
+ * searchCampaigns's own doc comment for why both are needed as fallbacks. */
+function normalizeForMatch(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 export async function searchCampaigns(ctx: AiToolCallerContext, args: SearchCampaignsArgs): Promise<CampaignSearchResult[]> {
-  const forms = await listCallerForms(ctx, { search: args.searchText, projectCode: args.projectCode, status: args.status });
+  let forms = await listCallerForms(ctx, { search: args.searchText, projectCode: args.projectCode, status: args.status });
+
+  // The model doesn't reliably echo the user's own exact wording into
+  // searchText (e.g. it may search "handraiser" when the user typed "hand
+  // raiser", or vice versa) — a plain substring search would then report a
+  // real campaign as "not found" purely over spacing/punctuation. Before
+  // giving up, retry against the same projectCode/status-scoped candidate
+  // set with two progressively looser passes: whitespace/punctuation/case-
+  // collapsed substring match, then (if still nothing) shared-word token
+  // overlap — the same scoring findSimilarCampaigns already uses below.
+  if (forms.length === 0 && args.searchText) {
+    const candidates = await listCallerForms(ctx, { projectCode: args.projectCode, status: args.status });
+    const needle = normalizeForMatch(args.searchText);
+    forms = candidates.filter((f) => normalizeForMatch(f.name).includes(needle));
+
+    if (forms.length === 0) {
+      const needleTokens = tokenize(args.searchText);
+      forms = candidates
+        .map((f) => ({ form: f, score: overlapScore(needleTokens, tokenize(f.name)) }))
+        .filter((s) => s.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map((s) => s.form);
+    }
+  }
+
   return forms.slice(0, RESULT_LIMIT).map((f) => ({
     formId: f.id,
     name: f.name,

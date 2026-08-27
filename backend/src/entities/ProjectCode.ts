@@ -17,10 +17,11 @@ export class ProjectCode {
   @Column({ type: "nvarchar", length: 100, unique: true })
   code!: string;
 
-  /** Whether new uploads may currently select this code — see
-   * projectCodeService.assertProjectCodeOpenForUpload, checked on every
-   * POST /api/v1/uploads. Toggled by an admin; never deleted, so historical
-   * uploads that used a since-closed code keep their record intact. */
+  /** Whether new uploads or Form Initiator forms may currently select this
+   * code — see projectCodeService.assertProjectCodeOpen, checked on every
+   * POST /api/v1/uploads and on Form Initiator create/ad-hoc-approve.
+   * Toggled by an admin; never deleted, so historical uploads/forms that
+   * used a since-closed code keep their record intact. */
   @Column({ type: "bit", default: true })
   isOpen!: boolean;
 

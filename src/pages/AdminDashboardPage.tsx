@@ -314,7 +314,7 @@ export function AdminDashboardPage() {
 
       {qaDialogRow && (
         <QaRunDialog
-          uploadId={qaDialogRow.id}
+          subject={{ kind: "upload", uploadId: qaDialogRow.id }}
           availableVariants={qaDialogRow.variants}
           open={!!qaDialogRow}
           onClose={() => setQaDialogRow(null)}

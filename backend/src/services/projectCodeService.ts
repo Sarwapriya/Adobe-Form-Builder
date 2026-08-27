@@ -193,24 +193,26 @@ export async function setProjectCodeDateRange(id: string, dateRange: ProjectCode
 }
 
 /**
- * Called from uploadService.createUpload before anything is written to disk:
- * throws NotFoundError if no project code matches (an admin never created it,
- * or it was mistyped client-side — the dropdown should prevent this, but the
- * server never trusts the client alone) or ProjectCodeClosedError if an admin
- * has since closed it. A no-op (resolves) if it's open.
+ * Called from uploadService.createUpload before anything is written to disk,
+ * and from formBuilderService.createForm/approveAdHocForm before a
+ * Configuration form is created/approved against a project code: throws
+ * NotFoundError if no project code matches (an admin never created it, or it
+ * was mistyped client-side — the dropdown should prevent this, but the
+ * server never trusts the client alone) or ProjectCodeClosedError if an
+ * admin has since closed it. A no-op (resolves) if it's open.
  */
-export async function assertProjectCodeOpenForUpload(code: string): Promise<void> {
+export async function assertProjectCodeOpen(code: string): Promise<void> {
   const projectCode = await AppDataSource.getRepository(ProjectCode).findOne({ where: { code } });
   if (!projectCode) {
     throw new NotFoundError(`Unknown project code "${code}"`);
   }
   if (!projectCode.isOpen) {
-    throw new ProjectCodeClosedError(`Project code "${code}" is closed for new uploads`);
+    throw new ProjectCodeClosedError(`Project code "${code}" is closed`);
   }
 }
 
 /**
- * Called from uploadService.createUpload alongside assertProjectCodeOpenForUpload,
+ * Called from uploadService.createUpload alongside assertProjectCodeOpen,
  * but only for non-admin uploaders — see ProjectCode.isLocked's own doc comment for why
  * this is a separate, more permanent freeze from isOpen/closed. Throws NotFoundError if
  * no project code matches, or ProjectCodeLockedError if an admin has locked it. A no-op

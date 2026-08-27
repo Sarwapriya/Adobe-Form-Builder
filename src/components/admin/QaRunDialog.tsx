@@ -32,6 +32,7 @@ import {
   getQaRunDetail,
   listQaRuns,
   type QaRun,
+  type QaRunSubject,
   type QaRunVariant,
   type QaTestCaseResult,
 } from "../../api/qaApi";
@@ -51,27 +52,43 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const POLL_INTERVAL_MS = 2000;
 
+/** A stable string key for a QaRunSubject — for effect dependency arrays,
+ * since the subject object itself is a fresh reference on every render. */
+function subjectKey(subject: QaRunSubject): string {
+  return subject.kind === "upload" ? subject.uploadId : subject.kind === "contribution" ? subject.contributionId : subject.formId;
+}
+
+const SUBJECT_NOUN: Record<QaRunSubject["kind"], string> = {
+  upload: "upload",
+  contribution: "submission",
+  adhoc: "form",
+};
+
 /**
- * Admin-only "run QA automation" dialog for one upload: pick a generated
- * variant (Full Form / One-Click), trigger a real Playwright run (see
- * backend qaRunService.ts — a headless-Chromium session against the exact
- * same self-contained HTML/CSS/JS the "Preview" button renders), watch it
- * move from pending -> running -> passed/failed/error, then inspect every
- * individual test case (which fields need fixing, and why) or download the
- * whole thing as a standalone HTML report.
+ * Admin-only "run QA automation" dialog for one subject — an upload's
+ * submitted output, a pending Translate & Extend contribution, or an ad-hoc
+ * form awaiting review: pick a generated variant (Full Form / One-Click),
+ * trigger a real Playwright run (see backend qaRunService.ts — a
+ * headless-Chromium session against the exact same self-contained
+ * HTML/CSS/JS the "Preview" button renders — an upload's already-generated
+ * output for an "upload" subject, or an in-memory merge/generate for a
+ * "contribution"/"adhoc" subject that hasn't been approved/published yet),
+ * watch it move from pending -> running -> passed/failed/error, then inspect
+ * every individual test case (which fields need fixing, and why) or
+ * download the whole thing as a standalone HTML report.
  *
  * `availableVariants` restricts the picker to whichever variant(s) this
- * upload actually generated (see Upload.variants) — an upload requested as
- * Full-Form-only never produced a One-Click HTML file, so offering it here
- * would just lead to a 409 from createQaRun's own strict check.
+ * subject actually offers (Upload.variants for an upload, the form's own
+ * BuilderConfig.variants otherwise) — offering one that isn't available
+ * would just lead to a 409 from the backend's own check.
  */
 export function QaRunDialog({
-  uploadId,
+  subject,
   availableVariants,
   open,
   onClose,
 }: {
-  uploadId: string;
+  subject: QaRunSubject;
   availableVariants: QaRunVariant[];
   open: boolean;
   onClose: () => void;
@@ -91,7 +108,7 @@ export function QaRunDialog({
   async function refreshRuns() {
     setLoadingRuns(true);
     try {
-      const rows = await listQaRuns(uploadId);
+      const rows = await listQaRuns(subject);
       setRuns(rows);
       if (rows.length > 0 && !selectedRunId) setSelectedRunId(rows[0].id);
     } catch (err) {
@@ -108,7 +125,7 @@ export function QaRunDialog({
     setVariant(availableVariants[0] ?? "ff");
     void refreshRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, uploadId]);
+  }, [open, subjectKey(subject)]);
 
   // Polls the selected run while it's still pending/running, and always
   // refreshes its detail (results table) whenever the selection changes.
@@ -153,7 +170,7 @@ export function QaRunDialog({
     setStarting(true);
     setError(null);
     try {
-      const created = await createQaRun(uploadId, variant);
+      const created = await createQaRun(subject, variant);
       setRuns((prev) => [created, ...prev]);
       setSelectedRunId(created.id);
     } catch (err) {
@@ -225,7 +242,7 @@ export function QaRunDialog({
           <CircularProgress size={20} />
         ) : runs.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            No QA runs yet for this upload — pick a variant above and click "Run QA".
+            No QA runs yet for this {SUBJECT_NOUN[subject.kind]} — pick a variant above and click "Run QA".
           </Typography>
         ) : (
           <>

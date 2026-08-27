@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { apiClient, setAccessToken, ApiError } from "../api/apiClient";
+import { useAiChatStore } from "../store/aiChatStore";
 
 export type UserRole = "admin" | "standard" | "superadmin";
 
@@ -83,9 +84,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ status: "loading", error: null });
     try {
       const response = await apiClient.post<LoginResponse>("/api/v1/auth/login", { username, password });
-      console.log(response);
       setAccessToken(response.accessToken);
       set({ user: response.user, status: "authenticated", error: null });
+      // Defensive: clears any chat transcript left over from a previous
+      // user's session in this same browser tab (the primary fix is
+      // logout()'s own reset below, but this covers any path that reaches
+      // here without going through logout first).
+      useAiChatStore.getState().reset();
     } catch (err) {
       setAccessToken(null);
       const message = err instanceof ApiError ? err.message : "Login failed";
@@ -103,6 +108,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     } finally {
       setAccessToken(null);
       set({ user: null, status: "unauthenticated", error: null });
+      // Clears the AI chat panel's in-memory transcript/conversationId/
+      // pending actions — without this, the next person to log in on this
+      // same browser tab would inherit this user's chat history (the panel
+      // is mounted globally, per-tab, not per-session; see AppLayout.tsx).
+      useAiChatStore.getState().reset();
     }
   },
 

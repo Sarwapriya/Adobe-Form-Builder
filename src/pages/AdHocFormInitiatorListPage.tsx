@@ -98,8 +98,27 @@ export function AdHocFormInitiatorListPage() {
   useEffect(() => {
     if (!createOpen) return;
     listSubsidiaries().then(setSubsidiaries).catch(() => undefined);
-    listOpenProjectCodes().then(setProjectCodes).catch(() => undefined);
   }, [createOpen]);
+
+  // Project codes are scoped to whichever subsidiary is currently selected —
+  // see HrFormInitiatorListPage's identical effect for the full reasoning.
+  useEffect(() => {
+    if (!createOpen || !newSubsidiaryId) {
+      setProjectCodes([]);
+      return;
+    }
+    let cancelled = false;
+    listOpenProjectCodes(newSubsidiaryId)
+      .then((codes) => {
+        if (cancelled) return;
+        setProjectCodes(codes);
+        setNewProjectCode((current) => (codes.some((c) => c.code === current) ? current : ""));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, newSubsidiaryId]);
 
   function closeCreateDialog() {
     setCreateOpen(false);
@@ -282,6 +301,14 @@ export function AdHocFormInitiatorListPage() {
                 value={newProjectCode}
                 onChange={(e) => setNewProjectCode(e.target.value)}
                 InputLabelProps={{ shrink: true }}
+                disabled={!newSubsidiaryId}
+                helperText={
+                  !newSubsidiaryId
+                    ? "Choose a subsidiary first"
+                    : projectCodes.length === 0
+                      ? "No project codes open for this subsidiary"
+                      : undefined
+                }
               >
                 <MenuItem value="">None</MenuItem>
                 {projectCodes.map((pc) => (

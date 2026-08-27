@@ -10,8 +10,8 @@ import { absoluteFilePath, hasExcelFileSignature, saveGeneratedFiles, saveSource
 import { classifyFileType, generateFromWorkbook, type GenerationResult } from "./generationService";
 import { sendUploadNotification } from "./emailService";
 import { getAdminSetting } from "./adminSettingsService";
-import { assertProjectCodeOpenForUpload, assertProjectCodeUnlockedForUpload } from "./projectCodeService";
-import { assertSubsidiaryActiveForUpload } from "./subsidiaryService";
+import { assertProjectCodeOpen, assertProjectCodeUnlockedForUpload } from "./projectCodeService";
+import { assertSubsidiaryActive } from "./subsidiaryService";
 import { assertNotBlocked } from "./subsidiaryProjectBlockService";
 
 export interface UploadListItem {
@@ -254,8 +254,8 @@ export async function createUpload(input: CreateUploadInput): Promise<CreateUplo
   // disabled outright, or this specific pair is blocked (see
   // subsidiaryService.ts / subsidiaryProjectBlockService.ts). Independent
   // gates — any one blocks the upload, regardless of the others.
-  await assertProjectCodeOpenForUpload(projectCode);
-  await assertSubsidiaryActiveForUpload(subsidiaryId);
+  await assertProjectCodeOpen(projectCode);
+  await assertSubsidiaryActive(subsidiaryId);
   await assertNotBlocked(subsidiaryId, projectCode);
   // Locking is a separate, more permanent freeze admins stay exempt from — see
   // ProjectCode.isLocked's own doc comment.

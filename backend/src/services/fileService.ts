@@ -139,6 +139,15 @@ export function formVersionGeneratedDir(subsidiaryId: string, formVersionId: str
   return path.join(sanitizeSubsidiaryId(subsidiaryId), "forms", formVersionId, "generated");
 }
 
+/** Directory (relative to UPLOAD_DIR) holding a Configuration form's own QA reports
+ * — keyed by the parent Form's own id (not a FormVersion's), since a QA run against a
+ * pending contribution or an ad-hoc draft never produces a FormVersion/GeneratedFiles
+ * row to key off of in the first place — see qaRunService.createContributionQaRun/
+ * createAdHocReviewQaRun. */
+export function formQaStorageDir(subsidiaryId: string, formId: string): string {
+  return path.join(sanitizeSubsidiaryId(subsidiaryId), "forms", formId, "qa");
+}
+
 /** Writes every generated solution file to one FormVersion's generated/ directory —
  * the builder-authored counterpart to saveGeneratedFiles above. Kept as its own
  * function (not a shared helper parameterized by directory) since the two callers'

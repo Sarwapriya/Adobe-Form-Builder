@@ -30,10 +30,10 @@ export class ValidationError extends Error {
   }
 }
 
-/** Thrown when an upload is attempted against a project code an admin has
- * closed — see projectCodeService.assertProjectCodeOpenForUpload. */
+/** Thrown when an upload or a Form Initiator form is attempted against a
+ * project code an admin has closed — see projectCodeService.assertProjectCodeOpen. */
 export class ProjectCodeClosedError extends Error {
-  constructor(message = "This project code is closed for new uploads") {
+  constructor(message = "This project code is closed") {
     super(message);
     this.name = "ProjectCodeClosedError";
   }
@@ -52,23 +52,24 @@ export class ProjectCodeLockedError extends Error {
   }
 }
 
-/** Thrown when an upload is attempted for a subsidiary an admin has disabled
- * outright — see subsidiaryService.assertSubsidiaryActiveForUpload. Blocks
- * every project code for that subsidiary in one step, independent of (and
- * layered above) SubsidiaryProjectBlockedError below, which scopes a block
- * to a single project code. */
+/** Thrown when an upload or a Form Initiator form is attempted for a
+ * subsidiary an admin has disabled outright — see
+ * subsidiaryService.assertSubsidiaryActive. Blocks every project code for
+ * that subsidiary in one step, independent of (and layered above)
+ * SubsidiaryProjectBlockedError below, which scopes a block to a single
+ * project code. */
 export class SubsidiaryInactiveError extends Error {
-  constructor(message = "This subsidiary is disabled for new uploads") {
+  constructor(message = "This subsidiary is disabled") {
     super(message);
     this.name = "SubsidiaryInactiveError";
   }
 }
 
-/** Thrown when an upload is attempted for a (subsidiary, project code) pair
- * an admin has specifically blocked — see
+/** Thrown when an upload or a Form Initiator form is attempted for a
+ * (subsidiary, project code) pair an admin has specifically blocked — see
  * subsidiaryProjectBlockService.assertNotBlocked. Independent of
- * ProjectCodeClosedError above — either one blocks the upload; this one
- * scopes the block to a single subsidiary rather than every uploader. */
+ * ProjectCodeClosedError above — either one blocks it; this one scopes the
+ * block to a single subsidiary rather than everyone. */
 export class SubsidiaryProjectBlockedError extends Error {
   constructor(message = "This project code is closed for new uploads from this subsidiary") {
     super(message);

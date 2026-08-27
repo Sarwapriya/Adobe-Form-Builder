@@ -116,6 +116,25 @@ export function createForm(input: CreateFormInput): Promise<FormListItem> {
   return apiClient.post<FormListItem>("/api/v1/admin/forms", input);
 }
 
+export interface QuestionSeed {
+  id: string;
+  order: number;
+  headingByLocale: Record<string, string>;
+  subheadingByLocale?: Record<string, string>;
+  controlType: "radio" | "checkbox" | "text" | "shortText" | "dropdown";
+  required: boolean;
+  answers?: Array<{ id: string; order: number; textByLocale: Record<string, string> }>;
+}
+
+export function createFormWithQuestions(
+  name: string,
+  subsidiaryId: string,
+  questions: QuestionSeed[],
+  projectCode?: string,
+): Promise<FormListItem> {
+  return apiClient.post<FormListItem>("/api/v1/admin/forms/with-questions", { name, subsidiaryId, questions, projectCode });
+}
+
 export function getFormDetail(formId: string): Promise<FormDetail> {
   return apiClient.get<FormDetail>(`/api/v1/admin/forms/${formId}`);
 }

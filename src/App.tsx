@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { CssBaseline, ThemeProvider } from "@mui/material";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { createAppTheme } from "./app/theme.ts";
+import { useThemeModeStore } from "./store/themeModeStore.ts";
 import { ErrorBoundary } from "./app/ErrorBoundary.tsx";
 import { AppLayout } from "./app/AppLayout.tsx";
 import { AppShell } from "./components/AppShell.tsx";
@@ -47,9 +48,10 @@ export default function App() {
   // Matches AppLayout.tsx's sidebar accent: red/maroon once we know the
   // signed-in user is an admin, brand blue for a subsidiary user or before
   // login, so the whole app — not just the sidebar — reads as one theme.
+  const mode = useThemeModeStore((s) => s.mode);
   const theme = useMemo(
-    () => createAppTheme(!user ? "default" : isAdminRole(user.role) ? "admin" : "subsidiary"),
-    [user],
+    () => createAppTheme(!user ? "default" : isAdminRole(user.role) ? "admin" : "subsidiary", mode),
+    [user, mode],
   );
 
   return (

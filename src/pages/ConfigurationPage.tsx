@@ -4,8 +4,7 @@ import { Box, Tab, Tabs } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import { ProjectCodeManager } from "../components/admin/ProjectCodeManager";
 import { SubsidiaryManager } from "../components/admin/SubsidiaryManager";
-import { SubsidiaryProjectBlockManager } from "../components/admin/SubsidiaryProjectBlockManager";
-import { SubsidiaryProjectBulkBlockManager } from "../components/admin/SubsidiaryProjectBulkBlockManager";
+import { SubsidiaryProjectCodeAccessManager } from "../components/admin/SubsidiaryProjectCodeAccessManager";
 import { SubsidiaryLocaleManager } from "../components/admin/SubsidiaryLocaleManager";
 import { SmtpSettingsManager } from "../components/admin/SmtpSettingsManager";
 import { FabrixSettingsManager } from "../components/admin/FabrixSettingsManager";
@@ -25,14 +24,24 @@ function TabPanel({ active, children }: { active: boolean; children: ReactNode }
 
 /**
  * Admin configuration hub: project codes (globally open/closed), subsidiaries
- * (a plain named list), per-(subsidiary, project code) upload restrictions
- * layered on top of both, notification email delivery, and the AI Assistant
- * connection. Split into tabs (rather than one long scroll) purely for
- * navigability — each manager below is otherwise unchanged and independent.
+ * (a plain named list) plus their per-project-code access, subsidiary locale
+ * approval, notification email delivery, and the AI Assistant connection.
+ * Split into tabs (rather than one long scroll) purely for navigability —
+ * each manager below is otherwise unchanged and independent.
+ *
+ * The old standalone "Subsidiary upload restrictions" block-list UI
+ * (SubsidiaryProjectBlockManager/SubsidiaryProjectBulkBlockManager) has been
+ * replaced by SubsidiaryProjectCodeAccessManager below, in the Subsidiaries
+ * section — same underlying SubsidiaryProjectBlock data/API, reframed
+ * subsidiary-first with an enable/disable switch per project code, since
+ * governance now targets Form Initiator (project code open + subsidiary
+ * active + not-blocked, enforced in
+ * formBuilderService.createForm/approveAdHocForm) rather than the
+ * now-unlinked Excel-upload flow.
  *
  * `restrictionsRefreshSignal` is bumped whenever ProjectCodeManager or
- * SubsidiaryManager change something — SubsidiaryProjectBlockManager's own
- * Project Code/Subsidiary dropdowns are otherwise independent state with no
+ * SubsidiaryManager change something — SubsidiaryProjectCodeAccessManager's
+ * own subsidiary/project-code lists are otherwise independent state with no
  * way to notice a code being closed or a subsidiary being added elsewhere on
  * this page.
  *
@@ -56,7 +65,7 @@ export function ConfigurationPage() {
       <PageHeader
         icon={<SettingsIcon />}
         title="Configuration"
-        subtitle="Manage project codes and subsidiaries, and control which are open for upload."
+        subtitle="Manage project codes and subsidiaries, and control which are open for Form Initiator campaigns."
       />
 
       <Tabs value={tab} onChange={handleTabChange} sx={{ mb: 2 }}>
@@ -69,14 +78,10 @@ export function ConfigurationPage() {
       <TabPanel active={tab === "campaigns"}>
         <ProjectCodeManager onChange={bumpRestrictionsRefresh} />
         <SubsidiaryManager onChange={bumpRestrictionsRefresh} />
+        <SubsidiaryProjectCodeAccessManager refreshSignal={restrictionsRefreshSignal} />
       </TabPanel>
 
       <TabPanel active={tab === "access"}>
-        <SubsidiaryProjectBlockManager refreshSignal={restrictionsRefreshSignal} />
-        <SubsidiaryProjectBulkBlockManager
-          refreshSignal={restrictionsRefreshSignal}
-          onChange={bumpRestrictionsRefresh}
-        />
         <SubsidiaryLocaleManager />
       </TabPanel>
 

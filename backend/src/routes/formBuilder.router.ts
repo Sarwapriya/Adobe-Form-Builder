@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
-import { formDefinitionSchema, type BuilderConfig } from "@formbuilder/shared";
+import { formDefinitionSchema, type BuilderConfig, type QuestionDefinition } from "@formbuilder/shared";
 import { asyncHandler } from "../utils/asyncHandler";
 import { parsePositiveInt } from "../utils/queryParsing";
 import { requireAdmin } from "../middleware/authJwt";
@@ -69,6 +69,28 @@ const createFormSchema = z.object({
   copyFromFormId: z.string().trim().min(1).optional(),
 });
 
+/** Schema for creating a form seeded with questions (e.g. from AI chat).
+ * `questions` is a plain QuestionDefinition[] — the backend merges them into
+ * the draft definition (see formBuilderService.createForm). */
+const createFormWithQuestionsSchema = z.object({
+  name: z.string().trim().min(1),
+  subsidiaryId: z.string().trim().min(1),
+  projectCode: z.string().trim().min(1).optional(),
+  questions: z.array(z.object({
+    id: z.string(),
+    order: z.number(),
+    headingByLocale: z.record(z.string(), z.string()),
+    subheadingByLocale: z.record(z.string(), z.string()).optional(),
+    controlType: z.enum(["radio", "checkbox", "text", "shortText", "dropdown"]),
+    required: z.boolean(),
+    answers: z.array(z.object({
+      id: z.string(),
+      order: z.number(),
+      textByLocale: z.record(z.string(), z.string()),
+    })).optional(),
+  })),
+});
+
 formBuilderRouter.post(
   "/",
   validateBody(createFormSchema),
@@ -87,6 +109,22 @@ formBuilderRouter.post(
       projectCode: projectCode ?? null,
       userId: req.auth!.sub,
       copyFromFormId,
+    });
+    res.status(201).json(form);
+  }),
+);
+
+formBuilderRouter.post(
+  "/with-questions",
+  validateBody(createFormWithQuestionsSchema),
+  asyncHandler(async (req, res) => {
+    const { name, subsidiaryId, projectCode, questions } = req.body as z.infer<typeof createFormWithQuestionsSchema>;
+    const form = await createForm({
+      name,
+      subsidiaryId,
+      projectCode: projectCode ?? null,
+      userId: req.auth!.sub,
+      questions: questions as unknown as QuestionDefinition[],
     });
     res.status(201).json(form);
   }),

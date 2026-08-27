@@ -15,10 +15,12 @@ import {
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { approveAdHocForm, FormInvalidError, rejectAdHocForm } from "../../api/formBuilderApi";
 import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesApi";
 import { ApiError } from "../../api/apiClient";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { QaRunDialog } from "../admin/QaRunDialog";
 
 /**
  * Admin review queue for a subsidiary user's own "ad-hoc" form submission (see
@@ -37,6 +39,7 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [qaOpen, setQaOpen] = useState(false);
   const [selectedProjectCode, setSelectedProjectCode] = useState("");
   const [rejectNote, setRejectNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,8 +47,13 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
 
   useEffect(() => {
     if (!approveOpen) return;
+    // Scoped to this subsidiary's own enabled project codes (see
+    // SubsidiaryProjectCodeAccessManager on the Configuration page) — no
+    // fallback to the unfiltered list if every open code happens to be
+    // disabled for this subsidiary; that's now a deliberate admin choice to
+    // surface (approveAdHocForm's own assertNotBlocked would reject the pick
+    // server-side regardless), not something to silently work around here.
     listOpenProjectCodes(subsidiaryId)
-      .then((codes) => (codes.length > 0 ? codes : listOpenProjectCodes()))
       .then(setProjectCodes)
       .catch(() => setProjectCodes([]));
   }, [approveOpen, subsidiaryId]);
@@ -108,7 +116,19 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
         <Button size="small" color="error" startIcon={<CancelIcon />} onClick={() => setRejectOpen(true)}>
           Reject
         </Button>
+        <Button size="small" startIcon={<PlayArrowIcon />} onClick={() => setQaOpen(true)}>
+          Run QA
+        </Button>
       </Stack>
+
+      {qaOpen && (
+        <QaRunDialog
+          subject={{ kind: "adhoc", formId }}
+          availableVariants={["ff"]}
+          open={qaOpen}
+          onClose={() => setQaOpen(false)}
+        />
+      )}
 
       <Dialog open={approveOpen} onClose={() => setApproveOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
