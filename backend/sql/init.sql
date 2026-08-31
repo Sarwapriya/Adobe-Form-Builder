@@ -22,6 +22,8 @@ CREATE TABLE Users (
     isActive           BIT NOT NULL DEFAULT 1,
     notificationEmail  NVARCHAR(255) NULL,
     notificationEmail2 NVARCHAR(255) NULL,
+    firstName          NVARCHAR(100) NULL,
+    lastName           NVARCHAR(100) NULL,
     createdAt          DATETIMEOFFSET(7) DEFAULT SYSDATETIMEOFFSET()
 );
 

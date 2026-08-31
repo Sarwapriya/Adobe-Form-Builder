@@ -20,6 +20,7 @@ import { GeneratedFile as GeneratedFileEntity, type GeneratedFileType } from "..
 import { resolvePaging, type PagedResult } from "../utils/queryParsing";
 import { absoluteFilePath, saveFormVersionGeneratedFiles } from "./fileService";
 import { classifyFileType } from "./generationService";
+import { deployGeneratedFiles } from "./sftpService";
 import { listSubsidiaryLocales } from "./subsidiaryLocaleService";
 import { buildZip, type ZipEntry } from "./zipService";
 import { sendAdHocReviewSubmittedNotification } from "./emailService";
@@ -421,6 +422,10 @@ export type PublishOutcome = "ok" | "not_found" | "invalid";
 export interface PublishResult {
   outcome: PublishOutcome;
   validation?: ValidationResult;
+  /** Best-effort SFTP push of the generated files to the Adobe Campaign drop
+   * folder — absent when outcome isn't "ok" (nothing was generated to push).
+   * A failure here never fails the publish itself; see sftpService.ts. */
+  deployment?: { ok: boolean; error?: string };
 }
 
 /**
@@ -505,7 +510,16 @@ export async function publishForm(formId: string, userId: string): Promise<Publi
   );
   await AppDataSource.getRepository(Form).update(formId, { currentDraftVersionId: newDraft.id });
 
-  return { outcome: "ok", validation: generation.validation };
+  // Best-effort push to the Adobe Campaign SFTP drop folder — deliberately
+  // never blocks or fails the publish itself (see sftpService.ts's doc
+  // comment: this host is typically only reachable from the office
+  // network/VPN, so a connection failure here is an expected, recoverable
+  // outcome, not a reason to roll back a publish that already succeeded).
+  const deployment = await deployGeneratedFiles(
+    saved.map((f) => ({ absolutePath: absoluteFilePath(f.relativePath), remoteFileName: f.fileName })),
+  );
+
+  return { outcome: "ok", validation: generation.validation, deployment };
 }
 
 export type UnpublishOutcome = "ok" | "not_found" | "not_published";

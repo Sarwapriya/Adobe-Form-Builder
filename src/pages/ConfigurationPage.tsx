@@ -10,9 +10,10 @@ import { SmtpSettingsManager } from "../components/admin/SmtpSettingsManager";
 import { FabrixSettingsManager } from "../components/admin/FabrixSettingsManager";
 import { FabrixModelManager } from "../components/admin/FabrixModelManager";
 import { OtherAiProvidersManager } from "../components/admin/OtherAiProvidersManager";
+import { DeploymentSettingsManager } from "../components/admin/DeploymentSettingsManager";
 import { PageHeader } from "../components/common/PageHeader";
 
-type ConfigTab = "campaigns" | "access" | "notifications" | "ai";
+type ConfigTab = "campaigns" | "access" | "notifications" | "ai" | "deployment";
 
 /** One tab's content, kept mounted (just visually hidden) rather than
  * unmounted when its tab isn't active — each manager below fetches its own
@@ -73,6 +74,7 @@ export function ConfigurationPage() {
         <Tab value="access" label="Access & Locales" />
         <Tab value="notifications" label="Notifications" />
         <Tab value="ai" label="AI Assistant" />
+        <Tab value="deployment" label="Deployment" />
       </Tabs>
 
       <TabPanel active={tab === "campaigns"}>
@@ -93,6 +95,10 @@ export function ConfigurationPage() {
         <FabrixSettingsManager />
         <FabrixModelManager />
         <OtherAiProvidersManager />
+      </TabPanel>
+
+      <TabPanel active={tab === "deployment"}>
+        <DeploymentSettingsManager />
       </TabPanel>
     </Box>
   );

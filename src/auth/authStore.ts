@@ -18,6 +18,10 @@ export interface AuthUser {
    * and locks its Subsidiary field to this value for them. Null for admins
    * and for standard users not tied to one. */
   subsidiaryId: string | null;
+  /** Optional display name, admin/superadmin-set via User Management — see
+   * backend User.firstName/lastName's own doc comment. Null until set. */
+  firstName: string | null;
+  lastName: string | null;
 }
 
 export type AuthStatus = "idle" | "loading" | "authenticated" | "unauthenticated";
@@ -69,6 +73,8 @@ function decodeAccessToken(token: string): AuthUser | null {
       username: payload.username,
       role: payload.role,
       subsidiaryId: typeof payload.subsidiaryId === "string" ? payload.subsidiaryId : null,
+      firstName: typeof payload.firstName === "string" ? payload.firstName : null,
+      lastName: typeof payload.lastName === "string" ? payload.lastName : null,
     };
   } catch {
     return null;

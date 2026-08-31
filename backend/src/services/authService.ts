@@ -23,6 +23,11 @@ export interface AccessTokenPayload {
   /** Null for admins and for standard users not tied to one subsidiary — see
    * User.subsidiaryId's own doc comment. */
   subsidiaryId: string | null;
+  /** Optional display name — see User.firstName/lastName's own doc comment.
+   * Display-only, same staleness tradeoff as every other claim here (a name
+   * change doesn't take effect until the next login/silent refresh). */
+  firstName: string | null;
+  lastName: string | null;
 }
 
 /**
@@ -47,6 +52,8 @@ export function issueAccessToken(user: User): string {
     username: user.username,
     role: user.role,
     subsidiaryId: user.subsidiaryId,
+    firstName: user.firstName,
+    lastName: user.lastName,
   };
   return jwt.sign(payload, requireEnv("JWT_SECRET"), { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
 }
@@ -191,6 +198,10 @@ export interface UpdateUserInput {
   /** `null` clears it (only valid when the resulting role isn't "standard" —
    * see the check below); `undefined` (simply omit the key) leaves it as-is. */
   subsidiaryId?: string | null;
+  /** `null`/blank clears it, `undefined` (omit the key) leaves it as-is —
+   * same presence-vs-value convention as `subsidiaryId` above. */
+  firstName?: string | null;
+  lastName?: string | null;
 }
 
 /**
@@ -240,6 +251,8 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
   existing.email = nextEmail;
   existing.role = nextRole;
   existing.subsidiaryId = nextSubsidiaryId;
+  if ("firstName" in input) existing.firstName = input.firstName?.trim() || null;
+  if ("lastName" in input) existing.lastName = input.lastName?.trim() || null;
   return repo.save(existing);
 }
 

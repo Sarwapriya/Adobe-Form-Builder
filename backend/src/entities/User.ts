@@ -24,6 +24,18 @@ export class User {
   @Column({ type: "nvarchar", length: 255 })
   passwordHash!: string;
 
+  /** Optional display name, admin/superadmin-set via User Management's Edit
+   * user dialog (there is no self-service profile editing anywhere in this
+   * app — see authService.ts's own doc comments). Shown in place of the
+   * login `username` wherever a friendlier greeting makes sense (e.g. the
+   * subsidiary Dashboard's "Welcome back" header) — falls back to `username`
+   * when either is null. */
+  @Column({ type: "nvarchar", length: 100, nullable: true })
+  firstName!: string | null;
+
+  @Column({ type: "nvarchar", length: 100, nullable: true })
+  lastName!: string | null;
+
   @Column({ type: "nvarchar", length: 20, default: "standard" })
   role!: UserRole;
 

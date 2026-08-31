@@ -10,6 +10,8 @@ import { AdminRoute } from "./auth/AdminRoute.tsx";
 import { ProtectedRoute } from "./auth/ProtectedRoute.tsx";
 import { isAdminRole, useAuthStore } from "./auth/authStore.ts";
 import { AdminDashboardPage } from "./pages/AdminDashboardPage.tsx";
+import { AdminOverviewDashboardPage } from "./pages/AdminOverviewDashboardPage.tsx";
+import { SubsidiaryDashboardPage } from "./pages/SubsidiaryDashboardPage.tsx";
 import { AdminHistoryPage } from "./pages/AdminHistoryPage.tsx";
 import { ConfigurationPage } from "./pages/ConfigurationPage.tsx";
 import { UserManagementPage } from "./pages/UserManagementPage.tsx";
@@ -30,8 +32,8 @@ import { QuestionMasterPage } from "./pages/QuestionMasterPage.tsx";
  * role's own nav now actually leads to instead. */
 function DefaultLanding() {
   const user = useAuthStore((s) => s.user);
-  if (isAdminRole(user?.role)) return <Navigate to="/admin/form-builder" replace />;
-  if (user?.subsidiaryId) return <Navigate to="/my-forms" replace />;
+  if (isAdminRole(user?.role)) return <Navigate to="/admin/dashboard" replace />;
+  if (user?.subsidiaryId) return <Navigate to="/dashboard" replace />;
   return <Navigate to="/my-submissions" replace />;
 }
 
@@ -69,6 +71,7 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route index element={<DefaultLanding />} />
+                <Route path="dashboard" element={<SubsidiaryDashboardPage />} />
                 <Route path="my-forms" element={<Navigate to="/my-forms/hr" replace />} />
                 <Route path="my-forms/hr" element={<MyHrFormsListPage />} />
                 <Route path="my-forms/adhoc" element={<MyAdHocFormsListPage />} />
@@ -78,6 +81,7 @@ export default function App() {
                 <Route path="my-subsidiary" element={<MySubsidiaryPage />} />
                 <Route element={<AdminRoute />}>
                   <Route path="admin" element={<AdminDashboardPage />} />
+                  <Route path="admin/dashboard" element={<AdminOverviewDashboardPage />} />
                   <Route path="admin/history" element={<AdminHistoryPage />} />
                   <Route path="admin/configuration" element={<ConfigurationPage />} />
                   <Route path="admin/users" element={<UserManagementPage />} />

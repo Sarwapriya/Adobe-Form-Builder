@@ -127,6 +127,9 @@ export interface AdminUserListItem {
    * `email` (the login identity) — see backend User entity's own doc comment. */
   notificationEmail: string | null;
   notificationEmail2: string | null;
+  /** Optional display name — see backend User.firstName/lastName's own doc comment. */
+  firstName: string | null;
+  lastName: string | null;
   createdAt: string;
 }
 
@@ -155,6 +158,9 @@ export interface UpdateUserProfileInput {
   /** `null` clears it (only valid when the resulting role isn't "standard");
    * `undefined` (omit the key) leaves it as-is. */
   subsidiaryId?: string | null;
+  /** `null`/blank clears it, `undefined` (omit the key) leaves it as-is. */
+  firstName?: string | null;
+  lastName?: string | null;
 }
 
 /**
@@ -487,6 +493,39 @@ export interface OtherAiModel {
   modelId: string;
   sortOrder: number;
   createdAt: string;
+}
+
+/** DB-stored SFTP deployment config (Configuration > Deployment) — see
+ * backend's sftpSettingsService.ts. Staging and production are both always
+ * present; `activeEnvironment` is whichever one Publish/Deploy actually
+ * pushes generated files to. `privateKeyPath` is a local filesystem path on
+ * whichever machine runs the backend, not the key's contents. */
+export type SftpEnvironment = "staging" | "production";
+
+export interface SftpTargetConfig {
+  host: string;
+  port: number;
+  username: string;
+  privateKeyPath: string;
+  remotePath: string;
+}
+
+export interface SftpDeploymentSettings {
+  activeEnvironment: SftpEnvironment;
+  staging: SftpTargetConfig;
+  production: SftpTargetConfig;
+}
+
+export function getDeploymentSettings(): Promise<SftpDeploymentSettings> {
+  return apiClient.get<SftpDeploymentSettings>("/api/v1/admin/deployment-settings");
+}
+
+export function saveDeploymentTarget(environment: SftpEnvironment, input: SftpTargetConfig): Promise<SftpDeploymentSettings> {
+  return apiClient.patch<SftpDeploymentSettings>(`/api/v1/admin/deployment-settings/${environment}`, input);
+}
+
+export function setActiveDeploymentEnvironment(environment: SftpEnvironment): Promise<SftpDeploymentSettings> {
+  return apiClient.post<SftpDeploymentSettings>("/api/v1/admin/deployment-settings/active", { environment });
 }
 
 export function listOtherAiModels(): Promise<OtherAiModel[]> {

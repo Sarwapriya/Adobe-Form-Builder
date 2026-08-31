@@ -171,6 +171,15 @@ export function UserManagementPage() {
     return currentUser?.role === "admin" && (target.role === "admin" || target.role === "standard");
   }
 
+  // A superadmin may edit anyone's full account details. A plain admin may
+  // edit a standard user's — never another admin's or a superadmin's,
+  // including their own (a plain admin's own row has role "admin", so this
+  // naturally excludes self-edit too). Enforced authoritatively server-side —
+  // see admin.router.ts's PATCH /users/:id/profile.
+  function canEditProfile(target: AdminUserListItem): boolean {
+    return isSuperAdmin || target.role === "standard";
+  }
+
   return (
     <Box>
       <PageHeader
@@ -313,19 +322,19 @@ export function UserManagementPage() {
                 <TableCell>Status</TableCell>
                 <TableCell>Notification email</TableCell>
                 <TableCell>Created</TableCell>
-                {isSuperAdmin && <TableCell align="right">Actions</TableCell>}
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={isSuperAdmin ? 8 : 7} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
                     <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isSuperAdmin ? 8 : 7} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
                     <Typography color="text.secondary">No users yet.</Typography>
                   </TableCell>
                 </TableRow>
@@ -360,15 +369,15 @@ export function UserManagementPage() {
                       <NotificationEmailCell user={u} editable={canEditNotificationEmail(u)} onSaved={refresh} />
                     </TableCell>
                     <TableCell>{new Date(u.createdAt).toLocaleString()}</TableCell>
-                    {isSuperAdmin && (
-                      <TableCell align="right">
+                    <TableCell align="right">
+                      {canEditProfile(u) && (
                         <Tooltip title="Edit account details">
                           <IconButton size="small" onClick={() => setEditingUser(u)}>
                             <EditIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                      </TableCell>
-                    )}
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -381,6 +390,7 @@ export function UserManagementPage() {
         <EditUserDialog
           user={editingUser}
           subsidiaries={subsidiaries}
+          assignableRoles={assignableRoles}
           onClose={() => setEditingUser(null)}
           onSaved={async () => {
             setEditingUser(null);
@@ -393,20 +403,34 @@ export function UserManagementPage() {
 }
 
 /**
- * Superadmin-only full account-details editor (username/email/role/
- * subsidiary) — distinct from the isActive toggle and the notification-email
+ * Full account-details editor (username/email/role/subsidiary/first & last
+ * name) — distinct from the isActive toggle and the notification-email
  * popover above, both of which stay available to a plain admin for the
- * targets they're allowed to manage. Enforced authoritatively server-side —
- * see admin.router.ts's PATCH /users/:id/profile.
+ * targets they're allowed to manage. Only ever rendered for a target this
+ * caller is actually allowed to edit (see `canEditProfile` above — a plain
+ * admin only for a "standard" target, a superadmin for anyone), but the Role
+ * field itself is separately restricted to `assignableRoles` regardless,
+ * since a plain admin must never be offered "admin"/"superadmin" as an
+ * option even while editing a standard user (that would be a
+ * privilege-escalation path around account creation's own same-shaped
+ * restriction) — enforced authoritatively server-side too, see
+ * admin.router.ts's PATCH /users/:id/profile. First/last name is the only
+ * self-service-adjacent field here (optional, shown in place of the login
+ * username on the subsidiary Dashboard's greeting — see
+ * SubsidiaryDashboardPage.tsx) but there is still no true self-service
+ * profile editing anywhere in this app, so it's set here like everything
+ * else.
  */
 function EditUserDialog({
   user,
   subsidiaries,
+  assignableRoles,
   onClose,
   onSaved,
 }: {
   user: AdminUserListItem;
   subsidiaries: Subsidiary[];
+  assignableRoles: AdminUserRole[];
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
@@ -414,6 +438,8 @@ function EditUserDialog({
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState<AdminUserRole>(user.role);
   const [subsidiaryId, setSubsidiaryId] = useState(user.subsidiaryId ?? "");
+  const [firstName, setFirstName] = useState(user.firstName ?? "");
+  const [lastName, setLastName] = useState(user.lastName ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -430,6 +456,8 @@ function EditUserDialog({
         email: email.trim(),
         role,
         subsidiaryId: subsidiaryRequired ? subsidiaryId : subsidiaryId.trim() || null,
+        firstName: firstName.trim() || null,
+        lastName: lastName.trim() || null,
       });
       await onSaved();
     } catch (err) {
@@ -459,16 +487,37 @@ function EditUserDialog({
             onChange={(e) => setEmail(e.target.value)}
             required
           />
+          <Stack direction="row" spacing={1.5}>
+            <TextField
+              label="First name"
+              size="small"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Optional"
+              fullWidth
+            />
+            <TextField
+              label="Last name"
+              size="small"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Optional"
+              fullWidth
+            />
+          </Stack>
           <TextField
             select
             label="Role"
             size="small"
             value={role}
             onChange={(e) => setRole(e.target.value as AdminUserRole)}
+            disabled={assignableRoles.length <= 1}
           >
-            <MenuItem value="standard">standard</MenuItem>
-            <MenuItem value="admin">admin</MenuItem>
-            <MenuItem value="superadmin">superadmin</MenuItem>
+            {assignableRoles.map((r) => (
+              <MenuItem key={r} value={r}>
+                {r}
+              </MenuItem>
+            ))}
           </TextField>
           <TextField
             select
@@ -588,9 +637,8 @@ function NotificationEmailCell({
                 error={error}
                 label1="Email 1"
                 label2="Email 2"
+                direction="column"
                 containerSx={{
-                  flexDirection: "column",
-                  alignItems: "stretch",
                   "& .MuiTextField-root": { width: "100%" },
                   "& .MuiButton-root": { alignSelf: "flex-start" },
                 }}

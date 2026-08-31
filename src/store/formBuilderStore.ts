@@ -72,7 +72,7 @@ interface FormBuilderState {
   updateDefinition: (updater: (definition: FormDefinition) => FormDefinition) => void;
   updateConfig: (patch: Partial<BuilderConfig>) => void;
   saveDraft: () => Promise<boolean>;
-  publish: () => Promise<{ ok: boolean; validation?: ValidationResult }>;
+  publish: () => Promise<{ ok: boolean; validation?: ValidationResult; deployment?: { ok: boolean; error?: string } }>;
   unpublish: () => Promise<boolean>;
   deleteForm: () => Promise<boolean>;
   /** adhoc mode only — saves the draft, then submits it for admin review (see
@@ -205,9 +205,9 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
 
     set({ publishing: true, error: null });
     try {
-      const { validation } = await apiPublishForm(formId);
+      const { validation, deployment } = await apiPublishForm(formId);
       await get().loadForm(formId);
-      return { ok: true, validation };
+      return { ok: true, validation, deployment };
     } catch (err) {
       const validation = err instanceof FormInvalidError ? err.validation : undefined;
       set({ error: err instanceof Error ? err.message : "Failed to publish form", validation: validation ?? get().validation });

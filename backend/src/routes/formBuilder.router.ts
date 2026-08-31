@@ -183,7 +183,7 @@ formBuilderRouter.post(
       res.status(422).json({ error: "form is not valid", validation: result.validation });
       return;
     }
-    res.json({ validation: result.validation });
+    res.json({ validation: result.validation, deployment: result.deployment });
   }),
 );
 

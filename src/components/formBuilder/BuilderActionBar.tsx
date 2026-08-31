@@ -75,6 +75,7 @@ export function BuilderActionBar() {
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeSeverity, setNoticeSeverity] = useState<"success" | "warning">("success");
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -87,7 +88,10 @@ export function BuilderActionBar() {
   async function handleSave() {
     setNotice(null);
     const ok = await saveDraft();
-    if (ok) setNotice("Draft saved.");
+    if (ok) {
+      setNoticeSeverity("success");
+      setNotice("Draft saved.");
+    }
   }
 
   useSaveShortcut(() => void handleSave(), dirty && !saving);
@@ -95,14 +99,27 @@ export function BuilderActionBar() {
   async function handlePublish() {
     setNotice(null);
     const result = await publish();
-    if (result.ok) setNotice("Published.");
+    if (result.ok) {
+      if (result.deployment && !result.deployment.ok) {
+        setNoticeSeverity("warning");
+        setNotice(
+          `Published. SFTP delivery to the campaign server failed (${result.deployment.error}) — this is expected off the office network; retry once connected.`,
+        );
+      } else {
+        setNoticeSeverity("success");
+        setNotice("Published.");
+      }
+    }
   }
 
   async function handleUnpublish() {
     if (!window.confirm("Unpublish this form? Its preview/download links will stop working until it's published again.")) return;
     setNotice(null);
     const ok = await unpublish();
-    if (ok) setNotice("Unpublished.");
+    if (ok) {
+      setNoticeSeverity("success");
+      setNotice("Unpublished.");
+    }
   }
 
   async function handleDelete() {
@@ -195,7 +212,7 @@ export function BuilderActionBar() {
         </Alert>
       )}
       {notice && !error && (
-        <Alert severity="success" sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => setNotice(null)}>
+        <Alert severity={noticeSeverity} sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => setNotice(null)}>
           {notice}
         </Alert>
       )}

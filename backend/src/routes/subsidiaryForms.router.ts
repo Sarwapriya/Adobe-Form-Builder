@@ -6,6 +6,7 @@ import { requireAuth } from "../middleware/authJwt";
 import { validateBody } from "../middleware/validate";
 import { getAccessibleFormDetail, listAccessibleForms } from "../services/formAccessService";
 import { listOwnContributions, listOwnContributionsAllForms, saveContributionDraft, submitContribution } from "../services/formContributionService";
+import { getSubsidiaryDashboardSummary } from "../services/dashboardService";
 import {
   createForm,
   deleteAdHocForm,
@@ -48,6 +49,21 @@ subsidiaryFormsRouter.get(
   asyncHandler(async (req, res) => {
     const contributions = await listOwnContributionsAllForms(req.auth!.sub);
     res.json(contributions);
+  }),
+);
+
+// The subsidiary user's post-login "Dashboard" landing page — scoped to their
+// own ad-hoc campaigns only (see dashboardService.ts's own doc comment).
+// Registered before "/:id" for the same route-ordering reason as above.
+subsidiaryFormsRouter.get(
+  "/dashboard-summary",
+  asyncHandler(async (req, res) => {
+    const subsidiaryId = req.auth!.subsidiaryId;
+    if (!subsidiaryId) {
+      res.json({ counts: { total: 0, drafts: 0, pendingReview: 0, changesRequested: 0, published: 0 }, recentCampaigns: [], continueWorking: [], actionRequired: [] });
+      return;
+    }
+    res.json(await getSubsidiaryDashboardSummary(subsidiaryId));
   }),
 );
 

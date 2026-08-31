@@ -68,7 +68,14 @@ authRouter.post(
 
     res.json({
       accessToken,
-      user: { id: user.id, username: user.username, role: user.role, subsidiaryId: user.subsidiaryId },
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        subsidiaryId: user.subsidiaryId,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
     });
   }),
 );

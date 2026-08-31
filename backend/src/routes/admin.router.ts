@@ -71,6 +71,8 @@ import {
 import { getClaudeSettingsForDisplay, saveClaudeSettings } from "../services/claudeSettingsService";
 import { sendMessage as sendClaudeMessage } from "../services/claudeAIService";
 import { listOtherAiModels } from "../services/otherAiModelsService";
+import { getSftpDeploymentSettings, saveSftpTarget, setActiveSftpEnvironment } from "../services/sftpSettingsService";
+import { getAdminDashboardSummary } from "../services/dashboardService";
 import {
   generateQuestionMaster,
   generateQuestionMasterFromUploads,
@@ -574,24 +576,43 @@ const updateUserProfileSchema = z.object({
   // authService.updateUser, not here, since a zod schema only sees this
   // request's own body.
   subsidiaryId: z.string().trim().min(1).nullable().optional(),
+  firstName: z.string().trim().max(100).nullable().optional(),
+  lastName: z.string().trim().max(100).nullable().optional(),
 });
 
-// Full account-details edit (username/email/role/subsidiary) — superadmin
-// only, any target including themselves. Deliberately stricter than
-// setUserActive's own admin-may-manage-standard-users split above: changing
-// someone's role or login identity is a bigger lever than a reversible
-// enable/disable toggle, so it stays superadmin-only regardless of the
-// target's role.
+// Full account-details edit (username/email/role/subsidiary) — same
+// admin-may-manage-standard-users, superadmin-may-manage-anyone split as
+// setUserActive/account creation above, applied twice here since this
+// endpoint can change two different things a plain admin shouldn't be able
+// to touch on a non-standard account: (1) the *target's own current* role
+// (a plain admin may only edit an existing "standard" account — never
+// another admin's or superadmin's, regardless of what fields are being
+// changed) and (2) the *requested* role (a plain admin may never grant
+// "admin"/"superadmin" via this field, which would otherwise be a
+// privilege-escalation path around account creation's own same-shaped
+// check).
 adminRouter.patch(
   "/users/:id/profile",
   validateBody(updateUserProfileSchema),
   asyncHandler(async (req, res) => {
-    if (req.auth!.role !== "superadmin") {
-      res.status(403).json({ error: "only a superadmin may update another user's account details" });
+    const input = req.body as z.infer<typeof updateUserProfileSchema>;
+
+    const target = await findUserById(req.params.id);
+    if (!target) {
+      res.status(404).json({ error: "user not found" });
       return;
     }
+    if (req.auth!.role !== "superadmin") {
+      if (target.role !== "standard") {
+        res.status(403).json({ error: "only a superadmin may update an admin or superadmin account" });
+        return;
+      }
+      if (input.role && input.role !== "standard") {
+        res.status(403).json({ error: "only a superadmin may grant an admin or superadmin role" });
+        return;
+      }
+    }
 
-    const input = req.body as z.infer<typeof updateUserProfileSchema>;
     const updated = await updateUser(req.params.id, input);
     if (!updated) {
       res.status(404).json({ error: "user not found" });
@@ -606,6 +627,8 @@ adminRouter.patch(
       isActive: updated.isActive,
       notificationEmail: updated.notificationEmail,
       notificationEmail2: updated.notificationEmail2,
+      firstName: updated.firstName,
+      lastName: updated.lastName,
     });
   })
 );
@@ -659,6 +682,8 @@ adminRouter.patch(
       isActive: updated.isActive,
       notificationEmail: updated.notificationEmail,
       notificationEmail2: updated.notificationEmail2,
+      firstName: updated.firstName,
+      lastName: updated.lastName,
     });
   })
 );
@@ -1132,5 +1157,70 @@ adminRouter.post(
       return;
     }
     res.json({ ok: true });
+  })
+);
+
+// DB-stored SFTP deployment config (Configuration > Deployment) — staging
+// and production targets are both always stored; `activeEnvironment` picks
+// which one sftpService.deployGeneratedFiles actually pushes to on every
+// Publish/Deploy. See sftpSettingsService.ts's own doc comment — none of
+// these fields are secrets in themselves (no password/key content), just a
+// host/username/local-file-path/remote-path, so unlike FabriX/Claude nothing
+// here is encrypted or write-only.
+const sftpTargetSchema = z.object({
+  host: z.string().trim().min(1),
+  port: z.coerce.number().int().min(1).max(65535).optional(),
+  username: z.string().trim().min(1),
+  privateKeyPath: z.string().trim().min(1),
+  remotePath: z.string().trim().min(1),
+});
+
+adminRouter.get(
+  "/deployment-settings",
+  asyncHandler(async (_req, res) => {
+    res.json(await getSftpDeploymentSettings());
+  })
+);
+
+adminRouter.patch(
+  "/deployment-settings/:environment",
+  validateBody(sftpTargetSchema),
+  asyncHandler(async (req, res) => {
+    const environment = req.params.environment;
+    if (environment !== "staging" && environment !== "production") {
+      res.status(400).json({ error: "environment must be 'staging' or 'production'" });
+      return;
+    }
+    const input = req.body as z.infer<typeof sftpTargetSchema>;
+    await saveSftpTarget(environment, {
+      host: input.host,
+      port: input.port ?? 22,
+      username: input.username,
+      privateKeyPath: input.privateKeyPath,
+      remotePath: input.remotePath,
+    });
+    res.json(await getSftpDeploymentSettings());
+  })
+);
+
+const setActiveSftpEnvironmentSchema = z.object({ environment: z.enum(["staging", "production"]) });
+
+adminRouter.post(
+  "/deployment-settings/active",
+  validateBody(setActiveSftpEnvironmentSchema),
+  asyncHandler(async (req, res) => {
+    const { environment } = req.body as z.infer<typeof setActiveSftpEnvironmentSchema>;
+    await setActiveSftpEnvironment(environment);
+    res.json(await getSftpDeploymentSettings());
+  })
+);
+
+// Admin's post-login "Dashboard" landing page — system-wide campaign counts,
+// activity trends, and the merged pending-approvals/recent-activity feeds
+// (see dashboardService.ts's own doc comment for the status-bucketing rule).
+adminRouter.get(
+  "/dashboard-summary",
+  asyncHandler(async (_req, res) => {
+    res.json(await getAdminDashboardSummary());
   })
 );

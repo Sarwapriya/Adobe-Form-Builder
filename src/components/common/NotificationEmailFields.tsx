@@ -25,6 +25,7 @@ export function NotificationEmailFields({
   savingLabel = "Saving...",
   saveButtonVariant = "text",
   leading,
+  direction = "row",
   containerSx,
 }: {
   value1: string;
@@ -41,10 +42,16 @@ export function NotificationEmailFields({
   savingLabel?: string;
   saveButtonVariant?: "text" | "outlined";
   leading?: ReactNode;
+  /** MUI's `Stack` spacing (the gap between fields) is computed from this
+   * prop, not from `flexDirection` set via `containerSx` — overriding the
+   * layout to column via sx alone while leaving this at "row" silently
+   * breaks the gap (margins end up horizontal in a vertical layout). Pass
+   * "column" here for a stacked layout instead. */
+  direction?: "row" | "column";
   containerSx?: SxProps<Theme>;
 }) {
   return (
-    <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={containerSx}>
+    <Stack direction={direction} spacing={1.5} alignItems={direction === "column" ? "stretch" : "center"} flexWrap="wrap" sx={containerSx}>
       {leading}
       <TextField
         size="small"

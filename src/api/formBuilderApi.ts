@@ -145,6 +145,10 @@ export function updateDraft(formId: string, definition: FormDefinition, config: 
 
 export interface PublishResponse {
   validation: ValidationResult;
+  /** Best-effort SFTP push to the Adobe Campaign drop folder — absent on
+   * validation failure (nothing was generated to push). A failed deployment
+   * doesn't mean publish itself failed; see backend's sftpService.ts. */
+  deployment?: { ok: boolean; error?: string };
 }
 
 export class FormInvalidError extends Error {
@@ -176,6 +180,70 @@ export function unpublishForm(formId: string): Promise<void> {
 
 export function deleteForm(formId: string): Promise<void> {
   return apiClient.delete<void>(`/api/v1/admin/forms/${formId}`);
+}
+
+/**
+ * Backs the admin "Dashboard" landing page — see backend's dashboardService.ts
+ * for the exact status-bucketing rule (Form.status and FormContribution.status
+ * are independent lifecycles, so every count/donut segment below is derived
+ * via a fixed priority: Pending Review > Approved > Published > Draft).
+ */
+export interface AdminDashboardCounts {
+  total: number;
+  draft: number;
+  pendingReview: number;
+  approved: number;
+  published: number;
+}
+
+export interface MonthlyActivity {
+  /** Short month label, e.g. "Mar" — the 6 most recent calendar months, oldest first. */
+  month: string;
+  created: number;
+  published: number;
+}
+
+/** Per-subsidiary counts, split the same way the stat cards are — lets the
+ * "Subsidiary Activity" chart re-scope to whichever stat card is currently
+ * selected (see AdminOverviewDashboardPage.tsx) while always summing back to
+ * that card's own total. */
+export interface SubsidiaryBucketBreakdown {
+  subsidiaryId: string;
+  total: number;
+  draft: number;
+  pendingReview: number;
+  approved: number;
+  published: number;
+}
+
+export type PendingApprovalType = "adhoc_review" | "contribution";
+
+export interface PendingApprovalItem {
+  formId: string;
+  formName: string;
+  subsidiaryId: string;
+  type: PendingApprovalType;
+  submittedAt: string;
+}
+
+export type RecentActivityKind = "submitted_for_review" | "published" | "contribution_approved" | "contribution_rejected" | "user_created";
+
+export interface RecentActivityItem {
+  kind: RecentActivityKind;
+  message: string;
+  occurredAt: string;
+}
+
+export interface AdminDashboardSummary {
+  counts: AdminDashboardCounts;
+  activityByMonth: MonthlyActivity[];
+  subsidiaryBreakdown: SubsidiaryBucketBreakdown[];
+  pendingApprovals: PendingApprovalItem[];
+  recentActivity: RecentActivityItem[];
+}
+
+export function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
+  return apiClient.get<AdminDashboardSummary>("/api/v1/admin/dashboard-summary");
 }
 
 export function listFormVersions(formId: string): Promise<FormVersionSummary[]> {

@@ -21,6 +21,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DescriptionIcon from "@mui/icons-material/Description";
+import DashboardIcon from "@mui/icons-material/Dashboard";
 import LogoutIcon from "@mui/icons-material/Logout";
 import HistoryIcon from "@mui/icons-material/History";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -107,6 +108,10 @@ export function AppLayout() {
 
   const isAdmin = isAdminRole(user?.role);
   const panelLabel = isAdmin ? "Admin Panel" : "Subsidiary Panel";
+  // Friendlier than the login username wherever we have it — see
+  // User.firstName/lastName's own doc comment. Falls back to username, same
+  // as SubsidiaryDashboardPage.tsx's own greeting.
+  const displayName = user?.firstName ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}` : user?.username;
   /** Sidebar background matches the page's own light/dark mode for both
    * roles (near-black in dark mode, near-white in light mode — see theme.ts
    * and the toggle next to "Log out" below), with a soft role-colored glow
@@ -192,6 +197,16 @@ export function AppLayout() {
    * AdminHistoryPage) is intentionally hidden from navigation for both roles —
    * its routes/components are untouched, just not linked here. Admins never
    * have subsidiaryId set, so exactly one branch below applies to a given user. */
+  // Standalone, section-less nav item at the very top — the new post-login
+  // landing page (see App.tsx's DefaultLanding) for both roles. Hidden for a
+  // standard user with no subsidiary, same gating the sections below already
+  // use, since the subsidiary dashboard has nothing meaningful to show them.
+  const dashboardNavItem: NavItem | null = isAdmin
+    ? { to: "/admin/dashboard", label: "Dashboard", icon: <DashboardIcon />, exact: true }
+    : user?.subsidiaryId
+      ? { to: "/dashboard", label: "Dashboard", icon: <DashboardIcon />, exact: true }
+      : null;
+
   const sections: NavSection[] = isAdminRole(user?.role)
     ? [
         {
@@ -419,6 +434,12 @@ export function AppLayout() {
         <Divider sx={{ borderColor: sidebarTokens.divider }} />
 
         <List sx={{ px: 1.25, py: 1.5, flexGrow: 1 }}>
+          {dashboardNavItem && (
+            <Box sx={{ mb: 1.5 }}>
+              {renderNavItem(dashboardNavItem)}
+              <Divider sx={{ borderColor: sidebarTokens.divider, mt: 1 }} />
+            </Box>
+          )}
           {sections.map((section, i) => {
             const sectionOpen = openSections[section.label] ?? true;
             return (
@@ -473,19 +494,19 @@ export function AppLayout() {
 
         <Box sx={{ p: 1.25 }}>
           {collapsed ? (
-            <Tooltip title={`${user?.username} · ${user?.role}`} placement="right">
+            <Tooltip title={`${displayName} · ${user?.role}`} placement="right">
               <Avatar sx={{ bgcolor: sidebarTokens.avatarBg, color: sidebarTokens.contrastText, mx: "auto", mb: 1 }}>
-                {user?.username?.[0]?.toUpperCase() ?? "?"}
+                {displayName?.[0]?.toUpperCase() ?? "?"}
               </Avatar>
             </Tooltip>
           ) : (
             <Chip
               avatar={
                 <Avatar sx={{ bgcolor: sidebarTokens.avatarBgStrong, color: sidebarTokens.contrastText }}>
-                  {user?.username?.[0]?.toUpperCase() ?? "?"}
+                  {displayName?.[0]?.toUpperCase() ?? "?"}
                 </Avatar>
               }
-              label={`${user?.username} · ${user?.role}`}
+              label={`${displayName} · ${user?.role}`}
               sx={{
                 width: "100%",
                 justifyContent: "flex-start",

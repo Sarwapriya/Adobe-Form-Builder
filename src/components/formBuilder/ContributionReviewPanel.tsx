@@ -98,6 +98,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
   const loading = useFormBuilderStore((s) => s.contributionsLoading);
   const refresh = useFormBuilderStore((s) => s.refreshContributions);
   const [error, setError] = useState<string | null>(null);
+  const [deployWarning, setDeployWarning] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewContribution, setPreviewContribution] = useState<ContributionSummary | null>(null);
   const [qaContribution, setQaContribution] = useState<ContributionSummary | null>(null);
@@ -130,8 +131,14 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
   async function handleDeploy() {
     setBusyId("__publish__");
     setError(null);
+    setDeployWarning(null);
     try {
-      await apiPublishForm(formId);
+      const result = await apiPublishForm(formId);
+      if (result.deployment && !result.deployment.ok) {
+        setDeployWarning(
+          `Deployed. SFTP delivery to the campaign server failed (${result.deployment.error}) — this is expected off the office network; retry once connected.`,
+        );
+      }
       await Promise.all([refresh(), reloadForm(formId)]);
     } catch (err) {
       if (err instanceof FormInvalidError) {
@@ -197,6 +204,12 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
       {error && (
         <Alert severity="error" sx={{ mb: 1.5, borderRadius: 2 }}>
           {error}
+        </Alert>
+      )}
+
+      {deployWarning && (
+        <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 2 }} onClose={() => setDeployWarning(null)}>
+          {deployWarning}
         </Alert>
       )}
 

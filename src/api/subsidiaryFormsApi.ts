@@ -134,3 +134,53 @@ export interface ContributionSummaryWithForm extends ContributionSummary {
 export function listMyAllContributions(): Promise<ContributionSummaryWithForm[]> {
   return apiClient.get<ContributionSummaryWithForm[]>("/api/v1/forms/contributions/mine");
 }
+
+/**
+ * Backs the subsidiary user's "Dashboard" landing page — scoped to their own
+ * ad-hoc campaigns only (see backend's dashboardService.ts). Unlike the admin
+ * dashboard's "Approved" bucket, an ad-hoc form's own pendingReview/reviewNote
+ * fields already keep these four states mutually exclusive, so there's no
+ * priority rule to know about here.
+ */
+export interface SubsidiaryDashboardCounts {
+  total: number;
+  drafts: number;
+  pendingReview: number;
+  changesRequested: number;
+  published: number;
+}
+
+export type SubsidiaryFormBucket = "pendingReview" | "published" | "changesRequested" | "draft";
+
+export interface RecentCampaignItem {
+  id: string;
+  name: string;
+  bucket: SubsidiaryFormBucket;
+  updatedAt: string;
+}
+
+export interface ContinueWorkingItem {
+  id: string;
+  name: string;
+  updatedAt: string;
+  /** 0 means the draft is ready to submit for review. */
+  issueCount: number;
+}
+
+export interface ActionRequiredItem {
+  id: string;
+  name: string;
+  reviewNote: string;
+  reviewedAt: string | null;
+}
+
+export interface SubsidiaryDashboardSummary {
+  counts: SubsidiaryDashboardCounts;
+  recentCampaigns: RecentCampaignItem[];
+  continueWorking: ContinueWorkingItem[];
+  actionRequired: ActionRequiredItem[];
+}
+
+export function getMyDashboardSummary(): Promise<SubsidiaryDashboardSummary> {
+  return apiClient.get<SubsidiaryDashboardSummary>("/api/v1/forms/dashboard-summary");
+}
