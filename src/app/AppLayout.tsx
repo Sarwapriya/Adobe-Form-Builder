@@ -169,10 +169,8 @@ export function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true");
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   /** Section-header accordion state (distinct from the sidebar-rail `collapsed`
-   * above). "Excel Upload" always starts closed for every user — the section's
-   * items only appear once the user clicks the header to expand it. Every other
-   * section defaults open (see the `?? true` fallback below). */
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ "Excel Upload": false });
+   * above) — every section defaults open (see the `?? true` fallback below). */
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
@@ -193,10 +191,8 @@ export function AppLayout() {
   /** Every nav item lives inside a labeled section — admin and subsidiary users
    * each get their own set: a "Form Configuration" group for the form-builder
    * side, and a general "Configuration"/"Administration" group for everything
-   * else. The Excel-upload workflow (UploadHistoryPage, AdminDashboardPage,
-   * AdminHistoryPage) is intentionally hidden from navigation for both roles —
-   * its routes/components are untouched, just not linked here. Admins never
-   * have subsidiaryId set, so exactly one branch below applies to a given user. */
+   * else. Admins never have subsidiaryId set, so exactly one branch below
+   * applies to a given user. */
   // Standalone, section-less nav item at the very top — the new post-login
   // landing page (see App.tsx's DefaultLanding) for both roles. Hidden for a
   // standard user with no subsidiary, same gating the sections below already
