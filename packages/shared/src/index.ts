@@ -5,11 +5,10 @@
  * intentionally not exported here.
  */
 
-// Excel parsing/mapping/validation pipeline
-export { isSupportedExcelFile, parseWorkbook } from "./excel/parser";
-export { mapWorkbook, type MapResult } from "./excel/mapper";
-export { validateWorkbook } from "./excel/validator";
-export { resolveLocales, ENGLISH_LOCALE, type LocaleResolution, type UnresolvedLocale } from "./excel/localeDetection";
+// Issue/ValidationResult (from excel/types.ts) are also the shared vocabulary
+// for the non-Excel, schema-authored validator below (form/formDefinitionValidator.ts)
+// and for contribution merging (form/contribution.ts) — kept even though the
+// Excel parsing/mapping/validation pipeline itself has been removed.
 export type { Issue, ParsedWorkbook, RawRow, ValidationResult, WorkbookMeta } from "./excel/types";
 
 // Question Master admin export — flat per-(subsidiary, locale, question/field) report,

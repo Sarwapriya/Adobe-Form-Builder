@@ -64,9 +64,9 @@ docker run -p 4000:4000 --env-file backend/.env \
 
 The Dockerfile already builds `packages/shared` before `backend/` (both
 stages) and copies only the compiled `dist/` output into the runtime image —
-no source, no devDependencies. The `uploads/` volume is where every stored
-workbook and generated solution file lives; back it up like you would a
-database.
+no source, no devDependencies. The `uploads/` volume is where every
+generated solution file, QA report, and Question Master export lives; back
+it up like you would a database.
 
 ### Bare Node (no Docker)
 
@@ -111,9 +111,6 @@ host/CDN. Two things that trip people up:
 - **The `packages/shared` build must run first**, same as for the backend —
   add `npm run build --workspace=packages/shared &&` in front of whatever
   build command your static-hosting CI is configured to run.
-
-The existing no-login wizard at `/local` needs no extra configuration — it's
-fully client-side and doesn't call the backend at all.
 
 ## 4. Cookie/CORS topology (important)
 
