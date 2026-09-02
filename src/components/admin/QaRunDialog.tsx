@@ -55,32 +55,29 @@ const POLL_INTERVAL_MS = 2000;
 /** A stable string key for a QaRunSubject — for effect dependency arrays,
  * since the subject object itself is a fresh reference on every render. */
 function subjectKey(subject: QaRunSubject): string {
-  return subject.kind === "upload" ? subject.uploadId : subject.kind === "contribution" ? subject.contributionId : subject.formId;
+  return subject.kind === "contribution" ? subject.contributionId : subject.formId;
 }
 
 const SUBJECT_NOUN: Record<QaRunSubject["kind"], string> = {
-  upload: "upload",
   contribution: "submission",
   adhoc: "form",
 };
 
 /**
- * Admin-only "run QA automation" dialog for one subject — an upload's
- * submitted output, a pending Translate & Extend contribution, or an ad-hoc
- * form awaiting review: pick a generated variant (Full Form / One-Click),
- * trigger a real Playwright run (see backend qaRunService.ts — a
- * headless-Chromium session against the exact same self-contained
- * HTML/CSS/JS the "Preview" button renders — an upload's already-generated
- * output for an "upload" subject, or an in-memory merge/generate for a
- * "contribution"/"adhoc" subject that hasn't been approved/published yet),
- * watch it move from pending -> running -> passed/failed/error, then inspect
- * every individual test case (which fields need fixing, and why) or
- * download the whole thing as a standalone HTML report.
+ * Admin-only "run QA automation" dialog for one subject — a pending
+ * Translate & Extend contribution, or an ad-hoc form awaiting review: pick a
+ * generated variant (Full Form / One-Click), trigger a real Playwright run
+ * (see backend qaRunService.ts — a headless-Chromium session against the
+ * exact same self-contained HTML/CSS/JS the "Preview" button renders, via an
+ * in-memory merge/generate for a "contribution"/"adhoc" subject that hasn't
+ * been approved/published yet), watch it move from pending -> running ->
+ * passed/failed/error, then inspect every individual test case (which fields
+ * need fixing, and why) or download the whole thing as a standalone HTML
+ * report.
  *
  * `availableVariants` restricts the picker to whichever variant(s) this
- * subject actually offers (Upload.variants for an upload, the form's own
- * BuilderConfig.variants otherwise) — offering one that isn't available
- * would just lead to a 409 from the backend's own check.
+ * subject's form's own BuilderConfig.variants actually offers — offering one
+ * that isn't available would just lead to a 409 from the backend's own check.
  */
 export function QaRunDialog({
   subject,

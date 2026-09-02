@@ -57,41 +57,6 @@ export function generateQuestionMaster(projectCode: string, division: string): P
   return apiClient.post<QuestionMasterVersion>("/api/v1/admin/question-master/generate", { projectCode, division });
 }
 
-/** Excel-upload-flow counterpart to `QuestionMasterReadinessItem` — one row per active
- * subsidiary's most recent Excel upload under a project code. */
-export interface QuestionMasterUploadReadinessItem {
-  uploadId: string;
-  fileName: string;
-  subsidiaryId: string;
-  status: "uploaded" | "generated" | "submitted" | "failed";
-  version: number | null;
-  /** The gate this page's "Generate from Excel Uploads" button/warnings key off —
-   * true only once this subsidiary's most recent upload under the project has
-   * actually been submitted. */
-  readyForExport: boolean;
-}
-
-/** GET /api/v1/admin/question-master/upload-readiness?projectCode= — additive
- * counterpart to getQuestionMasterReadiness: every active subsidiary's most recent
- * Excel upload under a project code, plus whether it's been submitted yet. */
-export function getQuestionMasterUploadReadiness(projectCode: string): Promise<QuestionMasterUploadReadinessItem[]> {
-  return apiClient.get<QuestionMasterUploadReadinessItem[]>(
-    `/api/v1/admin/question-master/upload-readiness?projectCode=${encodeURIComponent(projectCode)}`,
-  );
-}
-
-/** POST /api/v1/admin/question-master/generate-from-uploads — additive counterpart to
- * generateQuestionMaster: compiles every submitted Excel upload under the project code
- * into a new, versioned Question Master .xlsx (see backend
- * questionMasterService.generateQuestionMasterFromUploads). Doesn't touch or replace
- * the Form-Initiator-based generate() above — an admin chooses one or the other. */
-export function generateQuestionMasterFromUploads(projectCode: string, division: string): Promise<QuestionMasterVersion> {
-  return apiClient.post<QuestionMasterVersion>("/api/v1/admin/question-master/generate-from-uploads", {
-    projectCode,
-    division,
-  });
-}
-
 /** GET /api/v1/admin/question-master/versions?projectCode= — every version generated
  * for a project code, newest first (both generation paths, distinguished by `source`). */
 export function listQuestionMasterVersions(projectCode: string): Promise<QuestionMasterVersion[]> {

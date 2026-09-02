@@ -1,96 +1,10 @@
 import { apiClient } from "./apiClient";
-import type { PagedResult, UploadListItem, UploadStatus } from "./uploadsApi";
 import type { ProjectCode } from "./projectCodesApi";
 import type { Subsidiary } from "./subsidiariesApi";
 import type { SubsidiaryLocale } from "./subsidiaryLocalesApi";
 
 export type { ProjectCode } from "./projectCodesApi";
 export type { Subsidiary } from "./subsidiariesApi";
-
-export interface AdminUploadListItem extends UploadListItem {
-  username: string | null;
-}
-
-// A type alias (not an interface) — object type aliases get an implicit
-// string index signature when every property is string/number/undefined,
-// which is what lets buildQuery()'s `Record<string, ...>` parameter accept
-// this directly below. An `interface` here would not, and does not
-// consistently surface as an error outside a full `tsc -b` build (see
-// git history for this comment if that ever seems surprising again).
-export type AdminListParams = {
-  subsidiaryId?: string;
-  projectCode?: string;
-  userId?: string;
-  status?: UploadStatus;
-  search?: string;
-  page?: number;
-  pageSize?: number;
-  sortBy?: "uploadDate" | "subsidiaryId" | "status" | "version" | "fileName";
-  sortDir?: "ASC" | "DESC";
-};
-
-function buildQuery(params: Record<string, string | number | undefined>): string {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== "") search.set(key, String(value));
-  }
-  const query = search.toString();
-  return query ? `?${query}` : "";
-}
-
-/** GET /api/v1/admin/uploads — submitted uploads across every user, with
- * search/filter/sort/pagination. Admin-only (the backend's requireAdmin
- * middleware enforces this regardless of what the frontend does). An upload
- * only appears here once its uploader has submitted it — see AdminHistoryPage
- * for the full record including in-progress and failed uploads. */
-export function listUploadsForAdmin(params: AdminListParams = {}): Promise<PagedResult<AdminUploadListItem>> {
-  return apiClient.get<PagedResult<AdminUploadListItem>>(`/api/v1/admin/uploads${buildQuery(params)}`);
-}
-
-/** GET /api/v1/admin/history — every generated, submitted, or failed upload
- * across every user (the "All history" page). A "generated" row here is
- * still not-yet-submitted, so it's only guaranteed to show up until its
- * owner's next login purges it if they never submit it (see
- * uploadCleanupService.ts). */
-export function listUploadHistoryForAdmin(params: AdminListParams = {}): Promise<PagedResult<AdminUploadListItem>> {
-  return apiClient.get<PagedResult<AdminUploadListItem>>(`/api/v1/admin/history${buildQuery(params)}`);
-}
-
-export interface UploadHistorySummary {
-  total: number;
-  generated: number;
-  submitted: number;
-  failed: number;
-}
-
-/** GET /api/v1/admin/history/summary — status breakdown for AdminHistoryPage's
- * summary tiles, respecting the same subsidiary/projectCode/search filters as
- * listUploadHistoryForAdmin (its own `status` field is ignored server-side,
- * since the point is to show all three counts regardless of which one the
- * grid is currently filtered to). */
-export function getUploadHistorySummary(params: AdminListParams = {}): Promise<UploadHistorySummary> {
-  return apiClient.get<UploadHistorySummary>(`/api/v1/admin/history/summary${buildQuery(params)}`);
-}
-
-export function listVersionsForSubsidiary(subsidiaryName: string): Promise<UploadListItem[]> {
-  return apiClient.get<UploadListItem[]>(`/api/v1/admin/subsidiary/${encodeURIComponent(subsidiaryName)}`);
-}
-
-export function downloadUploadZip(uploadId: string): Promise<Blob> {
-  return apiClient.getBlob(`/api/v1/admin/download/${uploadId}`);
-}
-
-export function downloadSubsidiaryZip(subsidiaryName: string, version?: number): Promise<Blob> {
-  const query = version ? `?version=${version}` : "";
-  return apiClient.getBlob(`/api/v1/admin/download/subsidiary/${encodeURIComponent(subsidiaryName)}${query}`);
-}
-
-/** GET /api/v1/admin/preview/:uploadId — a single self-contained HTML document
- * (CSS/JS inlined server-side, see previewService.ts) for the admin
- * dashboard's "Preview" button. Defaults to the Full Form variant. */
-export function previewUpload(uploadId: string, variant: "ff" | "oc" = "ff"): Promise<Blob> {
-  return apiClient.getBlob(`/api/v1/admin/preview/${uploadId}?variant=${variant}`);
-}
 
 export type AdminUserRole = "admin" | "standard" | "superadmin";
 
