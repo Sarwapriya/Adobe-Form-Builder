@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { FileNames, GeneratedFile as SharedGeneratedFile } from "@formbuilder/shared";
 import { AppDataSource } from "../config/data-source";
-import { Upload } from "../entities/Upload";
 import { Form } from "../entities/Form";
 import { GeneratedFile as GeneratedFileEntity } from "../entities/GeneratedFile";
 import { absoluteFilePath } from "./fileService";
@@ -33,74 +32,14 @@ function inlineScript(html: string, file: GeneratedFileEntity | undefined, conte
 }
 
 /**
- * Builds a single self-contained HTML document for one upload's generated
- * form, for the admin dashboard's "Preview" button — same inlining technique
- * as the /local wizard's buildPreviewDocument (src/codegen/previewDocument.ts),
- * reimplemented here against on-disk GeneratedFiles rows rather than an
- * in-memory GeneratedFile[], since the admin dashboard previews an upload
- * that was generated server-side, possibly in a previous request entirely.
- *
- * Falls back to whichever variant *was* actually generated if the requested
- * one wasn't — the uploader may have only requested Full Form or only
- * One-Click (see Upload.variants), and the "View" button doesn't know which
- * up front, so this is friendlier than a flat 409 for the common case.
- *
- * `strict: true` disables that fallback and returns `no_files` outright if
- * the exact requested variant wasn't generated — used by qaRunService, where
- * silently substituting the other variant would run (and label) a QA report
- * against the wrong form entirely.
- */
-export async function buildUploadPreview(
-  uploadId: string,
-  variant: PreviewVariant,
-  strict = false,
-): Promise<PreviewResult> {
-  const upload = await AppDataSource.getRepository(Upload).findOne({ where: { id: uploadId, isDeleted: false } });
-  if (!upload) {
-    return { outcome: "not_found" };
-  }
-
-  const files = await AppDataSource.getRepository(GeneratedFileEntity).find({ where: { uploadId } });
-  if (files.length === 0) {
-    return { outcome: "no_files" };
-  }
-
-  const suffixFor = (v: PreviewVariant) => (v === "ff" ? "_FF" : "_OC");
-  const findHtml = (v: PreviewVariant) => files.find((f) => f.fileType === "html" && f.fileName.endsWith(`${suffixFor(v)}.html`));
-
-  const requestedHtml = findHtml(variant);
-  const fallbackVariant: PreviewVariant = variant === "ff" ? "oc" : "ff";
-  const htmlFile = requestedHtml ?? (strict ? undefined : findHtml(fallbackVariant));
-  const resolvedVariant = requestedHtml ? variant : fallbackVariant;
-  if (!htmlFile) {
-    return { outcome: "no_files" };
-  }
-  const suffix = suffixFor(resolvedVariant);
-  const jsFile = files.find((f) => f.fileType === "js" && f.fileName.endsWith(`${suffix}.js`));
-  const cssFile = files.find((f) => f.fileType === "css");
-  const dataJsFile = files.find((f) => f.fileType === "data-js");
-
-  const [html, css, dataJs, behaviorJs] = await Promise.all([
-    readGeneratedFile(htmlFile),
-    cssFile ? readGeneratedFile(cssFile) : Promise.resolve(""),
-    dataJsFile ? readGeneratedFile(dataJsFile) : Promise.resolve(""),
-    jsFile ? readGeneratedFile(jsFile) : Promise.resolve(""),
-  ]);
-
-  const inlined = inlineScript(inlineScript(inlineLink(html, cssFile, css), dataJsFile, dataJs), jsFile, behaviorJs);
-
-  return { outcome: "ok", html: inlined };
-}
-
-/**
- * Same self-contained-HTML inlining as buildUploadPreview/buildFormVersionPreview
- * above, but sourced directly from an in-memory `generateSolution()` output rather
+ * Same self-contained-HTML inlining as buildFormVersionPreview below, but
+ * sourced directly from an in-memory `generateSolution()` output rather
  * than on-disk GeneratedFiles rows — for QA runs against content that has no
  * GeneratedFiles rows to read yet (a pending subsidiary contribution merged onto a
  * form's current draft, or an ad-hoc form's own draft while it awaits admin review;
  * see qaRunService.createContributionQaRun/createAdHocReviewQaRun). Returns null if
  * the requested variant's HTML wasn't in `files` (e.g. it wasn't in the config's own
- * `variants` list), mirroring the two functions above's `no_files` outcome.
+ * `variants` list), mirroring buildFormVersionPreview's own `no_files` outcome.
  */
 export function inlineGeneratedFiles(files: SharedGeneratedFile[], fileNames: FileNames, variant: PreviewVariant): string | null {
   const suffix = variant === "ff" ? "_FF" : "_OC";
@@ -119,11 +58,13 @@ export function inlineGeneratedFiles(files: SharedGeneratedFile[], fileNames: Fi
 }
 
 /**
- * Builder-authored counterpart to buildUploadPreview above — same self-contained-HTML
- * inlining technique (reusing this file's own file-scoped readGeneratedFile/inlineLink/
- * inlineScript helpers), against a Form's *published* FormVersion instead of an Upload.
- * Only ever serves a currently-published form (`status === "published"`) — an
- * unpublished form's previously-generated files stay on disk but become unreachable
+ * Builds a single self-contained HTML document for a Form's *published*
+ * FormVersion — same inlining technique as the /local wizard's
+ * buildPreviewDocument (src/codegen/previewDocument.ts), reimplemented here
+ * against on-disk GeneratedFiles rows (reusing this file's own file-scoped
+ * readGeneratedFile/inlineLink/inlineScript helpers). Only ever serves a
+ * currently-published form (`status === "published"`) — an unpublished
+ * form's previously-generated files stay on disk but become unreachable
  * here, reversible by re-publishing (see formBuilderService.unpublishForm).
  */
 export async function buildFormVersionPreview(formId: string, variant: PreviewVariant, strict = false): Promise<PreviewResult> {

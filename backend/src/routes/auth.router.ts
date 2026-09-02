@@ -14,7 +14,6 @@ import {
   validateCredentials,
   REFRESH_TOKEN_TTL_MS,
 } from "../services/authService";
-import { cleanupUnsubmittedUploads } from "../services/uploadCleanupService";
 
 export const authRouter = Router();
 
@@ -56,10 +55,6 @@ authRouter.post(
       res.status(401).json({ error: "invalid credentials" });
       return;
     }
-
-    // Purge this user's never-submitted uploads from a previous session before
-    // they see their upload history again — see uploadCleanupService.ts.
-    await cleanupUnsubmittedUploads(user.id);
 
     const accessToken = issueAccessToken(user);
     const refreshToken = await issueRefreshToken(user, req.ip);

@@ -1,6 +1,5 @@
 import "reflect-metadata";
 import { DataSource } from "typeorm";
-import { Upload } from "../entities/Upload";
 import { AdminSetting } from "../entities/AdminSetting";
 import { User } from "../entities/User";
 import { RefreshToken } from "../entities/RefreshToken";
@@ -53,7 +52,6 @@ import { AddClaudeModels1980000000000 } from "../migrations/1980000000000-AddCla
 import { RenameClaudeModelsToOtherAiModels1990000000000 } from "../migrations/1990000000000-RenameClaudeModelsToOtherAiModels";
 
 const entities = [
-  Upload,
   AdminSetting,
   User,
   RefreshToken,

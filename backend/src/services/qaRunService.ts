@@ -13,50 +13,19 @@ import {
 import { AppDataSource } from "../config/data-source";
 import { QaRun, type QaRunVariant } from "../entities/QaRun";
 import { QaTestCaseResult } from "../entities/QaTestCaseResult";
-import { Upload } from "../entities/Upload";
 import { Form } from "../entities/Form";
 import { FormVersion } from "../entities/FormVersion";
 import { FormContribution } from "../entities/FormContribution";
-import { buildUploadPreview, inlineGeneratedFiles } from "./previewService";
+import { inlineGeneratedFiles } from "./previewService";
 import { runQaSuite } from "./qa/qaTestRunner";
 import type { QaCheckResult } from "./qa/types";
-import { absoluteFilePath, formQaStorageDir, uploadStorageDir } from "./fileService";
+import { absoluteFilePath, formQaStorageDir } from "./fileService";
 
 export type CreateQaRunOutcome =
   | { outcome: "not_found" }
   | { outcome: "no_files" }
   | { outcome: "invalid"; validation: ValidationResult }
   | { outcome: "ok"; qaRun: QaRun };
-
-/**
- * Kicks off a QA run for one upload's generated variant: validates the
- * upload/variant actually has generated files (reusing
- * previewService.buildUploadPreview — the exact same self-contained
- * HTML/CSS/JS the admin "Preview" button already renders, so what gets
- * QA-tested is byte-for-byte what an admin would see), persists a "pending"
- * QaRun row, then fires the real Playwright execution in the background
- * (deliberately not awaited here) so the request returns immediately — see
- * runQaJob below and admin.router.ts's POST /qa-runs, which the frontend
- * polls GET /qa-runs/:id against until status leaves "pending"/"running".
- *
- * Uses buildUploadPreview's `strict` mode — unlike the "Preview" button, a
- * QA run must never silently substitute the other variant: the uploader may
- * have only ever generated Full Form (see Upload.variants), and running (and
- * labeling) a QA report against One-Click in that case would misreport which
- * form was actually checked.
- */
-export async function createQaRun(uploadId: string, variant: QaRunVariant, triggeredByUserId: string): Promise<CreateQaRunOutcome> {
-  const preview = await buildUploadPreview(uploadId, variant, true);
-  if (preview.outcome === "not_found") return { outcome: "not_found" };
-  if (preview.outcome === "no_files") return { outcome: "no_files" };
-
-  const repo = AppDataSource.getRepository(QaRun);
-  const qaRun = await repo.save(repo.create({ uploadId, formId: null, contributionId: null, variant, status: "pending", triggeredByUserId }));
-
-  void runQaJob(qaRun.id, preview.html!);
-
-  return { outcome: "ok", qaRun };
-}
 
 /** Validates+generates `definition`/`config` in memory (never touching disk/
  * GeneratedFiles) and inlines it into one self-contained HTML document for
@@ -160,12 +129,12 @@ export async function createAdHocReviewQaRun(formId: string, variant: QaRunVaria
  * guarantees it eventually resolves or throws.
  *
  * There is no queue/worker process behind this — it's a plain fire-and-forget
- * async call from createQaRun, running in the same Node process as the API
- * server. That's a deliberate, documented limitation for this feature's
- * current scope: a server restart mid-run leaves that one QaRun stuck at
- * "running" forever (rare in practice, and always resolvable by re-running
- * QA for that upload), rather than something worth a persistent job queue
- * for a feature used this occasionally.
+ * async call from createContributionQaRun/createAdHocReviewQaRun, running in
+ * the same Node process as the API server. That's a deliberate, documented
+ * limitation for this feature's current scope: a server restart mid-run
+ * leaves that one QaRun stuck at "running" forever (rare in practice, and
+ * always resolvable by re-running QA), rather than something worth a
+ * persistent job queue for a feature used this occasionally.
  */
 async function runQaJob(qaRunId: string, html: string): Promise<void> {
   const qaRunRepo = AppDataSource.getRepository(QaRun);
@@ -216,10 +185,6 @@ export function getQaRun(id: string): Promise<QaRun | null> {
   return AppDataSource.getRepository(QaRun).findOne({ where: { id } });
 }
 
-export function listQaRunsForUpload(uploadId: string): Promise<QaRun[]> {
-  return AppDataSource.getRepository(QaRun).find({ where: { uploadId }, order: { createdAt: "DESC" } });
-}
-
 /** Every QA run ever triggered for one Configuration form, newest first —
  * covers both contribution-based runs and ad-hoc pending-review runs alike,
  * since both set `formId` (see createContributionQaRun/createAdHocReviewQaRun). */
@@ -228,14 +193,10 @@ export function listQaRunsForForm(formId: string): Promise<QaRun[]> {
 }
 
 /** Resolves the subsidiaryId (for report storage) and a human-readable label
- * (for the report's own header) for either subject kind a QaRun can have —
+ * (for the report's own header) for a QaRun's Configuration-form subject —
  * looked up once per completed run rather than carried on the row itself,
  * since a form's name can change after the run without needing to update it. */
 async function resolveQaRunSubject(qaRun: QaRun): Promise<{ subsidiaryId: string; subjectLabel: string }> {
-  if (qaRun.uploadId) {
-    const upload = await AppDataSource.getRepository(Upload).findOneOrFail({ where: { id: qaRun.uploadId } });
-    return { subsidiaryId: upload.subsidiaryId, subjectLabel: `Upload ${upload.fileName} (${upload.id})` };
-  }
   const form = await AppDataSource.getRepository(Form).findOneOrFail({ where: { id: qaRun.formId! } });
   const subjectLabel = qaRun.contributionId
     ? `Form "${form.name}" · pending contribution ${qaRun.contributionId}`
@@ -273,11 +234,9 @@ const CATEGORY_LABELS: Record<string, string> = {
  * Builds the downloadable HTML report — a single self-contained document
  * (no external assets) grouped by category, so an admin can open it directly
  * or send it to whoever owns fixing a failing field. Written to disk under
- * the same upload storage directory GeneratedFiles already use (see
- * fileService.uploadStorageDir) for an upload-based run, or the parallel
- * per-form QA directory (fileService.formQaStorageDir) for a Configuration-form
- * run — not the database, since reports can run to a few hundred rows and
- * there's no reason to carry that in every QaRun query.
+ * the per-form QA directory (fileService.formQaStorageDir) — not the
+ * database, since reports can run to a few hundred rows and there's no
+ * reason to carry that in every QaRun query.
  */
 async function writeQaReport(subsidiaryId: string, subjectLabel: string, qaRun: QaRun, results: QaCheckResult[]): Promise<string> {
   const byCategory = new Map<string, QaCheckResult[]>();
@@ -343,10 +302,7 @@ ${sections}
 </html>
 `;
 
-  const relativePath = path.join(
-    qaRun.uploadId ? path.join(uploadStorageDir(subsidiaryId, qaRun.uploadId), "qa") : formQaStorageDir(subsidiaryId, qaRun.formId!),
-    `${qaRun.id}.html`,
-  );
+  const relativePath = path.join(formQaStorageDir(subsidiaryId, qaRun.formId!), `${qaRun.id}.html`);
   const absolutePath = absoluteFilePath(relativePath);
   await fsp.mkdir(path.dirname(absolutePath), { recursive: true });
   await fsp.writeFile(absolutePath, html, "utf-8");

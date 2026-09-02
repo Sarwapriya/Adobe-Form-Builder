@@ -1,19 +1,8 @@
-import { Router, type Request } from "express";
+import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../utils/asyncHandler";
-import { parsePositiveInt } from "../utils/queryParsing";
 import { requireAdmin } from "../middleware/authJwt";
 import { validateBody } from "../middleware/validate";
-import {
-  buildSubsidiaryZip,
-  buildUploadZip,
-  getUploadHistorySummary,
-  listUploadHistoryForAdmin,
-  listUploadsForAdmin,
-  listVersionsForSubsidiary,
-  type AdminListFilters,
-} from "../services/adminUploadService";
-import { computeDiff } from "../services/diffService";
 import {
   createUser,
   findUserById,
@@ -22,7 +11,6 @@ import {
   setUserNotificationEmails,
   updateUser,
 } from "../services/authService";
-import { buildUploadPreview, type PreviewVariant } from "../services/previewService";
 import {
   createProjectCode,
   listProjectCodes,
@@ -52,10 +40,8 @@ import {
   buildQaReportDownload,
   createAdHocReviewQaRun,
   createContributionQaRun,
-  createQaRun,
   getQaRunDetail,
   listQaRunsForForm,
-  listQaRunsForUpload,
 } from "../services/qaRunService";
 import { sendTestEmail } from "../services/emailService";
 import { getSmtpSettingsForDisplay, saveSmtpSettings } from "../services/smtpSettingsService";
@@ -75,149 +61,14 @@ import { getSftpDeploymentSettings, saveSftpTarget, setActiveSftpEnvironment } f
 import { getAdminDashboardSummary } from "../services/dashboardService";
 import {
   generateQuestionMaster,
-  generateQuestionMasterFromUploads,
   getReadiness as getQuestionMasterReadiness,
-  getUploadReadiness as getQuestionMasterUploadReadiness,
   getVersionFile as getQuestionMasterVersionFile,
   listVersions as listQuestionMasterVersions,
 } from "../services/questionMasterService";
-import type { UploadStatus } from "../entities/Upload";
 
 export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
-
-const UPLOAD_STATUS_VALUES = new Set<UploadStatus>(["uploaded", "generated", "submitted", "failed"]);
-function isUploadStatus(value: unknown): value is UploadStatus {
-  return typeof value === "string" && UPLOAD_STATUS_VALUES.has(value as UploadStatus);
-}
-
-const ADMIN_SORT_BY_VALUES = new Set(["uploadDate", "subsidiaryId", "status", "version", "fileName"]);
-function isAdminSortBy(value: unknown): value is NonNullable<AdminListFilters["sortBy"]> {
-  return typeof value === "string" && ADMIN_SORT_BY_VALUES.has(value);
-}
-
-function parseListFilters(req: Request): AdminListFilters {
-  return {
-    subsidiaryId: typeof req.query.subsidiaryId === "string" ? req.query.subsidiaryId : undefined,
-    projectCode: typeof req.query.projectCode === "string" ? req.query.projectCode : undefined,
-    userId: typeof req.query.userId === "string" ? req.query.userId : undefined,
-    status: isUploadStatus(req.query.status) ? req.query.status : undefined,
-    search: typeof req.query.search === "string" ? req.query.search : undefined,
-    page: parsePositiveInt(req.query.page),
-    pageSize: parsePositiveInt(req.query.pageSize),
-    sortBy: isAdminSortBy(req.query.sortBy) ? req.query.sortBy : undefined,
-    sortDir: req.query.sortDir === "ASC" || req.query.sortDir === "DESC" ? req.query.sortDir : undefined,
-  };
-}
-
-adminRouter.get(
-  "/uploads",
-  asyncHandler(async (req, res) => {
-    const result = await listUploadsForAdmin(parseListFilters(req));
-    res.json(result);
-  })
-);
-
-// Every upload that ever reached a final state (submitted or failed) across
-// every user — the audit trail behind the main dashboard's submitted-only
-// view. See adminUploadService.ts's HISTORY_STATUSES.
-adminRouter.get(
-  "/history",
-  asyncHandler(async (req, res) => {
-    const result = await listUploadHistoryForAdmin(parseListFilters(req));
-    res.json(result);
-  })
-);
-
-// Status breakdown for the "All history" page's summary tiles — respects the
-// same subsidiary/projectCode/search filters as /history, but deliberately
-// ignores its `status` filter so all three counts stay meaningful regardless
-// of which status the admin currently has selected there.
-adminRouter.get(
-  "/history/summary",
-  asyncHandler(async (req, res) => {
-    const summary = await getUploadHistorySummary(parseListFilters(req));
-    res.json(summary);
-  })
-);
-
-adminRouter.get(
-  "/subsidiary/:name",
-  asyncHandler(async (req, res) => {
-    const versions = await listVersionsForSubsidiary(req.params.name);
-    res.json(versions);
-  })
-);
-
-adminRouter.get(
-  "/download/:uploadId",
-  asyncHandler(async (req, res) => {
-    const result = await buildUploadZip(req.params.uploadId);
-    if (result.outcome === "not_found") {
-      res.status(404).json({ error: "upload not found" });
-      return;
-    }
-    if (result.outcome === "no_files") {
-      res.status(409).json({ error: "this upload has no generated files yet" });
-      return;
-    }
-    res.set("Content-Type", "application/zip");
-    res.set("Content-Disposition", `attachment; filename="${result.fileName}"`);
-    res.send(Buffer.from(result.buffer!));
-  })
-);
-
-adminRouter.get(
-  "/download/subsidiary/:name",
-  asyncHandler(async (req, res) => {
-    const version = parsePositiveInt(req.query.version);
-    const result = await buildSubsidiaryZip(req.params.name, version);
-    if (result.outcome === "not_found") {
-      res.status(404).json({ error: "no matching upload found for this subsidiary" });
-      return;
-    }
-    if (result.outcome === "no_files") {
-      res.status(409).json({ error: "this upload has no generated files yet" });
-      return;
-    }
-    res.set("Content-Type", "application/zip");
-    res.set("Content-Disposition", `attachment; filename="${result.fileName}"`);
-    res.send(Buffer.from(result.buffer!));
-  })
-);
-
-adminRouter.get(
-  "/preview/:uploadId",
-  asyncHandler(async (req, res) => {
-    const variant: PreviewVariant = req.query.variant === "oc" ? "oc" : "ff";
-    const result = await buildUploadPreview(req.params.uploadId, variant);
-    if (result.outcome === "not_found") {
-      res.status(404).json({ error: "upload not found" });
-      return;
-    }
-    if (result.outcome === "no_files") {
-      res.status(409).json({ error: "this upload has no generated files yet" });
-      return;
-    }
-    res.set("Content-Type", "text/html");
-    res.send(result.html);
-  })
-);
-
-adminRouter.get(
-  "/diff",
-  asyncHandler(async (req, res) => {
-    const { oldFileId, newFileId } = req.query;
-    if (typeof oldFileId !== "string" || typeof newFileId !== "string") {
-      res.status(400).json({ error: "oldFileId and newFileId query params are required" });
-      return;
-    }
-
-    const diff = await computeDiff(oldFileId, newFileId);
-    res.json(diff);
-  })
-);
 
 // Every project code (open and closed) — the admin management list. The
 // upload form's own dropdown uses the open-only GET /api/v1/project-codes
@@ -688,44 +539,40 @@ adminRouter.patch(
   })
 );
 
-// Exactly one of uploadId/contributionId/formId identifies the QA subject —
-// uploadId for a submitted Excel upload (existing flow), contributionId for a
-// pending Translate & Extend contribution (merged onto its form's draft
-// in-memory, never persisted — see qaRunService.createContributionQaRun), or
-// formId alone for an ad-hoc form's own draft while it awaits admin review
-// (qaRunService.createAdHocReviewQaRun).
+// Exactly one of contributionId/formId identifies the QA subject —
+// contributionId for a pending Translate & Extend contribution (merged onto its
+// form's draft in-memory, never persisted — see
+// qaRunService.createContributionQaRun), or formId alone for an ad-hoc form's own
+// draft while it awaits admin review (qaRunService.createAdHocReviewQaRun).
 const createQaRunSchema = z
   .object({
-    uploadId: z.string().trim().min(1).optional(),
     contributionId: z.string().trim().min(1).optional(),
     formId: z.string().trim().min(1).optional(),
     variant: z.enum(["ff", "oc"]),
   })
-  .refine((v) => [v.uploadId, v.contributionId, v.formId].filter((x) => x !== undefined).length === 1, {
-    message: "Exactly one of uploadId, contributionId, or formId is required",
+  .refine((v) => [v.contributionId, v.formId].filter((x) => x !== undefined).length === 1, {
+    message: "Exactly one of contributionId or formId is required",
   });
 
-// Kicks off a Playwright QA run for one generated variant of an upload, a
-// pending contribution, or an ad-hoc form awaiting review — see
-// qaRunService.createQaRun/createContributionQaRun/createAdHocReviewQaRun.
-// Returns immediately with a "pending" run; the actual browser automation
-// happens in the background (no job queue, just a fire-and-forget async call
-// in this same process — see runQaJob's own doc comment for why that's an
-// acceptable tradeoff here). The frontend polls GET /qa-runs/:id until status
-// leaves "pending"/"running".
+// Kicks off a Playwright QA run for one generated variant of a pending
+// contribution, or an ad-hoc form awaiting review — see
+// qaRunService.createContributionQaRun/createAdHocReviewQaRun. Returns
+// immediately with a "pending" run; the actual browser automation happens in
+// the background (no job queue, just a fire-and-forget async call in this
+// same process — see runQaJob's own doc comment for why that's an acceptable
+// tradeoff here). The frontend polls GET /qa-runs/:id until status leaves
+// "pending"/"running".
 adminRouter.post(
   "/qa-runs",
   validateBody(createQaRunSchema),
   asyncHandler(async (req, res) => {
-    const { uploadId, contributionId, formId, variant } = req.body as z.infer<typeof createQaRunSchema>;
-    const result = uploadId
-      ? await createQaRun(uploadId, variant, req.auth!.sub)
-      : contributionId
-        ? await createContributionQaRun(contributionId, variant, req.auth!.sub)
-        : await createAdHocReviewQaRun(formId!, variant, req.auth!.sub);
+    const { contributionId, formId, variant } = req.body as z.infer<typeof createQaRunSchema>;
+    const result = contributionId
+      ? await createContributionQaRun(contributionId, variant, req.auth!.sub)
+      : await createAdHocReviewQaRun(formId!, variant, req.auth!.sub);
 
     if (result.outcome === "not_found") {
-      res.status(404).json({ error: "upload, form, or pending contribution not found" });
+      res.status(404).json({ error: "form or pending contribution not found" });
       return;
     }
     if (result.outcome === "no_files") {
@@ -740,19 +587,18 @@ adminRouter.post(
   })
 );
 
-// Every QA run ever triggered for one upload (?uploadId=) or one
-// Configuration form (?formId= — covers both contribution-based and ad-hoc
-// pending-review runs, since both set QaRun.formId), newest first.
+// Every QA run ever triggered for one Configuration form (?formId= — covers
+// both contribution-based and ad-hoc pending-review runs, since both set
+// QaRun.formId), newest first.
 adminRouter.get(
   "/qa-runs",
   asyncHandler(async (req, res) => {
-    const uploadId = typeof req.query.uploadId === "string" ? req.query.uploadId : undefined;
     const formId = typeof req.query.formId === "string" ? req.query.formId : undefined;
-    if (!uploadId && !formId) {
-      res.status(400).json({ error: "uploadId or formId query param is required" });
+    if (!formId) {
+      res.status(400).json({ error: "formId query param is required" });
       return;
     }
-    const runs = uploadId ? await listQaRunsForUpload(uploadId) : await listQaRunsForForm(formId!);
+    const runs = await listQaRunsForForm(formId);
     res.json(runs);
   })
 );
@@ -827,47 +673,6 @@ adminRouter.post(
     }
     if (result.outcome === "not_locked") {
       res.status(409).json({ error: "This project code must be locked before generating a Question Master" });
-      return;
-    }
-    res.status(201).json(result.version);
-  })
-);
-
-// Additive counterpart to /question-master/readiness above — every active
-// subsidiary's most recent Excel upload under a project code, plus whether it's been
-// submitted yet. See questionMasterService.getUploadReadiness.
-adminRouter.get(
-  "/question-master/upload-readiness",
-  asyncHandler(async (req, res) => {
-    const projectCode = typeof req.query.projectCode === "string" ? req.query.projectCode : undefined;
-    if (!projectCode) {
-      res.status(400).json({ error: "projectCode query param is required" });
-      return;
-    }
-    const readiness = await getQuestionMasterUploadReadiness(projectCode);
-    res.json(readiness);
-  })
-);
-
-// Additive counterpart to /question-master/generate above — compiles every submitted
-// Excel upload under the given project code into a new, versioned Question Master
-// .xlsx. See questionMasterService.generateQuestionMasterFromUploads.
-adminRouter.post(
-  "/question-master/generate-from-uploads",
-  validateBody(generateQuestionMasterSchema),
-  asyncHandler(async (req, res) => {
-    const { projectCode, division } = req.body as z.infer<typeof generateQuestionMasterSchema>;
-    const result = await generateQuestionMasterFromUploads(projectCode, division ?? "", req.auth!.sub);
-    if (result.outcome === "project_not_found") {
-      res.status(404).json({ error: `Unknown project code "${projectCode}"` });
-      return;
-    }
-    if (result.outcome === "not_locked") {
-      res.status(409).json({ error: "This project code must be locked before generating a Question Master" });
-      return;
-    }
-    if (result.outcome === "no_uploads") {
-      res.status(409).json({ error: "No active subsidiary has a submitted Excel upload under this project code yet" });
       return;
     }
     res.status(201).json(result.version);

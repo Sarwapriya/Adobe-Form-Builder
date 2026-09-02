@@ -2,8 +2,7 @@ import { AppDataSource } from "../config/data-source";
 import { Form } from "../entities/Form";
 import { ProjectCode } from "../entities/ProjectCode";
 import { SubsidiaryProjectBlock } from "../entities/SubsidiaryProjectBlock";
-import { Upload } from "../entities/Upload";
-import { ConflictError, NotFoundError, ProjectCodeClosedError, ProjectCodeLockedError } from "../utils/errors";
+import { ConflictError, NotFoundError, ProjectCodeClosedError } from "../utils/errors";
 import { sendProjectLockedNotification } from "./emailService";
 import { resolveSubsidiaryRecipients } from "./subsidiaryRecipients";
 
@@ -128,18 +127,13 @@ export async function setProjectCodeOpen(id: string, isOpen: boolean): Promise<P
   return repo.save(existing);
 }
 
-/** Every distinct subsidiary with a Form (draft or published, undeleted) or an
- * Upload under the given project code — the recipient set for the
- * project-locked notification below, mirroring cutoffReminderService's own
- * "group Forms by subsidiaryId" shape. */
+/** Every distinct subsidiary with a Form (draft or published, undeleted) under the
+ * given project code — the recipient set for the project-locked notification below,
+ * mirroring cutoffReminderService's own "group Forms by subsidiaryId" shape. */
 async function listSubsidiariesUnderProjectCode(code: string): Promise<string[]> {
-  const [forms, uploads] = await Promise.all([
-    AppDataSource.getRepository(Form).find({ where: { projectCode: code, isDeleted: false } }),
-    AppDataSource.getRepository(Upload).find({ where: { projectCode: code } }),
-  ]);
+  const forms = await AppDataSource.getRepository(Form).find({ where: { projectCode: code, isDeleted: false } });
   const subsidiaryIds = new Set<string>();
   for (const form of forms) subsidiaryIds.add(form.subsidiaryId);
-  for (const upload of uploads) subsidiaryIds.add(upload.subsidiaryId);
   return Array.from(subsidiaryIds);
 }
 
@@ -208,22 +202,5 @@ export async function assertProjectCodeOpen(code: string): Promise<void> {
   }
   if (!projectCode.isOpen) {
     throw new ProjectCodeClosedError(`Project code "${code}" is closed`);
-  }
-}
-
-/**
- * Called from uploadService.createUpload alongside assertProjectCodeOpen,
- * but only for non-admin uploaders — see ProjectCode.isLocked's own doc comment for why
- * this is a separate, more permanent freeze from isOpen/closed. Throws NotFoundError if
- * no project code matches, or ProjectCodeLockedError if an admin has locked it. A no-op
- * (resolves) if it's unlocked.
- */
-export async function assertProjectCodeUnlockedForUpload(code: string): Promise<void> {
-  const projectCode = await AppDataSource.getRepository(ProjectCode).findOne({ where: { code } });
-  if (!projectCode) {
-    throw new NotFoundError(`Unknown project code "${code}"`);
-  }
-  if (projectCode.isLocked) {
-    throw new ProjectCodeLockedError(`Project code "${code}" is locked for new uploads`);
   }
 }
