@@ -28,6 +28,7 @@ from app.services import (
     dashboard_service,
     fabrix_models_service,
     fabrix_settings_service,
+    groq_settings_service,
     other_ai_models_service,
     project_code_service,
     question_master_service,
@@ -40,6 +41,7 @@ from app.services import (
 from app.services.fabrix_models_service import CreateFabrixModelInput
 from app.services.fabrix_settings_service import FabrixSettingsInput
 from app.services.claude_settings_service import ClaudeSettingsInput
+from app.services.groq_settings_service import GroqSettingsInput
 from app.services.sftp_settings_service import SftpTargetConfig
 from app.services.smtp_settings_service import SmtpSettingsInput
 from app.services.subsidiary_locale_service import CreateSubsidiaryLocaleInput
@@ -711,6 +713,28 @@ def test_claude_settings(db: Session = Depends(get_db)) -> dict:
     if not settings["hasApiKey"]:
         raise HTTPException(status_code=400, detail={"ok": False, "error": "A Claude API key must be configured first"})
     return {"ok": False, "error": "Not yet implemented — outbound send ships in a later phase"}
+
+
+# --- Groq settings -------------------------------------------------------------
+
+
+class GroqSettingsBody(BaseModel):
+    model: str = Field(min_length=1)
+    apiKey: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+@router.get("/groq-settings")
+def get_groq_settings(db: Session = Depends(get_db)) -> dict:
+    return groq_settings_service.get_groq_settings_for_display(db)
+
+
+@router.patch("/groq-settings")
+def patch_groq_settings(body: GroqSettingsBody, db: Session = Depends(get_db)) -> dict:
+    groq_settings_service.save_groq_settings(
+        db, GroqSettingsInput(model=body.model, apiKey=body.apiKey, enabled=body.enabled)
+    )
+    return groq_settings_service.get_groq_settings_for_display(db)
 
 
 # --- SFTP deployment settings -----------------------------------------------------

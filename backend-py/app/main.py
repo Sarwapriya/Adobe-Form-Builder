@@ -37,6 +37,7 @@ from app.routers.project_codes import router as project_codes_router
 from app.routers.subsidiaries import router as subsidiaries_router
 from app.routers.subsidiary_forms import router as subsidiary_forms_router
 from app.routers.subsidiary_locales import router as subsidiary_locales_router
+from app.routers.ai import router as ai_router
 
 app = FastAPI(title="FormBuilder Backend (Python port)")
 
@@ -114,6 +115,7 @@ app.include_router(project_codes_router, prefix="/api/v1/project-codes", tags=["
 app.include_router(subsidiaries_router, prefix="/api/v1/subsidiaries", tags=["subsidiaries"])
 app.include_router(subsidiary_locales_router, prefix="/api/v1/subsidiary-locales", tags=["subsidiary-locales"])
 app.include_router(subsidiary_forms_router, prefix="/api/v1/forms", tags=["subsidiary-forms"])
+app.include_router(ai_router, prefix="/api/v1/ai", tags=["ai"])
 
 
 @app.get("/health")

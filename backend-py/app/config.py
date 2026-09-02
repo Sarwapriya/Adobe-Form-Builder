@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     CLAUDE_MODEL: str = "claude-opus-5"
     CLAUDE_ENABLED: bool = True
 
+    # --- Groq (OpenAI-compatible chat completions API; second fallback in
+    # the AI assistant chain, tried after FabriX and Claude) ---
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    GROQ_ENABLED: bool = True
+
     FORMBUILDER_NOTIFY_EMAIL: Optional[str] = None
 
     # --- Core / security ---
