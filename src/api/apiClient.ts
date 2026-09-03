@@ -34,7 +34,7 @@ export class ApiError extends Error {
 
 /**
  * Reads the `csrfToken` cookie the backend sets on login/refresh (see
- * backend/src/middleware/csrf.ts — it's deliberately Path=/, non-httpOnly, so
+ * backend-py/app/middleware/csrf.py — it's deliberately Path=/, non-httpOnly, so
  * JS on any of this app's pages can read it here). Echoed back as the
  * `X-CSRF-Token` header on every request below: harmless on requests that
  * don't check it, required on the cookie-authenticated POST /auth/refresh and

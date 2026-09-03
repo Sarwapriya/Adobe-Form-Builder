@@ -39,8 +39,9 @@ from app.models.form import Form, FormOrigin, FormStatus
 from app.models.form_contribution import FormContribution
 from app.models.form_version import FormVersion, FormVersionStatus
 from app.models.generated_file import GeneratedFile as GeneratedFileEntity
-from app.services import project_code_service, subsidiary_project_block_service, subsidiary_service
+from app.services import email_service, project_code_service, subsidiary_project_block_service, subsidiary_service
 from app.services.file_service import absolute_file_path, save_form_version_generated_files
+from app.utils.background import run_in_background
 from app.services.generation_service import classify_file_type
 from app.services.sftp_service import SftpDeployFile, deploy_generated_files
 from app.services.subsidiary_locale_service import list_subsidiary_locales
@@ -423,7 +424,7 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     # Best-effort push to the Adobe Campaign SFTP drop folder — deliberately
     # never blocks or fails the publish itself.
     deployment = deploy_generated_files(
-        [SftpDeployFile(absolutePath=absolute_file_path(f.relativePath), remoteFileName=f.fileName) for f in saved]
+        db, [SftpDeployFile(absolutePath=absolute_file_path(f.relativePath), remoteFileName=f.fileName) for f in saved]
     )
 
     return {"outcome": "ok", "validation": validation, "deployment": deployment}
@@ -469,13 +470,9 @@ SubmitAdHocOutcome = Literal["ok", "not_found", "already_pending"]
 
 
 def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) -> SubmitAdHocOutcome:
-    """A subsidiary user's "Submit for Review" action.
-
-    # TODO(phase: SFTP+email): the Node side best-effort notifies admins via
-    # `emailService.sendAdHocReviewSubmittedNotification` here — outbound
-    # email isn't implemented in this port yet, so that notification is
-    # skipped.
-    """
+    """A subsidiary user's "Submit for Review" action. Best-effort notifies
+    admins via `email_service.send_adhoc_review_submitted_notification` —
+    never fails this action if the notification itself fails."""
     form = find_owned_adhoc_form(db, form_id, subsidiary_id)
     if form is None:
         return "not_found"
@@ -486,6 +483,10 @@ def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) 
     form.submittedForReviewAt = _now()
     form.reviewNote = None
     db.commit()
+
+    form_name = form.name
+    submitted_at = form.submittedForReviewAt
+    run_in_background(lambda bg_db: email_service.send_adhoc_review_submitted_notification(bg_db, form_name, subsidiary_id, submitted_at))
     return "ok"
 
 

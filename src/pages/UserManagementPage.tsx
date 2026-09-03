@@ -56,7 +56,7 @@ const ROLE_COLOR: Record<AdminUserRole, "default" | "primary" | "secondary"> = {
  * Which roles can be assigned depends on the *creator's* own role: a
  * superadmin may create standard/admin/superadmin accounts, while a plain
  * admin may only create standard ones (enforced authoritatively server-side
- * in admin.router.ts's POST /users — this UI just doesn't offer the options
+ * in admin.py's POST /users — this UI just doesn't offer the options
  * a plain admin isn't allowed to submit).
  */
 export function UserManagementPage() {
@@ -108,7 +108,7 @@ export function UserManagementPage() {
   // one they'd fall back to the free-text Subsidiary field on every upload,
   // defeating the point of scoping them. Admin/superadmin accounts aren't
   // restricted to one subsidiary, so it stays optional for those. Mirrored
-  // authoritatively server-side in admin.router.ts's createUserSchema.
+  // authoritatively server-side in admin.py's CreateUserBody.
   const subsidiaryRequired = role === "standard";
   const canCreate =
     !!username.trim() && !!email.trim() && !!password && (!subsidiaryRequired || !!subsidiaryId) && !creating;
@@ -143,7 +143,7 @@ export function UserManagementPage() {
   }
 
   // A plain admin can only toggle standard accounts (enforced authoritatively
-  // server-side too — see admin.router.ts's PATCH /users/:id); nobody can
+  // server-side too — see admin.py's PATCH /users/:id); nobody can
   // toggle their own row, to avoid locking themselves out of the admin panel.
   function canToggle(target: AdminUserListItem): boolean {
     if (target.id === currentUser?.id) return false;
@@ -166,7 +166,7 @@ export function UserManagementPage() {
   // A superadmin may edit anyone's, including their own. A plain admin may
   // edit their own, any other admin's (same role), and any subsidiary
   // (standard) user's — but not a superadmin's. Enforced authoritatively
-  // server-side too — see admin.router.ts's PATCH
+  // server-side too — see admin.py's PATCH
   // /users/:id/notification-email.
   function canEditNotificationEmail(target: AdminUserListItem): boolean {
     if (isSuperAdmin) return true;
@@ -178,7 +178,7 @@ export function UserManagementPage() {
   // edit a standard user's — never another admin's or a superadmin's,
   // including their own (a plain admin's own row has role "admin", so this
   // naturally excludes self-edit too). Enforced authoritatively server-side —
-  // see admin.router.ts's PATCH /users/:id/profile.
+  // see admin.py's PATCH /users/:id/profile.
   function canEditProfile(target: AdminUserListItem): boolean {
     return isSuperAdmin || target.role === "standard";
   }
@@ -506,7 +506,7 @@ function DeleteUserDialog({
  * option even while editing a standard user (that would be a
  * privilege-escalation path around account creation's own same-shaped
  * restriction) — enforced authoritatively server-side too, see
- * admin.router.ts's PATCH /users/:id/profile. First/last name is the only
+ * admin.py's PATCH /users/:id/profile. First/last name is the only
  * self-service-adjacent field here (optional, shown in place of the login
  * username on the subsidiary Dashboard's greeting — see
  * SubsidiaryDashboardPage.tsx) but there is still no true self-service

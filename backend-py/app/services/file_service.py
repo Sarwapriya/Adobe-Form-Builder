@@ -1,7 +1,6 @@
 """Port of the FormVersion-generated-output half of `backend/src/services/
 fileService.ts`, plus the Question-Master file helpers (`questionMasterDir`,
-`saveQuestionMasterFile`). The QA-report path helper (`formQaStorageDir`)
-belongs to a later phase and is not ported here.
+`saveQuestionMasterFile`) and the QA-report path helper (`formQaStorageDir`).
 """
 
 from __future__ import annotations
@@ -52,6 +51,15 @@ def save_form_version_generated_files(
             f.write(file.contents)
         saved.append(SavedGeneratedFile(fileName=file.path, relativePath=relative_path))
     return saved
+
+
+def form_qa_storage_dir(subsidiary_id: str, form_id: str) -> str:
+    """Directory (relative to UPLOAD_DIR) holding a QA run's downloadable
+    HTML report for one Configuration form — keyed by the Form's own id
+    (not a FormVersion's), since a QA run against a pending contribution or
+    an ad-hoc draft never produces a FormVersion/GeneratedFiles row to key
+    off of in the first place."""
+    return os.path.join(sanitize_subsidiary_id(subsidiary_id), "forms", form_id, "qa")
 
 
 def question_master_dir(project_code: str, id: str) -> str:

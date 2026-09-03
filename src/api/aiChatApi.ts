@@ -10,7 +10,7 @@ import { apiClient } from "./apiClient";
 
 /**
  * Thin wrappers over apiClient for the FabriXAI-backed copilot's `/api/v1/ai/*`
- * routes (see backend's ai.router.ts, mounted alongside every other `/api/v1/*`
+ * routes (see backend-py's ai.py router, mounted alongside every other `/api/v1/*`
  * router — same base-path convention formBuilderApi.ts/uploadsApi.ts use, just
  * an "ai" segment instead of "admin/forms"/"uploads"). Every type here is
  * imported straight from `@formbuilder/shared`'s aiTypes.ts — the wire

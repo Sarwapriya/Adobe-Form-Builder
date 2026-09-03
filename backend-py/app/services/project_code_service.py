@@ -1,11 +1,4 @@
-"""Port of `backend/src/services/projectCodeService.ts`.
-
-Notification-on-lock (`sendProjectLockedNotification`) is deliberately NOT
-called here — `emailService.ts`'s outbound send is a later phase (see
-`backend-py`'s phase-3 task description). `set_project_code_locked` still
-toggles the flag; the notification fan-out is a `# TODO(phase: AI assistant
-/ SFTP+email)` left in place of the Node side's fire-and-forget call.
-"""
+"""Port of `backend/src/services/projectCodeService.ts`."""
 
 from __future__ import annotations
 
@@ -16,8 +9,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.errors import ConflictError, NotFoundError, ProjectCodeClosedError
+from app.models.form import Form
 from app.models.project_code import ProjectCode
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
+from app.services import email_service
+from app.services.subsidiary_recipients import resolve_subsidiary_recipients
+from app.utils.background import run_in_background
 
 
 def _parse_date(value: Optional[str]) -> Optional[date]:
@@ -122,23 +119,38 @@ def set_project_code_open(db: Session, id: str, is_open: bool) -> Optional[Proje
     return existing
 
 
-def set_project_code_locked(db: Session, id: str, is_locked: bool) -> Optional[ProjectCode]:
-    """Toggles a project code locked/unlocked. Returns `None` if the id
-    doesn't exist.
+def _list_subsidiaries_under_project_code(db: Session, code: str) -> list[str]:
+    """Every distinct subsidiary with a Form (draft or published, undeleted)
+    under the given project code — the recipient set for the
+    project-locked notification, mirroring cutoff_reminder_service's own
+    "group Forms by subsidiaryId" shape."""
+    rows = db.execute(select(Form.subsidiaryId).where(Form.projectCode == code, Form.isDeleted == False)).scalars()  # noqa: E712
+    return list({r for r in rows})
 
-    # TODO(phase: AI assistant / SFTP+email): the Node side best-effort
-    # notifies every subsidiary with a form under this code when it
-    # transitions to locked (see `emailService.sendProjectLockedNotification`
-    # via `subsidiaryRecipients.resolveSubsidiaryRecipients`) — outbound
-    # email isn't implemented in this phase, so that fan-out is skipped here.
-    """
+
+def set_project_code_locked(db: Session, id: str, is_locked: bool) -> Optional[ProjectCode]:
+    """Toggles a project code locked/unlocked — locking it (not unlocking)
+    best-effort notifies every subsidiary that has a form under this code.
+    Returns `None` if the id doesn't exist."""
     existing = db.get(ProjectCode, id)
     if existing is None:
         return None
+    was_locked = existing.isLocked
     existing.isLocked = is_locked
     db.add(existing)
     db.commit()
     db.refresh(existing)
+
+    if is_locked and not was_locked:
+        code = existing.code
+        cutoff_date = existing.cutoffDate
+        for subsidiary_id in _list_subsidiaries_under_project_code(db, code):
+            run_in_background(
+                lambda bg_db, sid=subsidiary_id: email_service.send_project_locked_notification(
+                    bg_db, resolve_subsidiary_recipients(bg_db, sid), code, cutoff_date
+                )
+            )
+
     return existing
 
 

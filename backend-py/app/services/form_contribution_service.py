@@ -16,8 +16,12 @@ from app.models.form import Form
 from app.models.form_contribution import FormContribution
 from app.models.form_version import FormVersion
 from app.models.project_code import ProjectCode
+from app.models.user import User
+from app.security import dkms_client
+from app.services import email_service
 from app.services.form_access_service import get_accessible_form_detail
 from app.services.form_builder_service import update_draft
+from app.utils.background import run_in_background
 
 
 def _now() -> datetime:
@@ -53,12 +57,8 @@ def submit_contribution(
 ) -> dict[str, Any]:
     """Validates a proposed contribution against the form's *published*
     content and, if valid, queues it as "pending" — never applied directly.
-
-    # TODO(phase: SFTP+email): the Node side best-effort notifies the admin
-    # team via `emailService.sendContributionSubmittedNotification` here —
-    # outbound email isn't implemented in this port yet, so that
-    # notification is skipped.
-    """
+    Best-effort notifies the admin team via
+    `email_service.send_contribution_submitted_notification`."""
     detail = get_accessible_form_detail(db, form_id, subsidiary_id)
     if not detail or not detail.get("published"):
         return {"outcome": "not_found"}
@@ -104,6 +104,24 @@ def submit_contribution(
         db.add(row)
     db.commit()
     db.refresh(row)
+
+    form = db.get(Form, form_id)
+    submitter = db.get(User, user_id)
+    if form is not None and submitter is not None:
+        form_name = form.name
+        submitter_username = submitter.username
+        submitter_email_ciphertext = submitter.email
+        note_value = note or None
+        run_in_background(
+            lambda bg_db: email_service.send_contribution_submitted_notification(
+                bg_db,
+                form_name,
+                subsidiary_id,
+                submitter_username,
+                dkms_client.decrypt_or_none(submitter_email_ciphertext) or "",
+                note_value,
+            )
+        )
 
     return {"outcome": "ok", "contribution": _to_summary(row), "validation": validation}
 

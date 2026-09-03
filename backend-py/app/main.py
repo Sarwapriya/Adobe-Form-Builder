@@ -30,6 +30,7 @@ from app.config import settings
 from app.errors import AppError, status_code_for
 from app.middleware.rate_limit import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.services.cutoff_reminder_service import start_cutoff_reminder_scheduler
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.form_builder import router as form_builder_router
@@ -116,6 +117,14 @@ app.include_router(subsidiaries_router, prefix="/api/v1/subsidiaries", tags=["su
 app.include_router(subsidiary_locales_router, prefix="/api/v1/subsidiary-locales", tags=["subsidiary-locales"])
 app.include_router(subsidiary_forms_router, prefix="/api/v1/forms", tags=["subsidiary-forms"])
 app.include_router(ai_router, prefix="/api/v1/ai", tags=["ai"])
+
+
+@app.on_event("startup")
+def _start_background_jobs() -> None:
+    """Mirrors `backend/src/index.ts`'s post-listen startup call — see
+    `cutoff_reminder_service.start_cutoff_reminder_scheduler`'s own doc
+    comment for the scheduling contract."""
+    start_cutoff_reminder_scheduler()
 
 
 @app.get("/health")

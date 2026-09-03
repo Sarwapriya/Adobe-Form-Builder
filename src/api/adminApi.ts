@@ -93,7 +93,7 @@ export interface UpdateUserProfileInput {
  * Updates a user's account details (username/email/role/subsidiary) —
  * superadmin only, any target including themselves. Distinct from
  * setUserActive (isActive only) and setUserNotificationEmail (contact
- * address only) above — enforced server-side in admin.router.ts's PATCH
+ * address only) above — enforced server-side in admin.py's PATCH
  * /users/:id/profile.
  */
 export function updateUserProfile(id: string, input: UpdateUserProfileInput): Promise<AdminUserListItem> {
@@ -104,7 +104,7 @@ export function updateUserProfile(id: string, input: UpdateUserProfileInput): Pr
  * Updates a user's own up-to-two separate notification-email addresses
  * (`null` or `""` clears a slot; an omitted field leaves it as-is). Any user
  * may update their own; only a superadmin may update someone else's —
- * enforced server-side in admin.router.ts's PATCH
+ * enforced server-side in admin.py's PATCH
  * /users/:id/notification-email.
  */
 export function setUserNotificationEmail(

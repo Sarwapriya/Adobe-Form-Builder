@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
-    "backend",
     "packages/shared"
   ],
   "scripts": {
@@ -15,10 +14,7 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "dev:shared": "npm run dev --workspace=packages/shared",
-    "test:shared": "npm run test --workspace=packages/shared",
-    "dev:backend": "npm run dev --workspace=backend",
-    "build:backend": "npm run build --workspace=packages/shared && npm run build --workspace=backend",
-    "start:backend": "npm run start --workspace=backend"
+    "test:shared": "npm run test --workspace=packages/shared"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

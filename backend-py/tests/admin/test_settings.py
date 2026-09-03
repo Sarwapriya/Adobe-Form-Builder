@@ -3,12 +3,12 @@
 verifies secrets are actually stored encrypted (not plaintext) and decrypt
 back correctly via `app.security.secret_cipher`.
 
-The smtp/fabrix "test" endpoints are asserted to return the not-yet-
-implemented shape this phase intentionally ships (outbound send is a later
-phase) rather than a 404 — the route must exist and be reachable. Groq's test
-endpoint is a real implementation (see `app.routers.admin.test_groq_settings`),
-so only its "no key configured" precondition is exercised here — a full
-round-trip would need real network access to api.groq.com.
+The smtp/fabrix/groq "test" endpoints are all real implementations (SMTP via
+`email_service.send_test_email`, FabriX via `fabrixAIService.send_message`,
+Groq via `groqAIService.send_message`) — only each one's "not configured yet"
+precondition is exercised here, not a full round-trip, since that would need
+real network access (an SMTP host, api.fabrix's OpenAPI endpoint, or
+api.groq.com) this test environment doesn't guarantee.
 """
 
 from __future__ import annotations
@@ -63,10 +63,24 @@ class TestSmtpSettings:
         resp = client.get("/api/v1/admin/smtp-settings", headers=standard_headers)
         assert resp.status_code == 403
 
-    def test_test_endpoint_not_yet_implemented(self, client: TestClient, admin_headers: dict):
+    def test_test_endpoint_sends_a_real_email(self, client: TestClient, admin_headers: dict, dkms_available: bool):
+        """The real implementation (see `app.routers.admin.test_smtp_settings`)
+        decrypts the calling admin's own DKMS-encrypted email, then sends to
+        it via `email_service.send_test_email` — neither DKMS nor a reachable
+        SMTP host is guaranteed in this test environment, so this only
+        asserts a well-formed outcome rather than a full round-trip."""
         resp = client.post("/api/v1/admin/smtp-settings/test", headers=admin_headers)
-        assert resp.status_code == 200
-        assert resp.json()["ok"] is False
+        if not dkms_available:
+            assert resp.status_code == 502
+            assert resp.json()["error"] == "Could not resolve your email address"
+            return
+        assert resp.status_code in (200, 502)
+        body = resp.json()
+        if resp.status_code == 200:
+            assert body["ok"] is True
+            assert "sentTo" in body
+        else:
+            assert "error" in body
 
 
 class TestFabrixSettings:

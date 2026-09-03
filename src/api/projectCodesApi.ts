@@ -24,7 +24,7 @@ export interface ProjectCode {
 
 /** GET /api/v1/project-codes — open project codes only, populating the
  * upload form's "Project Code" dropdown. Any authenticated user, not just
- * admins — see backend/src/routes/projectCode.router.ts. Passing
+ * admins — see backend-py/app/routers/project_codes.py. Passing
  * `subsidiaryName` also excludes any code an admin has specifically blocked
  * for that subsidiary (see adminApi.ts's subsidiary-project-block
  * management) — without it, only the global open/closed state applies.

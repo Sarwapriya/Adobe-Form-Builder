@@ -4,4 +4,3 @@ dist-sample-solution/
 .DS_Store
 *.tsbuildinfo
 .env
-backend/uploads/

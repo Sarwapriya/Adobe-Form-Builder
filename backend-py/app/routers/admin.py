@@ -4,9 +4,7 @@
 
 Route groups ported: project codes, subsidiaries, subsidiary-project blocks,
 subsidiary locales, users, SMTP/FabriX/Groq settings, SFTP deployment
-settings, dashboard-summary, and Question Master. `admin.router.ts`'s QA-run
-routes belong to a later phase (form builder / QA) and are intentionally not
-ported here.
+settings, QA runs, dashboard-summary, and Question Master.
 
 FabriX and Groq are the two AI-assistant provider tiers, each independently
 enable/disable-toggleable (see `fabrix_settings_service.py`/
@@ -28,15 +26,19 @@ from pydantic import BaseModel, BeforeValidator, EmailStr, Field, field_validato
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.form_pipeline import ValidationResult
+from app.models.qa_run import QaRunVariant
 from app.security import dkms_client
 from app.security.deps import require_admin
 from app.services import (
     auth_service,
     dashboard_service,
+    email_service,
     fabrix_models_service,
     fabrix_settings_service,
     groq_settings_service,
     project_code_service,
+    qa_run_service,
     question_master_service,
     sftp_settings_service,
     smtp_settings_service,
@@ -46,6 +48,7 @@ from app.services import (
 )
 from app.services.fabrix_models_service import CreateFabrixModelInput
 from app.services.fabrix_settings_service import FabrixSettingsInput
+from app.services.fabrixAIService import send_message as send_fabrix_message
 from app.services.groq_settings_service import GroqSettingsInput
 from app.services.groqAIService import send_message as send_groq_message
 from app.services.sftp_settings_service import SftpTargetConfig
@@ -612,10 +615,17 @@ def patch_smtp_settings(body: SmtpSettingsBody, db: Session = Depends(get_db)) -
 
 
 @router.post("/smtp-settings/test")
-def test_smtp_settings() -> dict:
-    # TODO(phase: AI assistant / SFTP+email): wire up emailService's real
-    # outbound SMTP send once that phase lands.
-    return {"ok": False, "error": "Not yet implemented — outbound send ships in a later phase"}
+def test_smtp_settings(db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> dict:
+    user = auth_service.find_user_by_id(db, auth["sub"])
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    recipient = dkms_client.decrypt_or_none(user.email)
+    if not recipient:
+        raise HTTPException(status_code=502, detail="Could not resolve your email address")
+    result = email_service.send_test_email(db, recipient)
+    if not result.ok:
+        raise HTTPException(status_code=502, detail=result.error)
+    return {"ok": True, "sentTo": recipient}
 
 
 # --- FabriX settings -------------------------------------------------------------
@@ -650,15 +660,16 @@ def patch_fabrix_settings(body: FabrixSettingsBody, db: Session = Depends(get_db
 
 
 @router.post("/fabrix-settings/test")
-def test_fabrix_settings(db: Session = Depends(get_db)) -> dict:
-    # TODO(phase: AI assistant / SFTP+email): wire up fabrixAIService's real
-    # outbound call once that phase lands.
-    settings = fabrix_settings_service.get_fabrix_settings_for_display(db)
-    if not settings["baseUrl"] or settings["enabledModelCount"] == 0:
+async def test_fabrix_settings(db: Session = Depends(get_db)) -> dict:
+    fabrix_settings = fabrix_settings_service.get_fabrix_settings_for_display(db)
+    if not fabrix_settings["baseUrl"] or fabrix_settings["enabledModelCount"] == 0:
         raise HTTPException(
             status_code=400, detail={"ok": False, "error": "FabriXAI base URL and at least one enabled model must be configured first"}
         )
-    return {"ok": False, "error": "Not yet implemented — outbound send ships in a later phase"}
+    result = await send_fabrix_message({"messages": [{"role": "user", "content": "Reply with the single word OK."}]}, db)
+    if not result["ok"]:
+        return {"ok": False, "error": result["error"]}
+    return {"ok": True}
 
 
 @router.get("/fabrix-models")
@@ -804,6 +815,120 @@ class SetActiveSftpEnvironmentBody(BaseModel):
 def post_active_deployment_environment(body: SetActiveSftpEnvironmentBody, db: Session = Depends(get_db)) -> dict:
     sftp_settings_service.set_active_sftp_environment(db, body.environment)
     return _serialize_sftp_settings(sftp_settings_service.get_sftp_deployment_settings(db))
+
+
+# --- QA runs ---------------------------------------------------------------
+# A Playwright QA run against one generated variant of a pending
+# contribution or an ad-hoc form awaiting review (see `qa_run_service.py`).
+# The actual browser automation runs in the background (no job queue, just a
+# fire-and-forget background thread in this same process — see
+# `qa_run_service.run_qa_job`'s own doc comment for why that's an acceptable
+# tradeoff here). The frontend polls GET /qa-runs/:id until status leaves
+# "pending"/"running".
+
+
+class CreateQaRunBody(BaseModel):
+    contributionId: Optional[str] = Field(default=None, min_length=1)
+    formId: Optional[str] = Field(default=None, min_length=1)
+    variant: Literal["ff", "oc"]
+
+    @model_validator(mode="after")
+    def _exactly_one_owner(self) -> "CreateQaRunBody":
+        if (self.contributionId is not None) == (self.formId is not None):
+            raise ValueError("Exactly one of contributionId or formId is required")
+        return self
+
+
+@router.post("/qa-runs", status_code=status.HTTP_201_CREATED)
+def create_qa_run(body: CreateQaRunBody, db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> dict:
+    variant: QaRunVariant = body.variant
+    result = (
+        qa_run_service.create_contribution_qa_run(db, body.contributionId, variant, auth["sub"])
+        if body.contributionId
+        else qa_run_service.create_adhoc_review_qa_run(db, body.formId, variant, auth["sub"])
+    )
+
+    if result.outcome == "not_found":
+        raise HTTPException(status_code=404, detail="form or pending contribution not found")
+    if result.outcome == "no_files":
+        raise HTTPException(status_code=409, detail="no generated output for that variant yet")
+    if result.outcome == "invalid":
+        validation: ValidationResult = result.validation
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "this form has blocking validation errors — fix them before running QA", "validation": validation.model_dump()},
+        )
+    return _serialize_qa_run(result.qaRun)
+
+
+# Every QA run ever triggered for one Configuration form (?formId= — covers
+# both contribution-based and ad-hoc pending-review runs, since both set
+# QaRun.formId), newest first.
+@router.get("/qa-runs")
+def list_qa_runs(formId: Optional[str] = None, db: Session = Depends(get_db)) -> list[dict]:
+    if not formId:
+        raise HTTPException(status_code=400, detail="formId query param is required")
+    return [_serialize_qa_run(r) for r in qa_run_service.list_qa_runs_for_form(db, formId)]
+
+
+# One run's full detail — status/counts plus every individual test case
+# result (name/status/fieldId/message), what the "which fields should be
+# fixed" view in the admin dashboard reads.
+@router.get("/qa-runs/{id}")
+def get_qa_run_detail_route(id: str, db: Session = Depends(get_db)) -> dict:
+    detail = qa_run_service.get_qa_run_detail(db, id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="QA run not found")
+    return {"run": _serialize_qa_run(detail.run), "results": [_serialize_qa_test_case_result(r) for r in detail.results]}
+
+
+# The same run, as a standalone downloadable HTML report — see
+# qa_run_service.build_qa_report_download / _write_qa_report.
+@router.get("/qa-runs/{id}/download")
+def download_qa_report(id: str, db: Session = Depends(get_db)) -> Response:
+    result = qa_run_service.build_qa_report_download(db, id)
+    if result.outcome == "not_found":
+        raise HTTPException(status_code=404, detail="QA run not found")
+    if result.outcome == "not_ready":
+        raise HTTPException(status_code=409, detail="this QA run has no report yet — it may still be running, or it errored before completing")
+    return Response(
+        content=result.html,
+        media_type="text/html",
+        headers={"Content-Disposition": f'attachment; filename="qa-report-{id}.html"'},
+    )
+
+
+def _serialize_qa_run(run) -> dict:
+    return {
+        "id": run.id,
+        "uploadId": run.uploadId,
+        "formId": run.formId,
+        "contributionId": run.contributionId,
+        "variant": run.variant,
+        "status": run.status,
+        "triggeredByUserId": run.triggeredByUserId,
+        "totalTests": run.totalTests,
+        "passedTests": run.passedTests,
+        "failedTests": run.failedTests,
+        "errorMessage": run.errorMessage,
+        "reportPath": run.reportPath,
+        "createdAt": run.createdAt,
+        "startedAt": run.startedAt,
+        "completedAt": run.completedAt,
+    }
+
+
+def _serialize_qa_test_case_result(row) -> dict:
+    return {
+        "id": row.id,
+        "qaRunId": row.qaRunId,
+        "category": row.category,
+        "name": row.name,
+        "status": row.status,
+        "fieldId": row.fieldId,
+        "message": row.message,
+        "createdAt": row.createdAt,
+    }
 
 
 # --- Question Master -----------------------------------------------------------
