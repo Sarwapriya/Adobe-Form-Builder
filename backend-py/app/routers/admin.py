@@ -33,6 +33,7 @@ from app.security.deps import require_admin
 from app.services import (
     auth_service,
     dashboard_service,
+    dkms_settings_service,
     email_service,
     fabrix_models_service,
     fabrix_settings_service,
@@ -46,6 +47,7 @@ from app.services import (
     subsidiary_project_block_service,
     subsidiary_service,
 )
+from app.services.dkms_settings_service import DkmsSettingsInput
 from app.services.fabrix_models_service import CreateFabrixModelInput
 from app.services.fabrix_settings_service import FabrixSettingsInput
 from app.services.fabrixAIService import send_message as send_fabrix_message
@@ -626,6 +628,53 @@ def test_smtp_settings(db: Session = Depends(get_db), auth: dict = Depends(requi
     if not result.ok:
         raise HTTPException(status_code=502, detail=result.error)
     return {"ok": True, "sentTo": recipient}
+
+
+# --- DKMS settings -----------------------------------------------------------
+# The base URL/task id the whole app's PII encryption depends on (see
+# app.security.dkms_client) — admin-managed here the same way SMTP/FabriX/
+# Groq/SFTP are, so a redeploy or environment change doesn't require editing
+# env vars and restarting the process. Nothing here is a secret (no API key —
+# DKMS auth today is just baseUrl + taskId), so unlike the others there's no
+# write-only field to hide on GET.
+
+
+class DkmsSettingsBody(BaseModel):
+    baseUrl: str = Field(min_length=1)
+    taskId: str = Field(min_length=1)
+    timeoutSeconds: Optional[int] = Field(default=None, ge=1, le=120)
+    piiTagEmail: Optional[str] = None
+    piiTagFirstName: Optional[str] = None
+    piiTagLastName: Optional[str] = None
+
+    @field_validator("baseUrl", "taskId")
+    @classmethod
+    def _trim_required(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must not be empty")
+        return v
+
+
+@router.get("/dkms-settings")
+def get_dkms_settings(db: Session = Depends(get_db)) -> dict:
+    return dkms_settings_service.get_dkms_settings_for_display(db)
+
+
+@router.patch("/dkms-settings")
+def patch_dkms_settings(body: DkmsSettingsBody, db: Session = Depends(get_db)) -> dict:
+    dkms_settings_service.save_dkms_settings(
+        db,
+        DkmsSettingsInput(
+            baseUrl=body.baseUrl,
+            taskId=body.taskId,
+            timeoutSeconds=body.timeoutSeconds,
+            piiTagEmail=(body.piiTagEmail.strip() or None) if body.piiTagEmail else None,
+            piiTagFirstName=(body.piiTagFirstName.strip() or None) if body.piiTagFirstName else None,
+            piiTagLastName=(body.piiTagLastName.strip() or None) if body.piiTagLastName else None,
+        ),
+    )
+    return dkms_settings_service.get_dkms_settings_for_display(db)
 
 
 # --- FabriX settings -------------------------------------------------------------

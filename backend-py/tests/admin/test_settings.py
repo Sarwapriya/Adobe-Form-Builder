@@ -189,3 +189,44 @@ class TestSftpDeploymentSettings:
             headers=admin_headers,
         )
         assert resp.status_code == 400
+
+
+class TestDkmsSettings:
+    """DKMS has no secret field (no API key/token — just baseUrl + taskId),
+    so unlike SMTP/FabriX/Groq there's nothing encrypted to round-trip here;
+    these tests just cover the CRUD shape and validation."""
+
+    def test_round_trip(self, client: TestClient, admin_headers: dict, db_session: Session):
+        resp = client.patch(
+            "/api/v1/admin/dkms-settings",
+            json={"baseUrl": "http://dkms.example.com:6161/dkms/v1", "taskId": "999:test_task"},
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["baseUrl"] == "http://dkms.example.com:6161/dkms/v1"
+        assert body["taskId"] == "999:test_task"
+        assert body["configured"] is True
+
+        row = db_session.execute(select(AdminSetting).where(AdminSetting.key == "dkmsBaseUrl")).scalar_one()
+        assert row.value == "http://dkms.example.com:6161/dkms/v1"  # stored in plaintext, not encrypted
+
+        get_resp = client.get("/api/v1/admin/dkms-settings", headers=admin_headers)
+        assert get_resp.status_code == 200
+        assert get_resp.json()["taskId"] == "999:test_task"
+
+    def test_base_url_normalizes_trailing_dkms_v1_segment(self, db_session: Session):
+        from app.security.dkms_client import _base_url
+        from app.services.dkms_settings_service import save_dkms_settings, get_dkms_settings, DkmsSettingsInput
+
+        save_dkms_settings(db_session, DkmsSettingsInput(baseUrl="http://dkms.example.com:6161/dkms/v1", taskId="t"))
+        resolved = get_dkms_settings(db_session)
+        assert _base_url(resolved) == "http://dkms.example.com:6161"
+
+    def test_missing_fields_rejected(self, client: TestClient, admin_headers: dict):
+        resp = client.patch("/api/v1/admin/dkms-settings", json={"baseUrl": "", "taskId": "x"}, headers=admin_headers)
+        assert resp.status_code == 400
+
+    def test_non_admin_forbidden(self, client: TestClient, standard_headers: dict):
+        resp = client.get("/api/v1/admin/dkms-settings", headers=standard_headers)
+        assert resp.status_code == 403
