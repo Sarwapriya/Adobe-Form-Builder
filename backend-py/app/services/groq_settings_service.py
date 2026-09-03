@@ -1,9 +1,9 @@
 """DB-stored connection config for Groq's OpenAI-compatible chat completions
-API, admin-managed via Configuration > AI Assistant — a second automatic
-fallback provider, tried after FabriX and Claude (see
-`aiProviderService.send_message`). Mirrors `claude_settings_service.py`'s
-shape exactly (one API key, one model string, DB-settings-win-over-env-vars
-precedence).
+API, admin-managed via Configuration > AI Assistant — the automatic fallback
+provider, tried whenever FabriX is disabled or unreachable (see
+`aiProviderService.send_message`). One API key, one model string, DB-settings
+-win-over-env-vars precedence — same shape/convention as every other
+provider settings service in this file's sibling modules (SMTP/FabriX/SFTP).
 """
 
 from __future__ import annotations

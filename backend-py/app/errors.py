@@ -80,6 +80,18 @@ class SubsidiaryMismatchError(AppError):
         super().__init__(message)
 
 
+class DkmsUnavailableError(AppError):
+    """The DKMS PII-encryption/hash/decrypt service failed or was
+    unreachable (see `app/security/dkms_client.py`) — raised on a write path
+    (encrypt/hash during user create/update) so the caller never silently
+    stores plaintext PII or half-written data. Read/display-path decrypt
+    failures are handled separately with a per-field fallback, not this
+    exception — see `dkms_client.decrypt_or_none`."""
+
+    def __init__(self, message: str = "The PII encryption service is unavailable") -> None:
+        super().__init__(message)
+
+
 # Status-code buckets, mirroring errorHandler.ts's instanceof chain exactly.
 BAD_REQUEST_ERRORS = (UnsupportedFileTypeError, ProjectCodeMismatchError, SubsidiaryMismatchError, ValidationError)
 NOT_FOUND_ERRORS = (NotFoundError,)
@@ -90,6 +102,7 @@ CONFLICT_ERRORS = (
     SubsidiaryInactiveError,
     SubsidiaryProjectBlockedError,
 )
+EXTERNAL_SERVICE_ERRORS = (DkmsUnavailableError,)
 
 
 def status_code_for(err: AppError) -> int:
@@ -99,4 +112,6 @@ def status_code_for(err: AppError) -> int:
         return 404
     if isinstance(err, CONFLICT_ERRORS):
         return 409
+    if isinstance(err, EXTERNAL_SERVICE_ERRORS):
+        return 502
     return 500

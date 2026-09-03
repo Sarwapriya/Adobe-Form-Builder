@@ -1,8 +1,8 @@
 """Port of `backend/src/services/authService.ts` — login/refresh/logout
 (phase 1) plus the admin-facing user-CRUD half (phase 3, `admin.router.ts`'s
 `/users` routes): `create_user`, `list_users`, `find_user_by_id`,
-`set_user_active`, `update_user`, `set_user_notification_emails`,
-`list_admin_notification_emails`.
+`set_user_active`, `update_user`, `delete_user`,
+`set_user_notification_emails`, `list_admin_notification_emails`.
 """
 
 from __future__ import annotations
@@ -10,16 +10,33 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import ConflictError, ValidationError
+from app.models.ai_action import AIAction
+from app.models.ai_conversation import AIConversation
+from app.models.form import Form
+from app.models.form_contribution import FormContribution
+from app.models.form_version import FormVersion
+from app.models.qa_run import QaRun
+from app.models.question_master_version import QuestionMasterVersion
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
+from app.security import dkms_client
 from app.security.jwt import AccessTokenPayload, create_access_token
 from app.security.passwords import hash_password, verify_password
+
+
+def _normalize_email(email: str) -> str:
+    """Matches the pre-encryption behavior's case-insensitivity
+    (`func.lower(User.email) == email.lower()`) — hashing (and looking up
+    duplicates by) the trimmed+lowercased form keeps "Ada@Example.com" and
+    "ada@example.com" resolving to the same account."""
+    return email.strip().lower()
 
 # 7 days, in milliseconds — kept as *milliseconds* (not e.g. seconds) to match
 # `REFRESH_TOKEN_TTL_MS`'s own unit, since `app/routers/auth.py` uses it
@@ -54,14 +71,22 @@ def validate_credentials(db: Session, username: str, password: str) -> Optional[
 
 def issue_access_token(user: User) -> str:
     """Short-lived (15 min), stateless — verified by signature/expiry only,
-    never checked against the database."""
+    never checked against the database.
+
+    `firstName`/`lastName` are decrypted here (not left as DKMS ciphertext)
+    because the frontend reads this token's payload client-side for display
+    after a page reload (`authStore.ts`'s `silentRefresh`/`decodeAccessToken`)
+    — embedding ciphertext would show garbled text as the user's name. Uses
+    `decrypt_or_none`, not `decrypt`: a DKMS outage decrypting a *display*
+    name shouldn't block login/refresh itself, which already succeeded on
+    the real check (the password/refresh-token validation above)."""
     payload: AccessTokenPayload = {
         "sub": user.id,
         "username": user.username,
         "role": user.role,
         "subsidiaryId": user.subsidiaryId,
-        "firstName": user.firstName,
-        "lastName": user.lastName,
+        "firstName": dkms_client.decrypt_or_none(user.firstName),
+        "lastName": dkms_client.decrypt_or_none(user.lastName),
     }
     return create_access_token(payload)
 
@@ -142,23 +167,31 @@ def create_user(
     """Creates a new user account. There is no self-service signup in this
     system — accounts are provisioned by an admin via
     `POST /api/v1/admin/users`. The plaintext password is hashed here and
-    never persisted or logged.
+    never persisted or logged; the plaintext email is likewise never logged
+    (see `dkms_client`'s own logging, which only ever logs metadata).
 
     Rejects a duplicate username or email (case-insensitive) with a
-    `ConflictError` before ever hashing the password."""
+    `ConflictError` before ever hashing the password. The email side of that
+    check compares `User.emailHash` — a deterministic hash of the normalized
+    email — never a decrypted/plaintext comparison.
+
+    Raises `DkmsUnavailableError` (unhandled here — propagates to the
+    caller/route) if DKMS can't be reached, rather than falling back to
+    storing the email in plaintext."""
+    email_hash = dkms_client.hash_email(_normalize_email(email))
     existing = db.execute(
-        select(User).where(
-            (func.lower(User.username) == username.lower()) | (func.lower(User.email) == email.lower())
-        )
+        select(User).where((func.lower(User.username) == username.lower()) | (User.emailHash == email_hash))
     ).scalar_one_or_none()
     if existing is not None:
         field = "username" if existing.username.lower() == username.lower() else "email"
         raise ConflictError(f"A user with this {field} already exists")
 
     password_hash = hash_password(password)
+    encrypted_email = dkms_client.encrypt_email(email)
     user = User(
         username=username,
-        email=email,
+        email=encrypted_email,
+        emailHash=email_hash,
         passwordHash=password_hash,
         role=role,
         subsidiaryId=subsidiary_id,
@@ -199,6 +232,76 @@ def set_user_active(db: Session, id: str, is_active: bool) -> Optional[User]:
     return existing
 
 
+def _user_has_dependent_records(db: Session, id: str) -> bool:
+    """True if this user has ever created/submitted/reviewed/triggered/
+    generated anything the app still shows in its history. Real DB foreign
+    keys enforce this regardless (a hard DELETE would fail on one of them),
+    but checking first lets `delete_user` return a clean, specific outcome
+    instead of a raw SQL error bubbling up.
+
+    Covers every table with a live FK to `Users.id` *except* `RefreshTokens`
+    (a login session, not a business record — `delete_user` deletes those
+    itself rather than blocking on them) — `Forms`, `FormVersions`,
+    `FormContributions` (both `submittedByUserId` and `reviewedByUserId`),
+    `QuestionMasterVersions`, `QaRuns`, `AIConversations`, `AIActions`, and
+    `Uploads` (the removed Excel-upload feature's table — no ORM model left
+    in this port, but the table and its FK to Users still exist in the
+    shared DB, so it's checked via raw SQL)."""
+    if db.execute(select(Form.id).where(Form.createdByUserId == id).limit(1)).first():
+        return True
+    if db.execute(select(FormVersion.id).where(FormVersion.createdByUserId == id).limit(1)).first():
+        return True
+    if db.execute(
+        select(FormContribution.id)
+        .where(or_(FormContribution.submittedByUserId == id, FormContribution.reviewedByUserId == id))
+        .limit(1)
+    ).first():
+        return True
+    if db.execute(
+        select(QuestionMasterVersion.id).where(QuestionMasterVersion.generatedByUserId == id).limit(1)
+    ).first():
+        return True
+    if db.execute(select(QaRun.id).where(QaRun.triggeredByUserId == id).limit(1)).first():
+        return True
+    if db.execute(select(AIConversation.id).where(AIConversation.userId == id).limit(1)).first():
+        return True
+    if db.execute(select(AIAction.id).where(AIAction.userId == id).limit(1)).first():
+        return True
+    if db.execute(text("SELECT TOP 1 id FROM Uploads WHERE userId = :id"), {"id": id}).first():
+        return True
+    return False
+
+
+DeleteUserOutcome = Literal["ok", "not_found", "has_records"]
+
+
+def delete_user(db: Session, id: str) -> DeleteUserOutcome:
+    """Hard-deletes a user account — only possible when they have no
+    dependent records anywhere in the app's history (see
+    `_user_has_dependent_records`); such a user can only be deactivated
+    (`set_user_active`, always available regardless of this), never deleted.
+    Deletes this user's refresh tokens first (a real FK too, but not itself
+    a "record" worth blocking on) so the delete doesn't fail on stale
+    sessions. The `IntegrityError` fallback is a last line of defense for a
+    race (a record created between the check above and this commit) or an
+    FK this function doesn't yet know about — translated to the same
+    `"has_records"` outcome rather than a raw DB error reaching the caller."""
+    existing = db.get(User, id)
+    if existing is None:
+        return "not_found"
+    if _user_has_dependent_records(db, id):
+        return "has_records"
+
+    db.execute(delete(RefreshToken).where(RefreshToken.userId == id))
+    db.delete(existing)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return "has_records"
+    return "ok"
+
+
 def update_user(db: Session, id: str, input: dict[str, Any]) -> Optional[User]:
     """Updates a user's own account fields (username/email/role/subsidiary)
     — distinct from `set_user_active` (isActive only) and
@@ -213,20 +316,34 @@ def update_user(db: Session, id: str, input: dict[str, Any]) -> Optional[User]:
     Rejects a duplicate username or email (case-insensitive, excluding this
     row itself) with a `ConflictError`. Rejects leaving a "standard" user
     without a subsidiary with a `ValidationError`, computed against the
-    *resulting* role/subsidiaryId (not just what's in this partial update)."""
+    *resulting* role/subsidiaryId (not just what's in this partial update).
+
+    The email side of the duplicate check — and of the "did email actually
+    change" decision — compares `User.emailHash`, never decrypted/plaintext
+    email: `existing.email` is DKMS ciphertext, not something `.lower()`-
+    comparable the way the pre-encryption code compared it. Encryption/
+    hashing is skipped entirely when no new email is provided, both to avoid
+    an unnecessary DKMS round trip and so a `DkmsUnavailableError` is only
+    ever possible here when the caller actually asked to change the email."""
     existing = db.get(User, id)
     if existing is None:
         return None
 
     next_username = (input.get("username") or "").strip() or existing.username
-    next_email = (input.get("email") or "").strip() or existing.email
+    requested_email = (input.get("email") or "").strip()
+    username_changed = next_username.lower() != existing.username.lower()
+    email_changing = bool(requested_email)
 
-    if next_username.lower() != existing.username.lower() or next_email.lower() != existing.email.lower():
+    next_email_hash: Optional[str] = existing.emailHash
+    if email_changing:
+        next_email_hash = dkms_client.hash_email(_normalize_email(requested_email))
+
+    if username_changed or email_changing:
+        conflict_conditions = [func.lower(User.username) == next_username.lower()]
+        if email_changing:
+            conflict_conditions.append(User.emailHash == next_email_hash)
         conflict = db.execute(
-            select(User).where(
-                User.id != id,
-                (func.lower(User.username) == next_username.lower()) | (func.lower(User.email) == next_email.lower()),
-            )
+            select(User).where(User.id != id, or_(*conflict_conditions))
         ).scalar_one_or_none()
         if conflict is not None:
             field = "username" if conflict.username.lower() == next_username.lower() else "email"
@@ -242,15 +359,17 @@ def update_user(db: Session, id: str, input: dict[str, Any]) -> Optional[User]:
         raise ValidationError("Subsidiary is required for a standard user")
 
     existing.username = next_username
-    existing.email = next_email
+    if email_changing:
+        existing.email = dkms_client.encrypt_email(requested_email)
+        existing.emailHash = next_email_hash
     existing.role = next_role
     existing.subsidiaryId = next_subsidiary_id
     if "firstName" in input:
         raw_first_name = input["firstName"]
-        existing.firstName = raw_first_name.strip() if raw_first_name else None
+        existing.firstName = dkms_client.encrypt_first_name(raw_first_name.strip()) if raw_first_name else None
     if "lastName" in input:
         raw_last_name = input["lastName"]
-        existing.lastName = raw_last_name.strip() if raw_last_name else None
+        existing.lastName = dkms_client.encrypt_last_name(raw_last_name.strip()) if raw_last_name else None
     db.add(existing)
     db.commit()
     db.refresh(existing)

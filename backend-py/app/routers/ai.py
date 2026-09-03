@@ -42,12 +42,12 @@ async def chat(
             db, auth, body.model_dump(exclude_none=True)
         )
         return result
-    except Exception as exc:
+    except Exception:
         import traceback
         traceback.print_exc()
         return {
             "conversationId": None,
-            "message": f"Something went wrong while processing your request: {exc}",
+            "message": aiAssistantService.GENERIC_AI_FAILURE_MESSAGE,
             "actions": [],
             "references": [],
         }

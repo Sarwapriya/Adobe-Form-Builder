@@ -27,9 +27,11 @@ import {
 } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
 import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { ApiError } from "../api/apiClient";
 import {
   createUser,
+  deleteUser,
   listUsers,
   setUserActive,
   setUserNotificationEmail,
@@ -69,6 +71,7 @@ export function UserManagementPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<AdminUserListItem | null>(null);
+  const [deletingUser, setDeletingUser] = useState<AdminUserListItem | null>(null);
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -177,6 +180,17 @@ export function UserManagementPage() {
   // naturally excludes self-edit too). Enforced authoritatively server-side —
   // see admin.router.ts's PATCH /users/:id/profile.
   function canEditProfile(target: AdminUserListItem): boolean {
+    return isSuperAdmin || target.role === "standard";
+  }
+
+  // Same permission shape as canToggle (nobody may act on their own account;
+  // a plain admin only on standard accounts, a superadmin on anyone) — the
+  // backend applies the identical check either way, so the *button* is
+  // always offered; whether the delete actually succeeds is a separate
+  // question answered by the confirm dialog (a user with existing records
+  // gets rejected with a 409 there, not hidden here).
+  function canDelete(target: AdminUserListItem): boolean {
+    if (target.id === currentUser?.id) return false;
     return isSuperAdmin || target.role === "standard";
   }
 
@@ -377,6 +391,13 @@ export function UserManagementPage() {
                           </IconButton>
                         </Tooltip>
                       )}
+                      {canDelete(u) && (
+                        <Tooltip title="Delete account">
+                          <IconButton size="small" color="error" onClick={() => setDeletingUser(u)}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -398,7 +419,78 @@ export function UserManagementPage() {
           }}
         />
       )}
+
+      {deletingUser && (
+        <DeleteUserDialog
+          user={deletingUser}
+          onClose={() => setDeletingUser(null)}
+          onDeleted={async () => {
+            setDeletingUser(null);
+            await refresh();
+          }}
+        />
+      )}
     </Box>
+  );
+}
+
+/**
+ * Confirms a permanent delete, then surfaces the backend's rejection
+ * front-and-center when the account can't be deleted — a user who's ever
+ * created a form, submitted a contribution, run a QA check, etc. always
+ * gets rejected with a 409 (see admin.router.py's `delete_user` /
+ * auth_service.py's `_user_has_dependent_records`), and this dialog is
+ * where that "cannot delete, deactivate instead" message actually reaches
+ * the admin — it's not something the row-level Delete button tries to
+ * predict ahead of time.
+ */
+function DeleteUserDialog({
+  user,
+  onClose,
+  onDeleted,
+}: {
+  user: AdminUserListItem;
+  onClose: () => void;
+  onDeleted: () => void | Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleConfirm() {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteUser(user.id);
+      await onDeleted();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete user");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <Dialog open onClose={deleting ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Delete user</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ mb: error ? 2 : 0 }}>
+          Permanently delete <strong>{user.username}</strong> ({user.email})? This cannot be undone.
+        </Typography>
+        {error && (
+          <Alert severity="error" onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={deleting}>
+          Cancel
+        </Button>
+        <Button variant="contained" color="error" onClick={handleConfirm} disabled={deleting}>
+          {deleting ? "Deleting..." : "Delete"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

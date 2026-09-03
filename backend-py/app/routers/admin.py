@@ -3,10 +3,17 @@
 `adminRouter.use(requireAdmin)`.
 
 Route groups ported: project codes, subsidiaries, subsidiary-project blocks,
-subsidiary locales, users, SMTP/FabriX/Claude settings, SFTP deployment
+subsidiary locales, users, SMTP/FabriX/Groq settings, SFTP deployment
 settings, dashboard-summary, and Question Master. `admin.router.ts`'s QA-run
 routes belong to a later phase (form builder / QA) and are intentionally not
 ported here.
+
+FabriX and Groq are the two AI-assistant provider tiers, each independently
+enable/disable-toggleable (see `fabrix_settings_service.py`/
+`groq_settings_service.py`) — FabriX always gets first priority when both are
+enabled (see `aiProviderService.py`). There is no third "Claude/Anthropic"
+tier — an earlier version of this port had one, but it was never actually
+configured with real Anthropic credentials in practice and has been removed.
 
 Mounted at `/api/v1/admin` (see `app/main.py`).
 """
@@ -21,15 +28,14 @@ from pydantic import BaseModel, BeforeValidator, EmailStr, Field, field_validato
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.security import dkms_client
 from app.security.deps import require_admin
 from app.services import (
     auth_service,
-    claude_settings_service,
     dashboard_service,
     fabrix_models_service,
     fabrix_settings_service,
     groq_settings_service,
-    other_ai_models_service,
     project_code_service,
     question_master_service,
     sftp_settings_service,
@@ -40,8 +46,8 @@ from app.services import (
 )
 from app.services.fabrix_models_service import CreateFabrixModelInput
 from app.services.fabrix_settings_service import FabrixSettingsInput
-from app.services.claude_settings_service import ClaudeSettingsInput
 from app.services.groq_settings_service import GroqSettingsInput
+from app.services.groqAIService import send_message as send_groq_message
 from app.services.sftp_settings_service import SftpTargetConfig
 from app.services.smtp_settings_service import SmtpSettingsInput
 from app.services.subsidiary_locale_service import CreateSubsidiaryLocaleInput
@@ -109,12 +115,18 @@ def _serialize_locale(loc) -> dict:
 
 
 def _serialize_user_full(u) -> dict:
+    # email/firstName/lastName are DKMS ciphertext at rest — decrypted only
+    # here, for the admin-facing response that actually needs to display
+    # them. `decrypt_or_none` degrades a single field to `null` on a DKMS
+    # failure rather than failing the whole list/response (see its own
+    # doc comment) — notificationEmail/notificationEmail2 are untouched,
+    # separate columns this feature doesn't encrypt.
     return {
         "id": u.id,
         "username": u.username,
-        "email": u.email,
-        "firstName": u.firstName,
-        "lastName": u.lastName,
+        "email": dkms_client.decrypt_or_none(u.email),
+        "firstName": dkms_client.decrypt_or_none(u.firstName),
+        "lastName": dkms_client.decrypt_or_none(u.lastName),
         "role": u.role,
         "subsidiaryId": u.subsidiaryId,
         "isActive": u.isActive,
@@ -126,10 +138,6 @@ def _serialize_user_full(u) -> dict:
 
 def _serialize_fabrix_model(m) -> dict:
     return {"id": m.id, "name": m.name, "modelId": m.modelId, "isEnabled": m.isEnabled, "sortOrder": m.sortOrder, "createdAt": m.createdAt}
-
-
-def _serialize_other_ai_model(m) -> dict:
-    return {"id": m.id, "name": m.name, "modelId": m.modelId, "sortOrder": m.sortOrder, "createdAt": m.createdAt}
 
 
 def _serialize_question_master_version(v) -> dict:
@@ -424,7 +432,9 @@ def create_user(body: CreateUserBody, db: Session = Depends(get_db), auth: dict 
     if auth.get("role") != "superadmin" and body.role != "standard":
         raise HTTPException(status_code=403, detail="only a superadmin may provision an admin or superadmin account")
     user = auth_service.create_user(db, body.username, str(body.email), body.password, body.role, body.subsidiaryId)
-    return {"id": user.id, "username": user.username, "email": user.email, "role": user.role, "subsidiaryId": user.subsidiaryId}
+    # Echoes back the email the admin just typed rather than decrypting
+    # `user.email` — same value, one fewer DKMS round trip.
+    return {"id": user.id, "username": user.username, "email": str(body.email), "role": user.role, "subsidiaryId": user.subsidiaryId}
 
 
 class UpdateUserActiveBody(BaseModel):
@@ -453,11 +463,41 @@ def update_user_active(
     return {
         "id": updated.id,
         "username": updated.username,
-        "email": updated.email,
+        "email": dkms_client.decrypt_or_none(updated.email),
         "role": updated.role,
         "subsidiaryId": updated.subsidiaryId,
         "isActive": updated.isActive,
     }
+
+
+# Hard delete — only possible when the account has no dependent records
+# anywhere in the app's history (created forms, contributions, QA runs,
+# Question Master exports, AI assistant activity, ...). A user who's ever
+# done any of that can only be deactivated (PATCH .../users/:id above),
+# never deleted — see auth_service.delete_user. Same self-account and
+# role-based restrictions as update_user_active.
+@router.delete("/users/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(id: str, db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> None:
+    if id == auth.get("sub"):
+        raise HTTPException(status_code=403, detail="you cannot delete your own account")
+
+    target = auth_service.find_user_by_id(db, id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    if auth.get("role") != "superadmin" and target.role != "standard":
+        raise HTTPException(status_code=403, detail="only a superadmin may delete an admin or superadmin account")
+
+    outcome = auth_service.delete_user(db, id)
+    if outcome == "not_found":
+        raise HTTPException(status_code=404, detail="user not found")
+    if outcome == "has_records":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This user cannot be deleted because they already have records in the system "
+                "(created forms, contributions, or other activity). Deactivate the account instead."
+            ),
+        )
 
 
 class UpdateUserProfileBody(BaseModel):
@@ -678,44 +718,12 @@ def delete_fabrix_model(id: str, db: Session = Depends(get_db)) -> None:
         raise HTTPException(status_code=404, detail="fabrix model not found")
 
 
-# --- Claude settings -------------------------------------------------------------
-
-
-class ClaudeSettingsBody(BaseModel):
-    model: str = Field(min_length=1)
-    apiKey: Optional[str] = None
-    enabled: Optional[bool] = None
-
-
-@router.get("/claude-settings")
-def get_claude_settings(db: Session = Depends(get_db)) -> dict:
-    return claude_settings_service.get_claude_settings_for_display(db)
-
-
-@router.get("/other-ai-models")
-def list_other_ai_models(db: Session = Depends(get_db)) -> list[dict]:
-    return [_serialize_other_ai_model(m) for m in other_ai_models_service.list_other_ai_models(db)]
-
-
-@router.patch("/claude-settings")
-def patch_claude_settings(body: ClaudeSettingsBody, db: Session = Depends(get_db)) -> dict:
-    claude_settings_service.save_claude_settings(
-        db, ClaudeSettingsInput(model=body.model, apiKey=body.apiKey, enabled=body.enabled)
-    )
-    return claude_settings_service.get_claude_settings_for_display(db)
-
-
-@router.post("/claude-settings/test")
-def test_claude_settings(db: Session = Depends(get_db)) -> dict:
-    # TODO(phase: AI assistant / SFTP+email): wire up claudeAIService's real
-    # outbound call once that phase lands.
-    settings = claude_settings_service.get_claude_settings_for_display(db)
-    if not settings["hasApiKey"]:
-        raise HTTPException(status_code=400, detail={"ok": False, "error": "A Claude API key must be configured first"})
-    return {"ok": False, "error": "Not yet implemented — outbound send ships in a later phase"}
-
-
-# --- Groq settings -------------------------------------------------------------
+# --- Groq settings -----------------------------------------------------------
+# The fallback AI-assistant provider tier, used automatically whenever
+# FabriX is disabled or unreachable (see aiProviderService.py). Enabling/
+# disabling either tier is exactly what decides "which API should use" —
+# there's no separate priority setting, since FabriX is always tried first
+# when both are enabled.
 
 
 class GroqSettingsBody(BaseModel):
@@ -735,6 +743,15 @@ def patch_groq_settings(body: GroqSettingsBody, db: Session = Depends(get_db)) -
         db, GroqSettingsInput(model=body.model, apiKey=body.apiKey, enabled=body.enabled)
     )
     return groq_settings_service.get_groq_settings_for_display(db)
+
+
+@router.post("/groq-settings/test")
+async def test_groq_settings(db: Session = Depends(get_db)) -> dict:
+    settings = groq_settings_service.get_groq_settings_for_display(db)
+    if not settings["hasApiKey"]:
+        raise HTTPException(status_code=400, detail={"ok": False, "error": "A Groq API key must be configured first"})
+    result = await send_groq_message({"messages": [{"role": "user", "content": "Reply with a short greeting."}]}, db)
+    return {"ok": result["ok"], "error": None if result["ok"] else result["error"]}
 
 
 # --- SFTP deployment settings -----------------------------------------------------

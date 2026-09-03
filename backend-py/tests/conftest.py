@@ -15,14 +15,17 @@ the suite never leaves rows behind in a shared database.
 
 from __future__ import annotations
 
+import socket
 import uuid
 from typing import Generator
+from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db, get_engine
 from app.main import app
 from app.middleware.rate_limit import limiter
@@ -44,6 +47,29 @@ def _database_reachable() -> bool:
 @pytest.fixture(scope="session")
 def database_available() -> bool:
     return _database_reachable()
+
+
+def _dkms_reachable() -> bool:
+    """A plain TCP-connect probe (not a real request to any of the three
+    DKMS endpoints) — mirrors `_database_reachable`'s "can we even reach
+    it" check, kept short-timeout so an unreachable DKMS doesn't slow down
+    every test run that collects this fixture."""
+    if not settings.DKMS_BASE_URL:
+        return False
+    parsed = urlparse(settings.DKMS_BASE_URL)
+    if not parsed.hostname:
+        return False
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((parsed.hostname, port), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
+@pytest.fixture(scope="session")
+def dkms_available() -> bool:
+    return _dkms_reachable()
 
 
 @pytest.fixture(autouse=True)

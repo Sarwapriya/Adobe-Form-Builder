@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -37,6 +38,17 @@ def _create_user_body(role: str = "standard", subsidiary_id: str | None = "Some 
 
 
 class TestCreateUser:
+    """Every case here calls `POST /api/v1/admin/users`, which now hashes
+    and encrypts the new user's email via DKMS (see
+    `auth_service.create_user`) — genuinely needs a reachable DKMS, unlike
+    most of this module's other tests (see the `dkms_available`-gated case
+    in `TestUpdateUserProfile` below for why the rest don't)."""
+
+    @pytest.fixture(autouse=True)
+    def _require_dkms(self, dkms_available: bool):
+        if not dkms_available:
+            pytest.skip("DKMS not reachable — set DKMS_BASE_URL/DKMS_TASK_ID to run this test")
+
     def test_non_admin_forbidden(self, client: TestClient, standard_headers: dict):
         resp = client.post("/api/v1/admin/users", json=_create_user_body(), headers=standard_headers)
         assert resp.status_code == 403
@@ -103,8 +115,64 @@ class TestSetUserActive:
         assert resp.status_code == 404
 
 
+class TestDeleteUser:
+    def test_cannot_delete_own_account(self, client: TestClient, admin_headers: dict, admin_user):
+        resp = client.delete(f"/api/v1/admin/users/{admin_user.id}", headers=admin_headers)
+        assert resp.status_code == 403
+
+    def test_admin_can_delete_standard_with_no_records(
+        self, client: TestClient, admin_headers: dict, db_session: Session
+    ):
+        target = make_user(db_session, role="standard", subsidiary_id="Sub")
+        resp = client.delete(f"/api/v1/admin/users/{target.id}", headers=admin_headers)
+        assert resp.status_code == 204
+
+        # actually gone, not just deactivated
+        follow_up = client.patch(f"/api/v1/admin/users/{target.id}", json={"isActive": False}, headers=admin_headers)
+        assert follow_up.status_code == 404
+
+    def test_admin_cannot_delete_another_admin(self, client: TestClient, admin_headers: dict, db_session: Session):
+        target = make_user(db_session, role="admin")
+        resp = client.delete(f"/api/v1/admin/users/{target.id}", headers=admin_headers)
+        assert resp.status_code == 403
+
+    def test_superadmin_can_delete_admin(self, client: TestClient, superadmin_headers: dict, db_session: Session):
+        target = make_user(db_session, role="admin")
+        resp = client.delete(f"/api/v1/admin/users/{target.id}", headers=superadmin_headers)
+        assert resp.status_code == 204
+
+    def test_unknown_user_404(self, client: TestClient, admin_headers: dict):
+        resp = client.delete("/api/v1/admin/users/00000000-0000-0000-0000-000000000000", headers=admin_headers)
+        assert resp.status_code == 404
+
+    def test_user_with_a_created_form_cannot_be_deleted(
+        self, client: TestClient, admin_headers: dict, db_session: Session
+    ):
+        from app.models.form import Form
+
+        target = make_user(db_session, role="standard", subsidiary_id="Sub")
+        db_session.add(Form(name="Some Campaign", subsidiaryId="Sub", createdByUserId=target.id))
+        db_session.commit()
+
+        resp = client.delete(f"/api/v1/admin/users/{target.id}", headers=admin_headers)
+        assert resp.status_code == 409
+        assert "deactivate" in resp.json()["error"].lower()
+
+        # still there, and can still be deactivated instead
+        follow_up = client.patch(f"/api/v1/admin/users/{target.id}", json={"isActive": False}, headers=admin_headers)
+        assert follow_up.status_code == 200
+        assert follow_up.json()["isActive"] is False
+
+
 class TestUpdateUserProfile:
-    def test_admin_can_edit_standard_profile(self, client: TestClient, admin_headers: dict, db_session: Session):
+    def test_admin_can_edit_standard_profile(
+        self, client: TestClient, admin_headers: dict, db_session: Session, dkms_available: bool
+    ):
+        if not dkms_available:
+            pytest.skip("DKMS not reachable — set DKMS_BASE_URL/DKMS_TASK_ID to run this test")
+        # A real DKMS encrypt-then-decrypt round trip: this route encrypts
+        # "Ada" via DKMS before storing it, then `_serialize_user_full`
+        # decrypts it again for the response — see auth_service.update_user.
         target = make_user(db_session, role="standard", subsidiary_id="Sub")
         resp = client.patch(
             f"/api/v1/admin/users/{target.id}/profile", json={"firstName": "Ada"}, headers=admin_headers

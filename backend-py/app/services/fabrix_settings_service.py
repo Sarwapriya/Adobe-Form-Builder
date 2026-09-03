@@ -80,8 +80,12 @@ def get_fabrix_settings(db: Session) -> Optional[FabrixSettings]:
         baseUrl=base_url,
         modelIds=model_ids,
         enabled=enabled,
-        timeoutSeconds=timeout_seconds or DEFAULT_TIMEOUT_SECONDS,
-        maxRetries=max_retries or DEFAULT_MAX_RETRIES,
+        # Not `timeout_seconds or DEFAULT_...` — an explicit 0 for maxRetries
+        # ("don't retry, fail fast") is falsy in Python, and the ternaries
+        # above already applied the real fallback chain, so a bare `or`
+        # here would silently discard a deliberate 0 back to the default.
+        timeoutSeconds=timeout_seconds,
+        maxRetries=max_retries,
         clientHeader=client_header,
         openApiToken=open_api_token,
         userEmail=user_email,

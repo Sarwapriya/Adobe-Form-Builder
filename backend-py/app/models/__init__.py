@@ -25,7 +25,6 @@ from app.models.ai_conversation import AIConversation
 from app.models.ai_conversation_message import AIConversationMessage
 from app.models.ai_action import AIAction
 from app.models.fabrix_model import FabrixModel
-from app.models.other_ai_model import OtherAiModel
 
 __all__ = [
     "Base",
@@ -50,5 +49,4 @@ __all__ = [
     "AIConversationMessage",
     "AIAction",
     "FabrixModel",
-    "OtherAiModel",
 ]

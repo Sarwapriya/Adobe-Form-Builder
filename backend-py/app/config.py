@@ -10,7 +10,7 @@ equivalent of `backend/src/utils/env.ts`'s `requireEnv`, but centralized.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal, Optional
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,19 +45,29 @@ class Settings(BaseSettings):
     FABRIX_OPENAPI_TOKEN: Optional[str] = None
     FABRIX_USER_EMAIL: Optional[str] = None
 
-    # --- Claude / Anthropic (TODO(phase N): AI assistant router/service) ---
-    AI_PROVIDER: Literal["fabrix", "claude"] = "fabrix"
-    ANTHROPIC_API_KEY: Optional[str] = None
-    CLAUDE_MODEL: str = "claude-opus-5"
-    CLAUDE_ENABLED: bool = True
-
-    # --- Groq (OpenAI-compatible chat completions API; second fallback in
-    # the AI assistant chain, tried after FabriX and Claude) ---
+    # --- Groq (OpenAI-compatible chat completions API; fallback tier in the
+    # AI assistant chain, tried whenever FabriX is disabled or unreachable —
+    # see aiProviderService.py) ---
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL: str = "openai/gpt-oss-120b"
     GROQ_ENABLED: bool = True
 
     FORMBUILDER_NOTIFY_EMAIL: Optional[str] = None
+
+    # --- DKMS (PII encryption/hashing service) ---
+    # Base URL only (no trailing /dkms/v1/... suffix) — app/security/dkms_client.py
+    # appends the specific endpoint path. taskId is sent on every encrypt call, per
+    # the DKMS request contract.
+    DKMS_BASE_URL: Optional[str] = None
+    DKMS_TASK_ID: Optional[str] = None
+    DKMS_TIMEOUT_SECONDS: int = 10
+    # piiTag values sent per field — DKMS's decrypt endpoint takes only a
+    # ciphertext (no tag), so these are audit/classification labels, not part of
+    # the encryption scheme itself. Adjust here (or via env) if DKMS expects
+    # specific enum values different from these defaults.
+    DKMS_PII_TAG_EMAIL: str = "email"
+    DKMS_PII_TAG_FIRST_NAME: str = "name"
+    DKMS_PII_TAG_LAST_NAME: str = "name"
 
     # --- Core / security ---
     JWT_SECRET: Optional[str] = None

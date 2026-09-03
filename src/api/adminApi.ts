@@ -65,6 +65,18 @@ export function setUserActive(id: string, isActive: boolean): Promise<CreatedUse
   return apiClient.patch<CreatedUser & { isActive: boolean }>(`/api/v1/admin/users/${id}`, { isActive });
 }
 
+/**
+ * Permanently deletes an account — only possible when it has no records
+ * anywhere in the app's history (created forms, contributions, QA runs,
+ * Question Master exports, AI assistant activity, ...); the backend rejects
+ * with a 409 otherwise (see admin.router.py's `delete_user`), and the only
+ * option for such an account is `setUserActive(id, false)` instead. Same
+ * self-account and role-based restriction as `setUserActive`.
+ */
+export function deleteUser(id: string): Promise<void> {
+  return apiClient.delete<void>(`/api/v1/admin/users/${id}`);
+}
+
 export interface UpdateUserProfileInput {
   username?: string;
   email?: string;
@@ -365,48 +377,34 @@ export function deleteFabrixModel(id: string): Promise<void> {
   return apiClient.delete(`/api/v1/admin/fabrix-models/${id}`);
 }
 
-/** DB-stored connection settings for the Anthropic Claude Messages API (see
- * backend's claudeSettingsService.ts) — used automatically as a fallback
- * whenever FabriX can't be reached (see backend's aiProviderService.ts).
- * Much simpler surface than FabriX: one API key, one model string, no
- * separate headers. */
-export interface ClaudeSettings {
+/** DB-stored connection settings for Groq's OpenAI-compatible chat
+ * completions API (see backend's groq_settings_service.py) — used
+ * automatically as a fallback whenever FabriX is disabled or unreachable
+ * (see backend's aiProviderService.py). Much simpler surface than FabriX:
+ * one API key, one model string, no separate headers. */
+export interface GroqSettings {
   model: string;
   enabled: boolean;
   hasApiKey: boolean;
 }
 
-export interface SaveClaudeSettingsInput {
+export interface SaveGroqSettingsInput {
   model: string;
   enabled: boolean;
   /** Omit or leave blank to keep whatever key is already saved. */
   apiKey?: string;
 }
 
-export function getClaudeSettings(): Promise<ClaudeSettings> {
-  return apiClient.get<ClaudeSettings>("/api/v1/admin/claude-settings");
+export function getGroqSettings(): Promise<GroqSettings> {
+  return apiClient.get<GroqSettings>("/api/v1/admin/groq-settings");
 }
 
-export function saveClaudeSettings(input: SaveClaudeSettingsInput): Promise<ClaudeSettings> {
-  return apiClient.patch<ClaudeSettings>("/api/v1/admin/claude-settings", input);
+export function saveGroqSettings(input: SaveGroqSettingsInput): Promise<GroqSettings> {
+  return apiClient.patch<GroqSettings>("/api/v1/admin/groq-settings", input);
 }
 
-export function sendClaudeTestMessage(): Promise<{ ok: boolean; error?: string }> {
-  return apiClient.post<{ ok: boolean; error?: string }>("/api/v1/admin/claude-settings/test");
-}
-
-/** Read-only reference catalog of known models for the fallback AI providers
- * (see backend's OtherAiModel entity) — feeds the Model field's picklist in
- * the "Other AI Providers" panel. Not admin-editable the way FabrixModel is:
- * these are Anthropic's own official model ids, not tenant-specific values.
- * Named provider-generically, like the rest of that section — see
- * ClaudeSettingsManager.tsx's AiProviderPanel. */
-export interface OtherAiModel {
-  id: string;
-  name: string;
-  modelId: string;
-  sortOrder: number;
-  createdAt: string;
+export function sendGroqTestMessage(): Promise<{ ok: boolean; error?: string }> {
+  return apiClient.post<{ ok: boolean; error?: string }>("/api/v1/admin/groq-settings/test");
 }
 
 /** DB-stored SFTP deployment config (Configuration > Deployment) — see
@@ -440,8 +438,4 @@ export function saveDeploymentTarget(environment: SftpEnvironment, input: SftpTa
 
 export function setActiveDeploymentEnvironment(environment: SftpEnvironment): Promise<SftpDeploymentSettings> {
   return apiClient.post<SftpDeploymentSettings>("/api/v1/admin/deployment-settings/active", { environment });
-}
-
-export function listOtherAiModels(): Promise<OtherAiModel[]> {
-  return apiClient.get<OtherAiModel[]>("/api/v1/admin/other-ai-models");
 }

@@ -36,6 +36,13 @@ from app.services.aiSystemPrompt import build_system_prompt
 
 HISTORY_LIMIT = 20
 
+# Shown to the customer whenever every AI provider tier (FabriX, Groq)
+# failed, or an unexpected exception was raised — never the raw
+# provider/exception text (e.g. "FabriXAI request timed out after 5s"),
+# which would leak internal infrastructure detail into the chat transcript.
+# The real error is still logged server-side for debugging.
+GENERIC_AI_FAILURE_MESSAGE = "Sorry, I'm having trouble reaching the AI service right now. Please try again in a moment."
+
 MUTATING_AI_TOOLS = [
     "CREATE_CAMPAIGN", "CLONE_CAMPAIGN", "ADD_QUESTION", "UPDATE_QUESTION",
     "DELETE_QUESTION", "REORDER_QUESTIONS", "SUGGEST_QUESTIONS",
@@ -150,10 +157,10 @@ async def send_chat_message(
 
         if not initial["ok"]:
             print(f"[aiAssistantService] AI provider call failed: {initial['error']}")
-            await _persist_message(db, conversation.id, "assistant", initial["error"])
+            await _persist_message(db, conversation.id, "assistant", GENERIC_AI_FAILURE_MESSAGE)
             return {
                 "conversationId": conversation.id,
-                "message": initial["error"],
+                "message": GENERIC_AI_FAILURE_MESSAGE,
                 "actions": [],
                 "references": [],
             }
@@ -189,13 +196,11 @@ async def send_chat_message(
             db, conversation, ctx, auth, form_id, call, remainder_text
         )
     except Exception as err:
-        detail = str(err)
         print(f"[aiAssistantService] sendChatMessage failed: {err}")
-        message = f"Something went wrong while processing your request: {detail}"
-        await _persist_message(db, conversation.id, "assistant", message)
+        await _persist_message(db, conversation.id, "assistant", GENERIC_AI_FAILURE_MESSAGE)
         return {
             "conversationId": conversation.id,
-            "message": message,
+            "message": GENERIC_AI_FAILURE_MESSAGE,
             "actions": [],
             "references": [],
         }
@@ -299,8 +304,10 @@ async def _handle_readonly_tool(
         {"role": "tool", "content": _section("TOOL RESULTS", json.dumps(tool_result, default=str))},
     ]
     final = await send_ai_message({"messages": follow_up}, db)
+    if not final["ok"]:
+        print(f"[aiAssistantService] AI provider follow-up call failed: {final['error']}")
 
-    message = final["replyText"] if final["ok"] else f"I couldn't complete your request: {final['error']}"
+    message = final["replyText"] if final["ok"] else GENERIC_AI_FAILURE_MESSAGE
     await _persist_message(
         db, conversation.id, "assistant", message,
         token_usage=final.get("tokenUsage") if final["ok"] else None,

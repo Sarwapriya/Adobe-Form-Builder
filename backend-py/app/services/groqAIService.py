@@ -1,11 +1,11 @@
 """Talks to Groq's OpenAI-compatible chat completions API
 (https://api.groq.com/openai/v1/chat/completions). Same `send_message`
-contract as `claudeAIService.py`/`fabrixAIService.py` — takes
-`request["messages"]` (a flat list of `{role, content}` turns, `role` one of
-"system"/"user"/"assistant"/"tool") and returns `{ok, replyText, model,
-tokenUsage}`, or a structured `{ok: False, error}`. Uses `httpx` (already a
-dependency for `fabrixAIService.py`), not the separate `openai` SDK, to avoid
-adding another dependency for what's a single JSON POST.
+contract as `fabrixAIService.py` — takes `request["messages"]` (a flat list
+of `{role, content}` turns, `role` one of "system"/"user"/"assistant"/"tool")
+and returns `{ok, replyText, model, tokenUsage}`, or a structured `{ok:
+False, error}`. Uses `httpx` (already a dependency for `fabrixAIService.py`),
+not the separate `openai` SDK, to avoid adding another dependency for what's
+a single JSON POST.
 """
 
 from __future__ import annotations
@@ -24,8 +24,7 @@ def _to_groq_role(role: str) -> str:
     # Groq's chat-completions API has no "tool" role in the sense this
     # codebase uses it (a synthetic turn injecting tool-call results back
     # into the conversation, not a real OpenAI tool-call response tied to a
-    # tool_call_id) — folded into "user" like the "assistant"/other-role
-    # normalization claudeAIService.py does for the Anthropic side.
+    # tool_call_id) — folded into "user" instead.
     if role in ("system", "assistant"):
         return role
     return "user"
@@ -46,13 +45,23 @@ async def send_message(request: dict[str, Any], db: Any) -> dict[str, Any]:
     body = {
         "model": settings.model,
         "messages": messages,
-        # Kept well under Claude's 8192 — Groq's free/on_demand tier caps
+        # Groq's free/on_demand tier caps
         # requests at 8000 tokens-per-minute *combined* prompt+completion
         # (see the account's actual limit surfaced in a 413 response), and
         # this app's system prompt + campaign-context turns alone can run
         # several thousand tokens, leaving little room if this were set any
         # higher.
-        "max_completion_tokens": 2048,
+        "max_completion_tokens": 4096,
+        # gpt-oss (and similarly reasoning-capable Groq models) emit hidden
+        # chain-of-thought into a separate `message.reasoning` field before
+        # the real answer — on a busy/longer conversation that reasoning
+        # alone was eating the whole `max_completion_tokens` budget, hitting
+        # `finish_reason: "length"` with `content` still empty (this app's
+        # actual system prompt + a tool-triggering user turn reproduced it:
+        # 165 reasoning tokens with the default effort). "low" cuts that
+        # down (60 tokens in the same repro) and leaves the budget for the
+        # actual reply.
+        "reasoning_effort": "low",
     }
     headers = {
         "Authorization": f"Bearer {settings.apiKey}",

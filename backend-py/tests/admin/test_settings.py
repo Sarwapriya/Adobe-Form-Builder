@@ -1,11 +1,14 @@
-"""Tests for the SMTP/FabriX/Claude/SFTP settings CRUD under
+"""Tests for the SMTP/FabriX/Groq/SFTP settings CRUD under
 `/api/v1/admin/*-settings` — round-trips each through the real DB and
 verifies secrets are actually stored encrypted (not plaintext) and decrypt
 back correctly via `app.security.secret_cipher`.
 
-The three "test" endpoints (smtp/fabrix/claude) are asserted to return the
-not-yet-implemented shape this phase intentionally ships (outbound send is a
-later phase) rather than a 404 — the route must exist and be reachable.
+The smtp/fabrix "test" endpoints are asserted to return the not-yet-
+implemented shape this phase intentionally ships (outbound send is a later
+phase) rather than a 404 — the route must exist and be reachable. Groq's test
+endpoint is a real implementation (see `app.routers.admin.test_groq_settings`),
+so only its "no key configured" precondition is exercised here — a full
+round-trip would need real network access to api.groq.com.
 """
 
 from __future__ import annotations
@@ -121,31 +124,28 @@ class TestFabrixModels:
         assert deleted_again.status_code == 404
 
 
-class TestClaudeSettings:
+class TestGroqSettings:
     def test_round_trip_and_key_write_only(self, client: TestClient, admin_headers: dict, db_session: Session):
         resp = client.patch(
-            "/api/v1/admin/claude-settings", json={"model": "claude-opus-5", "apiKey": "sk-ant-secret", "enabled": True}, headers=admin_headers
+            "/api/v1/admin/groq-settings",
+            json={"model": "openai/gpt-oss-120b", "apiKey": "gsk_secret", "enabled": True},
+            headers=admin_headers,
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["model"] == "claude-opus-5"
+        assert body["model"] == "openai/gpt-oss-120b"
         assert body["hasApiKey"] is True
         assert "apiKey" not in body
 
-        row = db_session.execute(select(AdminSetting).where(AdminSetting.key == "claudeApiKeyEnc")).scalar_one()
-        assert decrypt_secret(row.value) == "sk-ant-secret"
+        row = db_session.execute(select(AdminSetting).where(AdminSetting.key == "groqApiKeyEnc")).scalar_one()
+        assert decrypt_secret(row.value) == "gsk_secret"
 
     def test_test_endpoint_requires_key(self, client: TestClient, admin_headers: dict, db_session: Session):
         # Same ambient-state caveat as the FabriX test above — force-clear
         # any real API key within this test's own rolled-back scope.
-        set_admin_setting(db_session, "claudeApiKeyEnc", None)
-        resp = client.post("/api/v1/admin/claude-settings/test", headers=admin_headers)
+        set_admin_setting(db_session, "groqApiKeyEnc", None)
+        resp = client.post("/api/v1/admin/groq-settings/test", headers=admin_headers)
         assert resp.status_code == 400
-
-    def test_other_ai_models_listing(self, client: TestClient, admin_headers: dict):
-        resp = client.get("/api/v1/admin/other-ai-models", headers=admin_headers)
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
 
 
 class TestSftpDeploymentSettings:
