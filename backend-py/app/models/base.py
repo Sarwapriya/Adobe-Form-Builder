@@ -25,13 +25,19 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import text
+from sqlalchemy import MetaData, text
 from sqlalchemy.dialects import mssql
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 
-
+# Every table lives in the `fq` schema (FormIQ) rather than the SQL Server
+# default `dbo` — set once here via the shared metadata's default schema, so
+# every model (and every bare, non-schema-qualified `ForeignKey("Table.col")`
+# string elsewhere in app/models/) picks it up automatically. Raw SQL
+# (`text(...)`) elsewhere in the app that references a table by name must be
+# schema-qualified by hand — see app/services/auth_service.py and
+# form_builder_service.py.
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(schema="fq")
 
 
 def uuid_pk(name: str = "id"):

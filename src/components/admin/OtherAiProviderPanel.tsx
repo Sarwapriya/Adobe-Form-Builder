@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Alert, Box, Button, Chip, FormControlLabel, Stack, Switch, TextField, Typography } from "@mui/material";
+import { Box, Button, Chip, FormControlLabel, Stack, Switch, TextField, Typography } from "@mui/material";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { ApiError } from "../../api/apiClient";
 import { getGroqSettings, saveGroqSettings, sendGroqTestMessage, type GroqSettings } from "../../api/adminApi";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
 
@@ -38,11 +39,8 @@ function describeKeyShape(key: string): { ok: boolean; label: string } | null {
 export function AiProviderPanel() {
   const [settings, setSettings] = useState<GroqSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [apiKey, setApiKey] = useState("");
@@ -50,7 +48,6 @@ export function AiProviderPanel() {
 
   async function refresh() {
     setLoading(true);
-    setError(null);
     try {
       const result = await getGroqSettings();
       setSettings(result);
@@ -58,7 +55,7 @@ export function AiProviderPanel() {
       setEnabled(result.enabled);
       setApiKey("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load provider settings");
+      showToast(err instanceof ApiError ? err.message : "Failed to load provider settings", "error");
     } finally {
       setLoading(false);
     }
@@ -71,15 +68,12 @@ export function AiProviderPanel() {
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError(null);
-    setSaveNotice(null);
-    setTestResult(null);
     try {
       await saveGroqSettings({ model: model.trim(), enabled, apiKey: apiKey.trim() || undefined });
-      setSaveNotice("Provider settings saved.");
+      showToast("Provider settings saved.", "success");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save provider settings");
+      showToast(err instanceof ApiError ? err.message : "Failed to save provider settings", "error");
     } finally {
       setSaving(false);
     }
@@ -87,16 +81,14 @@ export function AiProviderPanel() {
 
   async function handleTest() {
     setTesting(true);
-    setTestResult(null);
     try {
       const result = await sendGroqTestMessage();
-      setTestResult(
-        result.ok
-          ? { ok: true, message: "Test message sent successfully." }
-          : { ok: false, message: result.error ?? "Test message failed." },
+      showToast(
+        result.ok ? "Test message sent successfully." : (result.error ?? "Test message failed."),
+        result.ok ? "success" : "error",
       );
     } catch (err) {
-      setTestResult({ ok: false, message: err instanceof ApiError ? err.message : "Failed to send test message" });
+      showToast(err instanceof ApiError ? err.message : "Failed to send test message", "error");
     } finally {
       setTesting(false);
     }
@@ -119,22 +111,6 @@ export function AiProviderPanel() {
         Add an API key below — it's identified automatically once entered. Only called when FabriX is disabled or
         unreachable.
       </Typography>
-
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
-      {saveNotice && (
-        <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setSaveNotice(null)}>
-          {saveNotice}
-        </Alert>
-      )}
-      {testResult && (
-        <Alert severity={testResult.ok ? "success" : "error"} sx={{ mb: 1.5 }} onClose={() => setTestResult(null)}>
-          {testResult.message}
-        </Alert>
-      )}
 
       {loading ? (
         <LoadingState />

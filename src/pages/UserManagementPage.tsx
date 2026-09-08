@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -43,6 +42,7 @@ import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { useAuthStore } from "../auth/authStore";
 import { PageHeader } from "../components/common/PageHeader";
 import { NotificationEmailFields } from "../components/common/NotificationEmailFields";
+import { showToast } from "../store/toastStore";
 
 const ROLE_COLOR: Record<AdminUserRole, "default" | "primary" | "secondary"> = {
   standard: "default",
@@ -66,10 +66,8 @@ export function UserManagementPage() {
 
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [toggleError, setToggleError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<AdminUserListItem | null>(null);
   const [deletingUser, setDeletingUser] = useState<AdminUserListItem | null>(null);
 
@@ -79,16 +77,13 @@ export function UserManagementPage() {
   const [role, setRole] = useState<AdminUserRole>("standard");
   const [subsidiaryId, setSubsidiaryId] = useState("");
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [createSuccess, setCreateSuccess] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
-    setLoadError(null);
     try {
       setUsers(await listUsers());
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : "Failed to load users");
+      showToast(err instanceof ApiError ? err.message : "Failed to load users", "error");
     } finally {
       setLoading(false);
     }
@@ -118,8 +113,6 @@ export function UserManagementPage() {
     if (!canCreate) return;
 
     setCreating(true);
-    setCreateError(null);
-    setCreateSuccess(null);
     try {
       const created = await createUser({
         username: username.trim(),
@@ -128,7 +121,7 @@ export function UserManagementPage() {
         role,
         subsidiaryId: subsidiaryId.trim() || undefined,
       });
-      setCreateSuccess(`Created ${created.role} account "${created.username}".`);
+      showToast(`Created ${created.role} account "${created.username}".`, "success");
       setUsername("");
       setEmail("");
       setPassword("");
@@ -136,7 +129,7 @@ export function UserManagementPage() {
       setSubsidiaryId("");
       await refresh();
     } catch (err) {
-      setCreateError(err instanceof ApiError ? err.message : "Failed to create user");
+      showToast(err instanceof ApiError ? err.message : "Failed to create user", "error");
     } finally {
       setCreating(false);
     }
@@ -152,12 +145,11 @@ export function UserManagementPage() {
 
   async function handleToggleActive(target: AdminUserListItem) {
     setTogglingId(target.id);
-    setToggleError(null);
     try {
       await setUserActive(target.id, !target.isActive);
       await refresh();
     } catch (err) {
-      setToggleError(err instanceof ApiError ? err.message : "Failed to update user");
+      showToast(err instanceof ApiError ? err.message : "Failed to update user", "error");
     } finally {
       setTogglingId(null);
     }
@@ -212,10 +204,7 @@ export function UserManagementPage() {
             label="Username"
             size="small"
             value={username}
-            onChange={(e) => {
-              setUsername(e.target.value);
-              setCreateSuccess(null);
-            }}
+            onChange={(e) => setUsername(e.target.value)}
             required
           />
           <TextField
@@ -223,10 +212,7 @@ export function UserManagementPage() {
             type="email"
             size="small"
             value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setCreateSuccess(null);
-            }}
+            onChange={(e) => setEmail(e.target.value)}
             required
           />
           <TextField
@@ -234,10 +220,7 @@ export function UserManagementPage() {
             type="password"
             size="small"
             value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setCreateSuccess(null);
-            }}
+            onChange={(e) => setPassword(e.target.value)}
             required
             helperText="At least 8 characters"
           />
@@ -247,10 +230,7 @@ export function UserManagementPage() {
             size="small"
             sx={{ minWidth: 160 }}
             value={role}
-            onChange={(e) => {
-              setRole(e.target.value as AdminUserRole);
-              setCreateSuccess(null);
-            }}
+            onChange={(e) => setRole(e.target.value as AdminUserRole)}
           >
             {assignableRoles.map((r) => (
               <MenuItem key={r} value={r}>
@@ -264,10 +244,7 @@ export function UserManagementPage() {
             size="small"
             sx={{ minWidth: 180 }}
             value={subsidiaryId}
-            onChange={(e) => {
-              setSubsidiaryId(e.target.value);
-              setCreateSuccess(null);
-            }}
+            onChange={(e) => setSubsidiaryId(e.target.value)}
             required={subsidiaryRequired}
             error={subsidiaryRequired && !subsidiaryId}
             helperText={
@@ -301,28 +278,7 @@ export function UserManagementPage() {
           </Typography>
         )}
 
-        {createError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {createError}
-          </Alert>
-        )}
-        {createSuccess && (
-          <Alert severity="success" sx={{ mt: 2 }} onClose={() => setCreateSuccess(null)}>
-            {createSuccess}
-          </Alert>
-        )}
       </Paper>
-
-      {loadError && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
-          {loadError}
-        </Alert>
-      )}
-      {toggleError && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
-          {toggleError}
-        </Alert>
-      )}
 
       <Paper sx={{ overflow: "hidden" }}>
         <TableContainer>
@@ -454,16 +410,14 @@ function DeleteUserDialog({
   onDeleted: () => void | Promise<void>;
 }) {
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function handleConfirm() {
     setDeleting(true);
-    setError(null);
     try {
       await deleteUser(user.id);
       await onDeleted();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete user");
+      showToast(err instanceof ApiError ? err.message : "Failed to delete user", "error");
     } finally {
       setDeleting(false);
     }
@@ -473,14 +427,9 @@ function DeleteUserDialog({
     <Dialog open onClose={deleting ? undefined : onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Delete user</DialogTitle>
       <DialogContent>
-        <Typography sx={{ mb: error ? 2 : 0 }}>
+        <Typography>
           Permanently delete <strong>{user.username}</strong> ({user.email})? This cannot be undone.
         </Typography>
-        {error && (
-          <Alert severity="error" onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={deleting}>
@@ -533,7 +482,6 @@ function EditUserDialog({
   const [firstName, setFirstName] = useState(user.firstName ?? "");
   const [lastName, setLastName] = useState(user.lastName ?? "");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const subsidiaryRequired = role === "standard";
   const canSave = !!username.trim() && !!email.trim() && (!subsidiaryRequired || !!subsidiaryId) && !saving;
@@ -541,7 +489,6 @@ function EditUserDialog({
   async function handleSave() {
     if (!canSave) return;
     setSaving(true);
-    setError(null);
     try {
       await updateUserProfile(user.id, {
         username: username.trim(),
@@ -553,7 +500,7 @@ function EditUserDialog({
       });
       await onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save changes");
+      showToast(err instanceof ApiError ? err.message : "Failed to save changes", "error");
     } finally {
       setSaving(false);
     }
@@ -631,7 +578,6 @@ function EditUserDialog({
               </MenuItem>
             ))}
           </TextField>
-          {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>
       <DialogActions>

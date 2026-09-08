@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert, Button, Chip, Paper, Stack, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
@@ -12,6 +12,7 @@ import { unsavedChangesBlinkSx } from "./unsavedChangesBlinkSx";
 import { ApiError } from "../../api/apiClient";
 import { deleteAdHocForm } from "../../api/subsidiaryFormsApi";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
+import { showToast } from "../../store/toastStore";
 
 /** Ad-hoc builder counterpart to BuilderActionBar.tsx — Preview / Save Draft /
  * Submit for Review / Delete, no Publish/Unpublish (a subsidiary user never
@@ -39,38 +40,37 @@ export function AdHocActionBar() {
   const submitForReview = useFormBuilderStore((s) => s.submitForReview);
 
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) showToast(error, "error");
+  }, [error]);
 
   const statusLabel = pendingReview ? "Pending review" : status === "published" ? "Published" : "Draft";
   const statusColor = pendingReview ? "warning" : status === "published" ? "success" : "default";
 
   async function handleSave() {
-    setNotice(null);
     const ok = await saveDraft();
-    if (ok) setNotice("Draft saved.");
+    if (ok) showToast("Draft saved.", "success");
   }
 
   useSaveShortcut(() => void handleSave(), dirty && !saving && !pendingReview);
 
   async function handleSubmit() {
     if (!window.confirm("Submit this form for admin review? You won't be able to edit it again until it's reviewed.")) return;
-    setNotice(null);
     const ok = await submitForReview();
-    if (ok) setNotice("Submitted for review.");
+    if (ok) showToast("Submitted for review.", "success");
   }
 
   async function handleDelete() {
     if (!formId) return;
     if (!window.confirm("Delete this form? This can't be undone.")) return;
-    setDeleteError(null);
     setDeleting(true);
     try {
       await deleteAdHocForm(formId);
       navigate("/my-forms/adhoc");
     } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : "Failed to delete form");
+      showToast(err instanceof ApiError ? err.message : "Failed to delete form", "error");
     } finally {
       setDeleting(false);
     }
@@ -133,21 +133,6 @@ export function AdHocActionBar() {
             An admin rejected your last submission:
           </Typography>
           {reviewNote}
-        </Alert>
-      )}
-      {error && (
-        <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => useFormBuilderStore.setState({ error: null })}>
-          {error}
-        </Alert>
-      )}
-      {deleteError && (
-        <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => setDeleteError(null)}>
-          {deleteError}
-        </Alert>
-      )}
-      {notice && !error && (
-        <Alert severity="success" sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => setNotice(null)}>
-          {notice}
         </Alert>
       )}
       <FormBuilderPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />

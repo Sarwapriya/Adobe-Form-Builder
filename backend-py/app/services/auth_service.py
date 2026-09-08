@@ -267,7 +267,7 @@ def _user_has_dependent_records(db: Session, id: str) -> bool:
         return True
     if db.execute(select(AIAction.id).where(AIAction.userId == id).limit(1)).first():
         return True
-    if db.execute(text("SELECT TOP 1 id FROM Uploads WHERE userId = :id"), {"id": id}).first():
+    if db.execute(text("SELECT TOP 1 id FROM fq.Uploads WHERE userId = :id"), {"id": id}).first():
         return True
     return False
 

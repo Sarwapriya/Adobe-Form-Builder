@@ -1,4 +1,4 @@
-# backend-py — the Form Builder backend (FastAPI)
+# backend-py — the FormIQ backend (FastAPI)
 
 A full FastAPI/SQLAlchemy port of this project's backend — auth, admin
 configuration, the form builder (Form Initiator campaigns, ad-hoc forms,

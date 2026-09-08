@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -21,6 +20,7 @@ import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesAp
 import { ApiError } from "../../api/apiClient";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { QaRunDialog } from "../admin/QaRunDialog";
+import { showToast } from "../../store/toastStore";
 
 /**
  * Admin review queue for a subsidiary user's own "ad-hoc" form submission (see
@@ -43,7 +43,6 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
   const [selectedProjectCode, setSelectedProjectCode] = useState("");
   const [rejectNote, setRejectNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!approveOpen) return;
@@ -61,16 +60,15 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
   async function handleApproveConfirm() {
     if (!selectedProjectCode) return;
     setBusy(true);
-    setError(null);
     try {
       await approveAdHocForm(formId, selectedProjectCode);
       setApproveOpen(false);
       await loadForm(formId);
     } catch (err) {
       if (err instanceof FormInvalidError) {
-        setError("Approve failed — this draft has validation errors. Open the form below, fix them, then try again.");
+        showToast("Approve failed — this draft has validation errors. Open the form below, fix them, then try again.", "error");
       } else {
-        setError(err instanceof ApiError ? err.message : "Failed to approve");
+        showToast(err instanceof ApiError ? err.message : "Failed to approve", "error");
       }
     } finally {
       setBusy(false);
@@ -79,13 +77,12 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
 
   async function handleRejectConfirm() {
     setBusy(true);
-    setError(null);
     try {
       await rejectAdHocForm(formId, rejectNote.trim() || undefined);
       setRejectOpen(false);
       await loadForm(formId);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to reject");
+      showToast(err instanceof ApiError ? err.message : "Failed to reject", "error");
     } finally {
       setBusy(false);
     }
@@ -102,12 +99,6 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
         picking a Project Code (never asked of the subsidiary user) and publishes the form immediately; rejecting sends it
         back to them, editable again.
       </Typography>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 1.5, borderRadius: 2 }}>
-          {error}
-        </Alert>
-      )}
 
       <Stack direction="row" spacing={1}>
         <Button size="small" variant="contained" startIcon={<CheckCircleIcon />} onClick={() => setApproveOpen(true)}>

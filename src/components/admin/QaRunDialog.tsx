@@ -38,6 +38,7 @@ import {
 } from "../../api/qaApi";
 import { downloadBlob } from "../../utils/download";
 import { qaRunStatusColor } from "../../app/statusColors";
+import { showToast } from "../../store/toastStore";
 
 const VARIANT_LABELS: Record<QaRunVariant, string> = { ff: "Full Form", oc: "One-Click" };
 
@@ -94,7 +95,6 @@ export function QaRunDialog({
   const [runs, setRuns] = useState<QaRun[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [results, setResults] = useState<QaTestCaseResult[] | null>(null);
@@ -109,7 +109,7 @@ export function QaRunDialog({
       setRuns(rows);
       if (rows.length > 0 && !selectedRunId) setSelectedRunId(rows[0].id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load QA runs");
+      showToast(err instanceof ApiError ? err.message : "Failed to load QA runs", "error");
     } finally {
       setLoadingRuns(false);
     }
@@ -151,7 +151,7 @@ export function QaRunDialog({
         }
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "Failed to load QA run detail");
+        showToast(err instanceof ApiError ? err.message : "Failed to load QA run detail", "error");
       }
     }
     void load();
@@ -165,13 +165,12 @@ export function QaRunDialog({
 
   async function handleRun() {
     setStarting(true);
-    setError(null);
     try {
       const created = await createQaRun(subject, variant);
       setRuns((prev) => [created, ...prev]);
       setSelectedRunId(created.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to start QA run");
+      showToast(err instanceof ApiError ? err.message : "Failed to start QA run", "error");
     } finally {
       setStarting(false);
     }
@@ -179,12 +178,11 @@ export function QaRunDialog({
 
   async function handleDownload(run: QaRun) {
     setDownloadingId(run.id);
-    setError(null);
     try {
       const blob = await downloadQaReport(run.id);
       downloadBlob(blob, `qa-report-${run.variant}-${run.id}.html`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Download failed");
+      showToast(err instanceof ApiError ? err.message : "Download failed", "error");
     } finally {
       setDownloadingId(null);
     }
@@ -228,12 +226,6 @@ export function QaRunDialog({
             {starting ? "Starting..." : "Run QA"}
           </Button>
         </Stack>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
 
         {loadingRuns ? (
           <CircularProgress size={20} />

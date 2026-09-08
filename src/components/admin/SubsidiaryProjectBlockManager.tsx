@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  Alert,
   Box,
   Button,
   IconButton,
@@ -26,6 +25,7 @@ import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 /**
  * Blocks a specific (subsidiary, project code) pair from new uploads — e.g.
@@ -48,7 +48,6 @@ export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [subsidiaryName, setSubsidiaryName] = useState("");
   const [projectCode, setProjectCode] = useState("");
@@ -72,7 +71,7 @@ export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal
       setSubsidiaryName((current) => (subsidiaryRows.some((s) => s.name === current) ? current : ""));
       setProjectCode((current) => (codeRows.some((c) => c.code === current) ? current : ""));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load subsidiary restrictions");
+      showToast(err instanceof ApiError ? err.message : "Failed to load subsidiary restrictions", "error");
     } finally {
       setLoading(false);
     }
@@ -91,13 +90,12 @@ export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal
     if (!subsidiaryName || !projectCode) return;
 
     setCreating(true);
-    setError(null);
     try {
       await createSubsidiaryProjectBlock(subsidiaryName, projectCode);
       setProjectCode("");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create restriction");
+      showToast(err instanceof ApiError ? err.message : "Failed to create restriction", "error");
     } finally {
       setCreating(false);
     }
@@ -105,12 +103,11 @@ export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal
 
   async function handleDelete(id: string) {
     setDeletingId(id);
-    setError(null);
     try {
       await deleteSubsidiaryProjectBlock(id);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to remove restriction");
+      showToast(err instanceof ApiError ? err.message : "Failed to remove restriction", "error");
     } finally {
       setDeletingId(null);
     }
@@ -159,12 +156,6 @@ export function SubsidiaryProjectBlockManager({ refreshSignal }: { refreshSignal
           {creating ? "Blocking..." : "Block"}
         </Button>
       </Box>
-
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
 
       {loading ? (
         <LoadingState />

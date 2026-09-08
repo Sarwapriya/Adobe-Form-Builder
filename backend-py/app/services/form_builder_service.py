@@ -577,16 +577,16 @@ def delete_form(db: Session, form_id: str) -> DeleteFormOutcome:
         return "not_found"
 
     if form.publishedVersionId is None:
-        db.execute(text("DELETE FROM FormContributions WHERE formId = :formId"), {"formId": form_id})
+        db.execute(text("DELETE FROM fq.FormContributions WHERE formId = :formId"), {"formId": form_id})
         form.currentDraftVersionId = None
         form.publishedVersionId = None
         db.flush()
         db.execute(
-            text("DELETE FROM GeneratedFiles WHERE formVersionId IN (SELECT id FROM FormVersions WHERE formId = :formId)"),
+            text("DELETE FROM fq.GeneratedFiles WHERE formVersionId IN (SELECT id FROM fq.FormVersions WHERE formId = :formId)"),
             {"formId": form_id},
         )
-        db.execute(text("DELETE FROM FormVersions WHERE formId = :formId"), {"formId": form_id})
-        db.execute(text("DELETE FROM Forms WHERE id = :formId"), {"formId": form_id})
+        db.execute(text("DELETE FROM fq.FormVersions WHERE formId = :formId"), {"formId": form_id})
+        db.execute(text("DELETE FROM fq.Forms WHERE id = :formId"), {"formId": form_id})
         db.commit()
         return "ok"
 

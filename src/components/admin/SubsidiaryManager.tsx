@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Alert, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
@@ -18,6 +18,7 @@ import {
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
 import { NotificationEmailFields } from "../common/NotificationEmailFields";
+import { showToast } from "../../store/toastStore";
 
 /**
  * Inline admin panel for managing subsidiaries: create new ones, disable one
@@ -30,7 +31,6 @@ import { NotificationEmailFields } from "../common/NotificationEmailFields";
 export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) {
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
     try {
       setSubsidiaries(await listAllSubsidiaries());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load subsidiaries");
+      showToast(err instanceof ApiError ? err.message : "Failed to load subsidiaries", "error");
     } finally {
       setLoading(false);
     }
@@ -60,14 +60,13 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
     if (!newName.trim()) return;
 
     setCreating(true);
-    setError(null);
     try {
       await createSubsidiary(newName.trim());
       setNewName("");
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create subsidiary");
+      showToast(err instanceof ApiError ? err.message : "Failed to create subsidiary", "error");
     } finally {
       setCreating(false);
     }
@@ -75,13 +74,12 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
 
   async function handleToggle(subsidiary: Subsidiary) {
     setTogglingId(subsidiary.id);
-    setError(null);
     try {
       await setSubsidiaryActive(subsidiary.id, !subsidiary.isActive);
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update subsidiary");
+      showToast(err instanceof ApiError ? err.message : "Failed to update subsidiary", "error");
     } finally {
       setTogglingId(null);
     }
@@ -89,13 +87,12 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
 
   async function handleDelete(subsidiary: Subsidiary) {
     setDeletingId(subsidiary.id);
-    setError(null);
     try {
       await deleteSubsidiary(subsidiary.id);
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete subsidiary");
+      showToast(err instanceof ApiError ? err.message : "Failed to delete subsidiary", "error");
     } finally {
       setDeletingId(null);
     }
@@ -120,12 +117,11 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
 
   async function handleSaveEmails(id: string, notificationEmail1: string, notificationEmail2: string) {
     setSavingEmailsId(id);
-    setError(null);
     try {
       await setSubsidiaryNotificationEmails(id, notificationEmail1 || null, notificationEmail2 || null);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update notification emails");
+      showToast(err instanceof ApiError ? err.message : "Failed to update notification emails", "error");
     } finally {
       setSavingEmailsId(null);
     }
@@ -134,7 +130,6 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
   async function handleBulkSetActive(isActive: boolean) {
     if (selectedIds.size === 0) return;
     setBulkUpdating(true);
-    setError(null);
     try {
       await Promise.all(Array.from(selectedIds).map((id) => setSubsidiaryActive(id, isActive)));
       setSelectedIds(new Set());
@@ -142,7 +137,7 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update subsidiaries");
+      showToast(err instanceof ApiError ? err.message : "Failed to update subsidiaries", "error");
     } finally {
       setBulkUpdating(false);
     }
@@ -199,12 +194,6 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
           {creating ? "Adding..." : "Add"}
         </Button>
       </Box>
-
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
 
       {loading ? (
         <LoadingState />

@@ -2,8 +2,15 @@ import { useEffect, useState } from "react";
 import {
   Avatar,
   Box,
+  Button,
   Chip,
+  CircularProgress,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Divider,
   Drawer,
   Grow,
@@ -20,7 +27,6 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import DescriptionIcon from "@mui/icons-material/Description";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import LogoutIcon from "@mui/icons-material/Logout";
 import HistoryIcon from "@mui/icons-material/History";
@@ -38,6 +44,8 @@ import type { ReactNode } from "react";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
 import { useAiChatStore } from "../store/aiChatStore";
 import { useThemeModeStore } from "../store/themeModeStore";
+import { useFormBuilderStore } from "../store/formBuilderStore";
+import { useFormContributionStore } from "../store/formContributionStore";
 import { AIChatButton } from "../components/ai/AIChatButton";
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { PALETTES } from "./theme";
@@ -108,6 +116,52 @@ export function AppLayout() {
 
   const isAdmin = isAdminRole(user?.role);
   const panelLabel = isAdmin ? "Admin Panel" : "Subsidiary Panel";
+  // Matches App.tsx's DefaultLanding routing exactly, since that's what a
+  // freshly-logged-in user with no in-progress edits would land on anyway.
+  const dashboardPath = isAdmin ? "/admin/dashboard" : user?.subsidiaryId ? "/dashboard" : "/my-submissions";
+
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [savingBeforeLeave, setSavingBeforeLeave] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  /** The FormIQ logo/name in the sidebar always goes to the signed-in user's
+   * dashboard — but a form builder or contribution/translate editor keeps its
+   * in-progress edits in `useFormBuilderStore`/`useFormContributionStore`
+   * (both global, not tied to the current route), so this checks their
+   * `dirty` flags at click time rather than navigating straight away. */
+  function handleBrandClick() {
+    const builderDirty = useFormBuilderStore.getState().dirty;
+    const contributionDirty = useFormContributionStore.getState().dirty;
+    if (builderDirty || contributionDirty) {
+      setLeaveError(null);
+      setLeaveConfirmOpen(true);
+      return;
+    }
+    navigate(dashboardPath);
+  }
+
+  async function handleSaveAndLeave() {
+    setSavingBeforeLeave(true);
+    setLeaveError(null);
+    try {
+      let ok = true;
+      if (useFormBuilderStore.getState().dirty) ok = await useFormBuilderStore.getState().saveDraft();
+      if (ok && useFormContributionStore.getState().dirty) ok = await useFormContributionStore.getState().saveDraft();
+      if (ok) {
+        setLeaveConfirmOpen(false);
+        navigate(dashboardPath);
+      } else {
+        setLeaveError("Couldn't save your changes — please check the form for errors and try again.");
+      }
+    } finally {
+      setSavingBeforeLeave(false);
+    }
+  }
+
+  function handleDiscardAndLeave() {
+    setLeaveConfirmOpen(false);
+    navigate(dashboardPath);
+  }
   // Friendlier than the login username wherever we have it — see
   // User.firstName/lastName's own doc comment. Falls back to username, same
   // as SubsidiaryDashboardPage.tsx's own greeting.
@@ -145,8 +199,6 @@ export function AppLayout() {
         avatarBg: "rgba(255,255,255,0.18)",
         avatarBgStrong: "rgba(255,255,255,0.25)",
         contrastText: "#fff",
-        logoBadgeBg: alpha(roleAccent.main, 0.25),
-        logoIcon: roleAccent.light,
       }
     : {
         text: "rgba(20,22,33,0.78)",
@@ -158,12 +210,10 @@ export function AppLayout() {
         avatarBg: alpha(roleAccent.main, 0.16),
         avatarBgStrong: alpha(roleAccent.main, 0.22),
         contrastText: "#14161f",
-        logoBadgeBg: alpha(roleAccent.main, 0.14),
-        logoIcon: roleAccent.dark,
       };
 
   useEffect(() => {
-    document.title = `Form Builder · ${panelLabel}`;
+    document.title = `FormIQ · ${panelLabel}`;
   }, [panelLabel]);
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true");
@@ -385,27 +435,47 @@ export function AppLayout() {
           },
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, py: 2.5, minHeight: 72 }}>
+        <Box
+          role="button"
+          tabIndex={0}
+          onClick={handleBrandClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleBrandClick();
+            }
+          }}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            px: 2,
+            py: 2.5,
+            minHeight: 72,
+            cursor: "pointer",
+            "&:hover": { bgcolor: sidebarTokens.hoverBg },
+          }}
+        >
           <Tooltip title={collapsed ? panelLabel : ""} placement="right">
             <Box
+              component="img"
+              src="/logo.png"
+              alt="FormIQ"
               sx={{
                 width: 36,
                 height: 36,
                 borderRadius: 2,
                 flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                bgcolor: sidebarTokens.logoBadgeBg,
-                color: sidebarTokens.logoIcon,
+                objectFit: "contain",
               }}
-            >
-              <DescriptionIcon fontSize="small" />
-            </Box>
+            />
           </Tooltip>
           {!collapsed && (
             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
               <Typography variant="h6" fontWeight={700} noWrap>
+                FormIQ
+              </Typography>
+              <Typography variant="caption" sx={{ color: sidebarTokens.textMuted, display: "block", lineHeight: 1.2 }} noWrap>
                 Form Builder
               </Typography>
               <Chip
@@ -621,6 +691,37 @@ export function AppLayout() {
         </Paper>
       </Grow>
       <AIChatButton />
+
+      <Dialog open={leaveConfirmOpen} onClose={() => (savingBeforeLeave ? undefined : setLeaveConfirmOpen(false))}>
+        <DialogTitle>Unsaved changes</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You have unsaved changes on this page. Save them before going to your dashboard, or discard them and leave
+            anyway?
+          </DialogContentText>
+          {leaveError && (
+            <DialogContentText color="error" sx={{ mt: 1.5 }}>
+              {leaveError}
+            </DialogContentText>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLeaveConfirmOpen(false)} disabled={savingBeforeLeave}>
+            Cancel
+          </Button>
+          <Button onClick={handleDiscardAndLeave} disabled={savingBeforeLeave} color="error">
+            Discard & leave
+          </Button>
+          <Button
+            onClick={() => void handleSaveAndLeave()}
+            disabled={savingBeforeLeave}
+            variant="contained"
+            startIcon={savingBeforeLeave ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            {savingBeforeLeave ? "Saving..." : "Save & leave"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

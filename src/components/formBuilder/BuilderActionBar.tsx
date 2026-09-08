@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Button, Chip, Paper, Stack } from "@mui/material";
+import { Button, Chip, Paper, Stack } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import SaveIcon from "@mui/icons-material/Save";
@@ -15,6 +15,7 @@ import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { useSaveShortcut } from "../../hooks/useSaveShortcut";
 import { unsavedChangesBlinkSx } from "./unsavedChangesBlinkSx";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
+import { showToast } from "../../store/toastStore";
 
 const STATUS_COLOR = { draft: "default", published: "success", unpublished: "warning" } as const;
 
@@ -74,11 +75,12 @@ export function BuilderActionBar() {
   const deleteForm = useFormBuilderStore((s) => s.deleteForm);
 
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [noticeSeverity, setNoticeSeverity] = useState<"success" | "warning">("success");
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) showToast(error, "error");
+  }, [error]);
 
   // An approved contribution the admin hasn't deployed yet — see this
   // component's own doc comment for why this disables Publish specifically
@@ -86,45 +88,34 @@ export function BuilderActionBar() {
   const hasAwaitingContribution = contributions.some((c) => c.status === "approved" && !c.publishedAt);
 
   async function handleSave() {
-    setNotice(null);
     const ok = await saveDraft();
-    if (ok) {
-      setNoticeSeverity("success");
-      setNotice("Draft saved.");
-    }
+    if (ok) showToast("Draft saved.", "success");
   }
 
   useSaveShortcut(() => void handleSave(), dirty && !saving);
 
   async function handlePublish() {
-    setNotice(null);
     const result = await publish();
     if (result.ok) {
       if (result.deployment && !result.deployment.ok) {
-        setNoticeSeverity("warning");
-        setNotice(
+        showToast(
           `Published. SFTP delivery to the campaign server failed (${result.deployment.error}) — this is expected off the office network; retry once connected.`,
+          "warning",
         );
       } else {
-        setNoticeSeverity("success");
-        setNotice("Published.");
+        showToast("Published.", "success");
       }
     }
   }
 
   async function handleUnpublish() {
     if (!window.confirm("Unpublish this form? Its preview/download links will stop working until it's published again.")) return;
-    setNotice(null);
     const ok = await unpublish();
-    if (ok) {
-      setNoticeSeverity("success");
-      setNotice("Unpublished.");
-    }
+    if (ok) showToast("Unpublished.", "success");
   }
 
   async function handleDelete() {
     if (!window.confirm("Delete this form? This can't be undone.")) return;
-    setNotice(null);
     setDeleting(true);
     const ok = await deleteForm();
     setDeleting(false);
@@ -133,14 +124,13 @@ export function BuilderActionBar() {
 
   async function handleDownload() {
     if (!formId) return;
-    setDownloadError(null);
     setDownloading(true);
     try {
       const blob = await downloadFormZip(formId);
       const safeName = (name || "form").replace(/[^a-zA-Z0-9._-]+/g, "-");
       downloadBlob(blob, `${safeName}.zip`);
     } catch (err) {
-      setDownloadError(err instanceof ApiError ? err.message : "Download failed");
+      showToast(err instanceof ApiError ? err.message : "Download failed", "error");
     } finally {
       setDownloading(false);
     }
@@ -201,21 +191,6 @@ export function BuilderActionBar() {
           {deleting ? "Deleting..." : "Delete"}
         </Button>
       </Stack>
-      {error && (
-        <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => useFormBuilderStore.setState({ error: null })}>
-          {error}
-        </Alert>
-      )}
-      {downloadError && (
-        <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => setDownloadError(null)}>
-          {downloadError}
-        </Alert>
-      )}
-      {notice && !error && (
-        <Alert severity={noticeSeverity} sx={{ mt: 1.5, borderRadius: 2 }} onClose={() => setNotice(null)}>
-          {notice}
-        </Alert>
-      )}
       <FormBuilderPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
     </Paper>
   );

@@ -280,7 +280,7 @@ async def _persist_message(
     # datetime -> datetimeoffset binding can silently round-trip wrong
     # on pyodbc, and the server-side SYSDATETIMEOFFSET() is authoritative.
     db.execute(
-        text("UPDATE AIConversations SET updatedAt = SYSDATETIMEOFFSET() WHERE id = :id"),
+        text("UPDATE fq.AIConversations SET updatedAt = SYSDATETIMEOFFSET() WHERE id = :id"),
         {"id": conversation_id},
     )
     db.commit()

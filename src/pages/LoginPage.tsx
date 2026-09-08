@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Alert, Avatar, Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
-import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import { Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
 import { useAuthStore } from "../auth/authStore";
+import { showToast } from "../store/toastStore";
 
 export function LoginPage() {
   const status = useAuthStore((s) => s.status);
@@ -15,6 +15,10 @@ export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (error) showToast(error, "error");
+  }, [error]);
 
   if (status === "authenticated") {
     const state = location.state as { from?: { pathname: string } } | null;
@@ -54,15 +58,10 @@ export function LoginPage() {
           boxShadow: "0 20px 50px rgba(20, 40, 160, 0.12)",
         }}
       >
-        <Stack alignItems="center" spacing={1.5} sx={{ mb: 3, textAlign: "center" }}>
-          <Avatar sx={{ bgcolor: "primary.main", width: 48, height: 48 }}>
-            <LockOutlinedIcon />
-          </Avatar>
-          <Typography variant="h5" component="h1">
-            Form Builder
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Sign in to upload workbooks and manage submissions.
+        <Stack alignItems="center" spacing={1} sx={{ mb: 3, textAlign: "center" }}>
+          <Box component="img" src="/logo.png" alt="FormIQ" sx={{ width: 180, height: 180, objectFit: "contain" }} />
+          <Typography variant="body2" color="text.secondary" sx={{ pt: 1 }}>
+            Sign in to create and manage campaign forms from one place.
           </Typography>
         </Stack>
 
@@ -87,12 +86,6 @@ export function LoginPage() {
             margin="normal"
             autoComplete="current-password"
           />
-
-          {error && (
-            <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>
-              {error}
-            </Alert>
-          )}
 
           <Button type="submit" variant="contained" fullWidth size="large" sx={{ mt: 3, py: 1.2 }} disabled={submitting}>
             {submitting ? "Signing in..." : "Sign in"}

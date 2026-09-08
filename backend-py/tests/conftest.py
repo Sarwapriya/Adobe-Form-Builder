@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -94,9 +95,14 @@ def db_session(database_available: bool) -> Generator[Session, None, None]:
         )
 
     engine = get_engine()
+    # Every model lives in the `fq` schema (see app/models/base.py) — a fresh
+    # test DB won't have that schema yet, and create_all doesn't create
+    # schemas on SQL Server, only tables within an existing one.
+    with engine.begin() as conn:
+        conn.execute(text("IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'fq') EXEC('CREATE SCHEMA fq')"))
     # Ensure every table exists (a fresh test DB might not have run the
-    # Node-side migrations / backend/sql/init.sql) — safe/idempotent, only
-    # creates tables that are missing.
+    # canonical schema script) — safe/idempotent, only creates tables that
+    # are missing.
     Base.metadata.create_all(engine, checkfirst=True)
 
     connection = engine.connect()

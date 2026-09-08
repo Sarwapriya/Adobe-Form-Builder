@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Alert, Box, Button, Chip, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import LanguageIcon from "@mui/icons-material/Language";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { isRtlLangSubtag, langDisplayName } from "@formbuilder/shared";
@@ -10,6 +10,7 @@ import type { SubsidiaryLocale } from "../../api/subsidiaryLocalesApi";
 import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 const LOCALE_CODE_PATTERN = /^[a-zA-Z]{2,3}_[A-Z]{2}$/;
 
@@ -26,7 +27,6 @@ export function SubsidiaryLocaleManager() {
   const [locales, setLocales] = useState<SubsidiaryLocale[]>([]);
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [subsidiaryName, setSubsidiaryName] = useState("");
   const [code, setCode] = useState("");
@@ -41,7 +41,7 @@ export function SubsidiaryLocaleManager() {
       setLocales(localeRows);
       setSubsidiaries(subsidiaryRows);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load subsidiary locales");
+      showToast(err instanceof ApiError ? err.message : "Failed to load subsidiary locales", "error");
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,6 @@ export function SubsidiaryLocaleManager() {
     if (!subsidiaryName || !LOCALE_CODE_PATTERN.test(trimmedCode)) return;
 
     setCreating(true);
-    setError(null);
     try {
       const langSubtag = trimmedCode.split("_")[0].toLowerCase();
       await addSubsidiaryLocale({
@@ -72,7 +71,7 @@ export function SubsidiaryLocaleManager() {
       setIsFallback(false);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to add locale");
+      showToast(err instanceof ApiError ? err.message : "Failed to add locale", "error");
     } finally {
       setCreating(false);
     }
@@ -80,12 +79,11 @@ export function SubsidiaryLocaleManager() {
 
   async function handleDelete(id: string) {
     setDeletingId(id);
-    setError(null);
     try {
       await deleteSubsidiaryLocale(id);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to remove locale");
+      showToast(err instanceof ApiError ? err.message : "Failed to remove locale", "error");
     } finally {
       setDeletingId(null);
     }
@@ -141,12 +139,6 @@ export function SubsidiaryLocaleManager() {
           {creating ? "Adding..." : "Add"}
         </Button>
       </Box>
-
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
 
       {loading ? (
         <LoadingState />

@@ -15,6 +15,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { showToast } from "../store/toastStore";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import AddIcon from "@mui/icons-material/Add";
 import { ApiError } from "../api/apiClient";
@@ -76,7 +77,6 @@ export function MyAdHocFormsListPage() {
   const navigate = useNavigate();
   const [adHocForms, setAdHocForms] = useState<FormListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   /** Set when "New Ad-hoc Form" is opened via a specific row's Copy action
@@ -90,11 +90,10 @@ export function MyAdHocFormsListPage() {
 
   function refresh() {
     setLoading(true);
-    setError(null);
     listMyAdHocForms()
       .then(setAdHocForms)
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : "Failed to load forms");
+        showToast(err instanceof ApiError ? err.message : "Failed to load forms", "error");
       })
       .finally(() => {
         setLoading(false);
@@ -124,7 +123,7 @@ export function MyAdHocFormsListPage() {
       closeCreateDialog();
       navigate(`/my-forms/adhoc/${created.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create form");
+      showToast(err instanceof ApiError ? err.message : "Failed to create form", "error");
     } finally {
       setCreating(false);
     }
@@ -133,12 +132,11 @@ export function MyAdHocFormsListPage() {
   async function handleDelete(form: FormListItem) {
     if (!window.confirm(`Delete "${form.name}"? This can't be undone.`)) return;
     setDeletingId(form.id);
-    setError(null);
     try {
       await deleteAdHocForm(form.id);
       setAdHocForms((prev) => prev.filter((f) => f.id !== form.id));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete form");
+      showToast(err instanceof ApiError ? err.message : "Failed to delete form", "error");
     } finally {
       setDeletingId(null);
     }
@@ -151,12 +149,6 @@ export function MyAdHocFormsListPage() {
         title="Ad-hoc Forms"
         subtitle="Brand-new forms you build yourself. An admin reviews each one (and picks its Project Code) before it goes live."
       />
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
-          {error}
-        </Alert>
-      )}
 
       <Paper sx={{ p: 2, borderRadius: 3 }}>
         <Stack direction="row" alignItems="center" sx={{ mb: 1.5 }}>

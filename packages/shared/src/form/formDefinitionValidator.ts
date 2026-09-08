@@ -2,7 +2,7 @@ import type { Issue, ValidationResult } from "../excel/types";
 import { findCallingCodeEntry } from "./callingCodes";
 import { resolveMobileNumberCountries, type FormDefinition, type QuestionDefinition } from "./formDefinition";
 
-const LABEL = "Form Builder";
+const LABEL = "FormIQ";
 
 /**
  * `FormDefinition`-native validator for builder-authored forms — the counterpart to

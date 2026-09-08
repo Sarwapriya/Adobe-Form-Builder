@@ -6,6 +6,7 @@ import { ApiError } from "../../api/apiClient";
 import { getFabrixSettings, saveFabrixSettings, sendFabrixTestMessage, type FabrixSettings } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 /**
  * Admin-only connection settings for the FabriX OpenAPI chat endpoint
@@ -25,11 +26,8 @@ import { LoadingState } from "../common/LoadingState";
 export function FabrixSettingsManager() {
   const [settings, setSettings] = useState<FabrixSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const [baseUrl, setBaseUrl] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -39,7 +37,6 @@ export function FabrixSettingsManager() {
 
   async function refresh() {
     setLoading(true);
-    setError(null);
     try {
       const result = await getFabrixSettings();
       setSettings(result);
@@ -49,7 +46,7 @@ export function FabrixSettingsManager() {
       setClientHeader("");
       setOpenApiToken("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load FabriXAI settings");
+      showToast(err instanceof ApiError ? err.message : "Failed to load FabriXAI settings", "error");
     } finally {
       setLoading(false);
     }
@@ -62,9 +59,6 @@ export function FabrixSettingsManager() {
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError(null);
-    setSaveNotice(null);
-    setTestResult(null);
     try {
       await saveFabrixSettings({
         baseUrl: baseUrl.trim(),
@@ -73,10 +67,10 @@ export function FabrixSettingsManager() {
         clientHeader: clientHeader.trim() || undefined,
         openApiToken: openApiToken.trim() || undefined,
       });
-      setSaveNotice("FabriXAI settings saved.");
+      showToast("FabriXAI settings saved.", "success");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save FabriXAI settings");
+      showToast(err instanceof ApiError ? err.message : "Failed to save FabriXAI settings", "error");
     } finally {
       setSaving(false);
     }
@@ -84,16 +78,14 @@ export function FabrixSettingsManager() {
 
   async function handleTest() {
     setTesting(true);
-    setTestResult(null);
     try {
       const result = await sendFabrixTestMessage();
-      setTestResult(
-        result.ok
-          ? { ok: true, message: "Test message sent successfully." }
-          : { ok: false, message: result.error ?? "Test message failed." },
+      showToast(
+        result.ok ? "Test message sent successfully." : (result.error ?? "Test message failed."),
+        result.ok ? "success" : "error",
       );
     } catch (err) {
-      setTestResult({ ok: false, message: err instanceof ApiError ? err.message : "Failed to send test message" });
+      showToast(err instanceof ApiError ? err.message : "Failed to send test message", "error");
     } finally {
       setTesting(false);
     }
@@ -109,21 +101,6 @@ export function FabrixSettingsManager() {
         variables when set here. Pick which model(s) to use on the "Models" tab.
       </Typography>
 
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
-      {saveNotice && (
-        <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setSaveNotice(null)}>
-          {saveNotice}
-        </Alert>
-      )}
-      {testResult && (
-        <Alert severity={testResult.ok ? "success" : "error"} sx={{ mb: 1.5 }} onClose={() => setTestResult(null)}>
-          {testResult.message}
-        </Alert>
-      )}
       {!loading && settings && settings.enabledModelCount === 0 && (
         <Alert severity="warning" sx={{ mb: 1.5 }}>
           No models are enabled yet — the assistant can't respond until at least one is turned on in the "Models" tab.

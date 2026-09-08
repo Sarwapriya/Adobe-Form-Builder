@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Box, Chip, CircularProgress, Divider, Paper, Stack, Typography } from "@mui/material";
+import { Box, Chip, CircularProgress, Divider, Paper, Stack, Typography } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
 import { ApiError } from "../api/apiClient";
 import {
@@ -10,6 +10,7 @@ import {
   type ContributionSummaryWithForm,
 } from "../api/subsidiaryFormsApi";
 import { PageHeader } from "../components/common/PageHeader";
+import { showToast } from "../store/toastStore";
 
 // listMyAllContributions never returns a "draft" row (see formContributionService's
 // own filter) — this entry only exists so the Record type-checks.
@@ -40,18 +41,16 @@ export function MySubmissionsPage() {
   const navigate = useNavigate();
   const [contributions, setContributions] = useState<ContributionSummaryWithForm[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setError(null);
     listMyAllContributions()
       .then((result) => {
         if (!cancelled) setContributions(result);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load submissions");
+        if (!cancelled) showToast(err instanceof ApiError ? err.message : "Failed to load submissions", "error");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -79,12 +78,6 @@ export function MySubmissionsPage() {
         title="My Submissions"
         subtitle="Every translation/question/consent you've submitted for review, across all forms."
       />
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
-          {error}
-        </Alert>
-      )}
 
       {loading ? (
         <CircularProgress size={24} />

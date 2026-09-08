@@ -17,6 +17,7 @@ import {
 } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 /**
  * Admin-managed catalog of selectable FabriX LLMs (Configuration > AI
@@ -30,7 +31,6 @@ import { LoadingState } from "../common/LoadingState";
 export function FabrixModelManager() {
   const [models, setModels] = useState<FabrixModel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [newName, setNewName] = useState("");
@@ -39,11 +39,10 @@ export function FabrixModelManager() {
 
   async function refresh() {
     setLoading(true);
-    setError(null);
     try {
       setModels(await listFabrixModels());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load FabriX models");
+      showToast(err instanceof ApiError ? err.message : "Failed to load FabriX models", "error");
     } finally {
       setLoading(false);
     }
@@ -57,14 +56,13 @@ export function FabrixModelManager() {
     e.preventDefault();
     if (!newName.trim() || !newModelId.trim()) return;
     setCreating(true);
-    setError(null);
     try {
       await createFabrixModel(newName.trim(), newModelId.trim());
       setNewName("");
       setNewModelId("");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to add model");
+      showToast(err instanceof ApiError ? err.message : "Failed to add model", "error");
     } finally {
       setCreating(false);
     }
@@ -72,12 +70,11 @@ export function FabrixModelManager() {
 
   async function handleToggle(model: FabrixModel) {
     setBusyId(model.id);
-    setError(null);
     try {
       await updateFabrixModel(model.id, { isEnabled: !model.isEnabled });
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update model");
+      showToast(err instanceof ApiError ? err.message : "Failed to update model", "error");
     } finally {
       setBusyId(null);
     }
@@ -85,12 +82,11 @@ export function FabrixModelManager() {
 
   async function handleMove(model: FabrixModel, direction: "up" | "down") {
     setBusyId(model.id);
-    setError(null);
     try {
       await moveFabrixModel(model.id, direction);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to reorder model");
+      showToast(err instanceof ApiError ? err.message : "Failed to reorder model", "error");
     } finally {
       setBusyId(null);
     }
@@ -98,12 +94,11 @@ export function FabrixModelManager() {
 
   async function handleDelete(model: FabrixModel) {
     setBusyId(model.id);
-    setError(null);
     try {
       await deleteFabrixModel(model.id);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete model");
+      showToast(err instanceof ApiError ? err.message : "Failed to delete model", "error");
     } finally {
       setBusyId(null);
     }
@@ -119,11 +114,6 @@ export function FabrixModelManager() {
         around or fall back past one that's unavailable or hitting a token/rate limit.
       </Typography>
 
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
       {!loading && models.length > 0 && enabledCount === 0 && (
         <Alert severity="warning" sx={{ mb: 1.5 }}>
           No models are enabled — turn at least one on below or the assistant can't respond.

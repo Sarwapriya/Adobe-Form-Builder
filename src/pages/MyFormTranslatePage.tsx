@@ -36,6 +36,7 @@ import { ContributionPreviewDialog } from "../components/formContribution/Contri
 import { autoPopulateParamName, CONTROL_TYPE_LABEL } from "../components/formBuilder/formBuilderHelpers";
 import { useSaveShortcut } from "../hooks/useSaveShortcut";
 import { unsavedChangesBlinkSx } from "../components/formBuilder/unsavedChangesBlinkSx";
+import { showToast } from "../store/toastStore";
 
 const STATUS_COLOR: Record<ContributionStatus, "default" | "success" | "error"> = {
   draft: "default",
@@ -105,7 +106,10 @@ export function MyFormTranslatePage() {
   const [addAnswerForQuestionId, setAddAnswerForQuestionId] = useState<string | null>(null);
   const [addConsentOpen, setAddConsentOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) showToast(error, "error");
+  }, [error]);
 
   useEffect(() => {
     if (!id) return;
@@ -134,18 +138,16 @@ export function MyFormTranslatePage() {
   }, [id]);
 
   async function handleSaveDraft() {
-    setNotice(null);
     const ok = await saveDraft();
-    if (ok) setNotice("Draft saved.");
+    if (ok) showToast("Draft saved.", "success");
   }
 
   useSaveShortcut(() => void handleSaveDraft(), dirty && !savingDraft && !locked && !projectLocked);
 
   async function handleSubmit() {
-    setNotice(null);
     const ok = await submit();
     if (ok) {
-      setNotice("Submitted for review.");
+      showToast("Submitted for review.", "success");
       if (id) {
         try {
           syncOwnContributions(await listMyContributions(id));
@@ -633,16 +635,6 @@ export function MyFormTranslatePage() {
             {submitting ? "Submitting..." : "Submit for review"}
           </Button>
         </Stack>
-        {error && (
-          <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }}>
-            {error}
-          </Alert>
-        )}
-        {notice && !error && (
-          <Alert severity="success" sx={{ mt: 1.5, borderRadius: 2 }}>
-            {notice}
-          </Alert>
-        )}
       </Paper>
       </Box>
 

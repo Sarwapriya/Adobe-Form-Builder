@@ -23,6 +23,7 @@ import { MyAdHocFormEditorPage } from "./pages/MyAdHocFormEditorPage.tsx";
 import { MySubmissionsPage } from "./pages/MySubmissionsPage.tsx";
 import { MySubsidiaryPage } from "./pages/MySubsidiaryPage.tsx";
 import { QuestionMasterPage } from "./pages/QuestionMasterPage.tsx";
+import { GlobalToast } from "./components/common/GlobalToast.tsx";
 
 /** Post-login/index landing page — the Excel-upload workflow (formerly here)
  * is hidden from navigation for both roles, so this picks the first page each
@@ -88,6 +89,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
+        <GlobalToast />
       </ErrorBoundary>
     </ThemeProvider>
   );

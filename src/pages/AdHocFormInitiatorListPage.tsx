@@ -27,6 +27,7 @@ import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
+import { showToast } from "../store/toastStore";
 
 const STATUS_COLOR: Record<FormStatus, "default" | "success" | "warning"> = {
   draft: "default",
@@ -58,7 +59,6 @@ export function AdHocFormInitiatorListPage() {
   const navigate = useNavigate();
   const [forms, setForms] = useState<FormListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<FormStatus | "">("");
   const [pendingReviewOnly, setPendingReviewOnly] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -75,7 +75,6 @@ export function AdHocFormInitiatorListPage() {
 
   async function refresh() {
     setLoading(true);
-    setError(null);
     try {
       const result = await listForms({
         status: statusFilter || undefined,
@@ -84,7 +83,7 @@ export function AdHocFormInitiatorListPage() {
       });
       setForms(result.items);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load forms");
+      showToast(err instanceof ApiError ? err.message : "Failed to load forms", "error");
     } finally {
       setLoading(false);
     }
@@ -142,7 +141,6 @@ export function AdHocFormInitiatorListPage() {
     if (!newName.trim() || !newSubsidiaryId || !copySourceForm) return;
 
     setCreating(true);
-    setError(null);
     try {
       const form = await createForm({
         name: newName.trim(),
@@ -153,7 +151,7 @@ export function AdHocFormInitiatorListPage() {
       closeCreateDialog();
       navigate(`/admin/form-builder/${form.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create form");
+      showToast(err instanceof ApiError ? err.message : "Failed to create form", "error");
     } finally {
       setCreating(false);
     }
@@ -162,13 +160,12 @@ export function AdHocFormInitiatorListPage() {
   async function handleConfirmDelete() {
     if (!confirmDeleteForm) return;
     setDeletingId(confirmDeleteForm.id);
-    setError(null);
     try {
       await deleteForm(confirmDeleteForm.id);
       setConfirmDeleteForm(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete form");
+      showToast(err instanceof ApiError ? err.message : "Failed to delete form", "error");
     } finally {
       setDeletingId(null);
     }
@@ -203,12 +200,6 @@ export function AdHocFormInitiatorListPage() {
           label="Pending review only"
         />
       </Paper>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
-          {error}
-        </Alert>
-      )}
 
       {loading ? (
         <CircularProgress size={24} />

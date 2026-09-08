@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Box, MenuItem, Paper, Stack, Switch, TextField, Typography } from "@mui/material";
+import { Box, MenuItem, Paper, Stack, Switch, TextField, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import TuneIcon from "@mui/icons-material/Tune";
 import { ApiError } from "../../api/apiClient";
@@ -13,6 +13,7 @@ import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 /**
  * Per-subsidiary project code access — pick a subsidiary, then toggle which
@@ -40,7 +41,6 @@ export function SubsidiaryProjectCodeAccessManager({ refreshSignal }: { refreshS
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [blocks, setBlocks] = useState<SubsidiaryProjectBlock[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [subsidiaryName, setSubsidiaryName] = useState("");
   const [togglingCode, setTogglingCode] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export function SubsidiaryProjectCodeAccessManager({ refreshSignal }: { refreshS
       setBlocks(blockRows);
       setSubsidiaryName((current) => (subsidiaryRows.some((s) => s.name === current) ? current : ""));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load project code access");
+      showToast(err instanceof ApiError ? err.message : "Failed to load project code access", "error");
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,6 @@ export function SubsidiaryProjectCodeAccessManager({ refreshSignal }: { refreshS
 
   async function handleToggle(code: string, existingBlock: SubsidiaryProjectBlock | undefined) {
     setTogglingCode(code);
-    setError(null);
     try {
       if (existingBlock) {
         await deleteSubsidiaryProjectBlock(existingBlock.id);
@@ -83,7 +82,7 @@ export function SubsidiaryProjectCodeAccessManager({ refreshSignal }: { refreshS
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update project code access");
+      showToast(err instanceof ApiError ? err.message : "Failed to update project code access", "error");
     } finally {
       setTogglingCode(null);
     }
@@ -117,12 +116,6 @@ export function SubsidiaryProjectCodeAccessManager({ refreshSignal }: { refreshS
           ))}
         </TextField>
       </Box>
-
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
 
       {loading ? (
         <LoadingState />

@@ -15,7 +15,7 @@ from ..excel.types import Issue, ValidationResult
 from .calling_codes import find_calling_code_entry
 from .definition import FormDefinition, QuestionDefinition, resolve_mobile_number_countries
 
-_LABEL = "Form Builder"
+_LABEL = "FormIQ"
 
 
 def _err(message: str) -> Issue:

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Alert, Box, Button, FormControlLabel, Paper, Stack, Switch, TextField, Typography } from "@mui/material";
+import { Box, Button, FormControlLabel, Paper, Stack, Switch, TextField, Typography } from "@mui/material";
 import EmailIcon from "@mui/icons-material/Email";
 import { ApiError } from "../../api/apiClient";
 import { getSmtpSettings, saveSmtpSettings, sendSmtpTestEmail, type SmtpSettings } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 /**
  * Admin-only SMTP connection settings — host/port/secure/user/password/from,
@@ -19,11 +20,8 @@ import { LoadingState } from "../common/LoadingState";
 export function SmtpSettingsManager() {
   const [settings, setSettings] = useState<SmtpSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const [host, setHost] = useState("");
   const [port, setPort] = useState("587");
@@ -34,7 +32,6 @@ export function SmtpSettingsManager() {
 
   async function refresh() {
     setLoading(true);
-    setError(null);
     try {
       const result = await getSmtpSettings();
       setSettings(result);
@@ -45,7 +42,7 @@ export function SmtpSettingsManager() {
       setFrom(result.from ?? "");
       setPassword("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load SMTP settings");
+      showToast(err instanceof ApiError ? err.message : "Failed to load SMTP settings", "error");
     } finally {
       setLoading(false);
     }
@@ -58,9 +55,6 @@ export function SmtpSettingsManager() {
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError(null);
-    setSaveNotice(null);
-    setTestResult(null);
     try {
       await saveSmtpSettings({
         host: host.trim(),
@@ -70,10 +64,10 @@ export function SmtpSettingsManager() {
         password: password.trim() || undefined,
         from: from.trim() || null,
       });
-      setSaveNotice("SMTP settings saved.");
+      showToast("SMTP settings saved.", "success");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save SMTP settings");
+      showToast(err instanceof ApiError ? err.message : "Failed to save SMTP settings", "error");
     } finally {
       setSaving(false);
     }
@@ -81,12 +75,11 @@ export function SmtpSettingsManager() {
 
   async function handleTest() {
     setTesting(true);
-    setTestResult(null);
     try {
       const result = await sendSmtpTestEmail();
-      setTestResult({ ok: true, message: `Test email sent to ${result.sentTo}.` });
+      showToast(`Test email sent to ${result.sentTo}.`, "success");
     } catch (err) {
-      setTestResult({ ok: false, message: err instanceof ApiError ? err.message : "Failed to send test email" });
+      showToast(err instanceof ApiError ? err.message : "Failed to send test email", "error");
     } finally {
       setTesting(false);
     }
@@ -99,22 +92,6 @@ export function SmtpSettingsManager() {
         Connection details for every outgoing notification email (uploads, submissions, form reviews, cutoff
         reminders, project locks). Overrides the server's SMTP_* environment variables when set here.
       </Typography>
-
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
-      {saveNotice && (
-        <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setSaveNotice(null)}>
-          {saveNotice}
-        </Alert>
-      )}
-      {testResult && (
-        <Alert severity={testResult.ok ? "success" : "error"} sx={{ mb: 1.5 }} onClose={() => setTestResult(null)}>
-          {testResult.message}
-        </Alert>
-      )}
 
       {loading ? (
         <LoadingState />

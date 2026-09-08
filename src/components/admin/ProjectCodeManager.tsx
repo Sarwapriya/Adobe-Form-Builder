@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Alert, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
@@ -19,6 +19,7 @@ import {
 } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 /** Backend returns Date columns as full ISO datetime strings ("2026-06-01T00:00:00.000Z")
  * once serialized to JSON — an <input type="date"> needs exactly "YYYY-MM-DD". */
@@ -49,7 +50,6 @@ function toDateInputValue(value: string | null): string {
 export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {}) {
   const [codes, setCodes] = useState<ProjectCode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [newCode, setNewCode] = useState("");
   const [newStartDate, setNewStartDate] = useState("");
   const [newEndDate, setNewEndDate] = useState("");
@@ -65,7 +65,7 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
     try {
       setCodes(await listAllProjectCodes());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load project codes");
+      showToast(err instanceof ApiError ? err.message : "Failed to load project codes", "error");
     } finally {
       setLoading(false);
     }
@@ -80,7 +80,6 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
     if (!newCode.trim()) return;
 
     setCreating(true);
-    setError(null);
     try {
       await createProjectCode(newCode.trim(), newStartDate || undefined, newEndDate || undefined, newCutoffDate || undefined);
       setNewCode("");
@@ -90,7 +89,7 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create project code");
+      showToast(err instanceof ApiError ? err.message : "Failed to create project code", "error");
     } finally {
       setCreating(false);
     }
@@ -98,13 +97,12 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
 
   async function handleToggle(code: ProjectCode) {
     setTogglingId(code.id);
-    setError(null);
     try {
       await setProjectCodeOpen(code.id, !code.isOpen);
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update project code");
+      showToast(err instanceof ApiError ? err.message : "Failed to update project code", "error");
     } finally {
       setTogglingId(null);
     }
@@ -112,13 +110,12 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
 
   async function handleToggleLock(code: ProjectCode) {
     setTogglingLockedId(code.id);
-    setError(null);
     try {
       await setProjectCodeLocked(code.id, !code.isLocked);
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update project code");
+      showToast(err instanceof ApiError ? err.message : "Failed to update project code", "error");
     } finally {
       setTogglingLockedId(null);
     }
@@ -126,12 +123,11 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
 
   async function handleSaveDateRange(id: string, startDate: string, endDate: string, cutoffDate: string) {
     setSavingId(id);
-    setError(null);
     try {
       await setProjectCodeDateRange(id, startDate || null, endDate || null, cutoffDate || null);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update campaign dates");
+      showToast(err instanceof ApiError ? err.message : "Failed to update campaign dates", "error");
     } finally {
       setSavingId(null);
     }
@@ -139,13 +135,12 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
 
   async function handleRename(id: string, code: string) {
     setRenamingId(id);
-    setError(null);
     try {
       await setProjectCodeValue(id, code);
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to rename project code");
+      showToast(err instanceof ApiError ? err.message : "Failed to rename project code", "error");
     } finally {
       setRenamingId(null);
     }
@@ -190,12 +185,6 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
           {creating ? "Adding..." : "Add"}
         </Button>
       </Box>
-
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
 
       {loading ? (
         <LoadingState />

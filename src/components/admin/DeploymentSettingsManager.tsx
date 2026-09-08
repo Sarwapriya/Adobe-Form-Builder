@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -25,6 +24,7 @@ import {
 } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 /** One environment's own connection form (Staging or Production) — kept as
  * its own component so each side has independent field state and its own
@@ -42,8 +42,6 @@ function SftpTargetPanel({
 }) {
   const [form, setForm] = useState<SftpTargetConfig>(target);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setForm(target);
@@ -52,14 +50,12 @@ function SftpTargetPanel({
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError(null);
-    setSaveNotice(null);
     try {
       const settings = await saveDeploymentTarget(environment, form);
       onSaved(settings);
-      setSaveNotice("Saved.");
+      showToast("Saved.", "success");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save deployment target");
+      showToast(err instanceof ApiError ? err.message : "Failed to save deployment target", "error");
     } finally {
       setSaving(false);
     }
@@ -72,17 +68,6 @@ function SftpTargetPanel({
       <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
         {label}
       </Typography>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
-      {saveNotice && (
-        <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setSaveNotice(null)}>
-          {saveNotice}
-        </Alert>
-      )}
 
       <Box component="form" onSubmit={handleSave}>
         <Stack spacing={1.5} sx={{ mb: 1.5 }}>
@@ -154,17 +139,14 @@ function SftpTargetPanel({
 export function DeploymentSettingsManager() {
   const [settings, setSettings] = useState<SftpDeploymentSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
-  const [switchError, setSwitchError] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
-    setLoadError(null);
     try {
       setSettings(await getDeploymentSettings());
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : "Failed to load deployment settings");
+      showToast(err instanceof ApiError ? err.message : "Failed to load deployment settings", "error");
     } finally {
       setLoading(false);
     }
@@ -180,11 +162,10 @@ export function DeploymentSettingsManager() {
       return;
     }
     setSwitching(true);
-    setSwitchError(null);
     try {
       setSettings(await setActiveDeploymentEnvironment(next));
     } catch (err) {
-      setSwitchError(err instanceof ApiError ? err.message : "Failed to switch active environment");
+      showToast(err instanceof ApiError ? err.message : "Failed to switch active environment", "error");
     } finally {
       setSwitching(false);
     }
@@ -198,17 +179,6 @@ export function DeploymentSettingsManager() {
         This is best-effort — a failed push never fails the publish itself, and the configured host is typically only
         reachable from the office network/VPN.
       </Typography>
-
-      {loadError && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {loadError}
-        </Alert>
-      )}
-      {switchError && (
-        <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setSwitchError(null)}>
-          {switchError}
-        </Alert>
-      )}
 
       {loading || !settings ? (
         <LoadingState />

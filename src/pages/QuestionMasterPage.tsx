@@ -39,6 +39,7 @@ import {
 } from "../api/questionMasterApi";
 import { downloadBlob } from "../utils/download";
 import { PageHeader } from "../components/common/PageHeader";
+import { showToast } from "../store/toastStore";
 
 /**
  * Admin-only: generates a versioned "Question Master" .xlsx per project code —
@@ -55,7 +56,6 @@ export function QuestionMasterPage() {
   const [readiness, setReadiness] = useState<QuestionMasterReadinessItem[]>([]);
   const [versions, setVersions] = useState<QuestionMasterVersion[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [generateOpen, setGenerateOpen] = useState(false);
   const [division, setDivision] = useState("");
@@ -85,14 +85,13 @@ export function QuestionMasterPage() {
 
   function refresh(code: string) {
     setLoading(true);
-    setError(null);
     Promise.all([getQuestionMasterReadiness(code), listQuestionMasterVersions(code)])
       .then(([readinessResult, versionsResult]) => {
         setReadiness(readinessResult);
         setVersions(versionsResult);
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : "Failed to load Question Master data");
+        showToast(err instanceof ApiError ? err.message : "Failed to load Question Master data", "error");
       })
       .finally(() => setLoading(false));
   }
@@ -116,14 +115,13 @@ export function QuestionMasterPage() {
 
   async function handleGenerate() {
     setGenerating(true);
-    setError(null);
     try {
       await generateQuestionMaster(projectCode, division.trim());
       setGenerateOpen(false);
       setDivision("");
       refresh(projectCode);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to generate Question Master");
+      showToast(err instanceof ApiError ? err.message : "Failed to generate Question Master", "error");
     } finally {
       setGenerating(false);
     }
@@ -135,7 +133,7 @@ export function QuestionMasterPage() {
       const blob = await downloadQuestionMasterVersion(version.id);
       downloadBlob(blob, `QuestionMaster_${version.projectCode}_v${version.version}.xlsx`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Download failed");
+      showToast(err instanceof ApiError ? err.message : "Download failed", "error");
     } finally {
       setDownloadingId(null);
     }
@@ -169,12 +167,6 @@ export function QuestionMasterPage() {
           ))}
         </TextField>
       </Paper>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
-          {error}
-        </Alert>
-      )}
 
       {!projectCode && (
         <Typography color="text.secondary">Select a project code to see subsidiary readiness and past versions.</Typography>

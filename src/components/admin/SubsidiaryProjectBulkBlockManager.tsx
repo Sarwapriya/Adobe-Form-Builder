@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  Alert,
   Box,
   Button,
   Checkbox,
@@ -24,6 +23,7 @@ import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
 
 /**
  * Bulk version of SubsidiaryProjectBlockManager above: pick several
@@ -48,12 +48,10 @@ export function SubsidiaryProjectBulkBlockManager(
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [selectedSubsidiaries, setSelectedSubsidiaries] = useState<string[]>([]);
   const [selectedProjectCodes, setSelectedProjectCodes] = useState<string[]>([]);
   const [blocking, setBlocking] = useState(false);
-  const [lastResult, setLastResult] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -71,7 +69,7 @@ export function SubsidiaryProjectBulkBlockManager(
       setSelectedSubsidiaries((current) => current.filter((name) => subsidiaryNames.has(name)));
       setSelectedProjectCodes((current) => current.filter((code) => codeValues.has(code)));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load subsidiaries / project codes");
+      showToast(err instanceof ApiError ? err.message : "Failed to load subsidiaries / project codes", "error");
     } finally {
       setLoading(false);
     }
@@ -98,8 +96,6 @@ export function SubsidiaryProjectBulkBlockManager(
     if (selectedSubsidiaries.length === 0 || selectedProjectCodes.length === 0) return;
 
     setBlocking(true);
-    setError(null);
-    setLastResult(null);
     try {
       const pairsToCreate = selectedSubsidiaries.flatMap((subsidiaryName) =>
         selectedProjectCodes
@@ -107,17 +103,18 @@ export function SubsidiaryProjectBulkBlockManager(
           .map((code) => ({ subsidiaryName, code })),
       );
       await Promise.all(pairsToCreate.map((p) => createSubsidiaryProjectBlock(p.subsidiaryName, p.code)));
-      setLastResult(
+      showToast(
         pairsToCreate.length === 0
           ? "Every selected pair was already blocked — nothing to do."
           : `Blocked ${pairsToCreate.length} pair${pairsToCreate.length === 1 ? "" : "s"}.`,
+        pairsToCreate.length === 0 ? "info" : "success",
       );
       setSelectedSubsidiaries([]);
       setSelectedProjectCodes([]);
       await refresh();
       onChange?.();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create restrictions");
+      showToast(err instanceof ApiError ? err.message : "Failed to create restrictions", "error");
     } finally {
       setBlocking(false);
     }
@@ -211,17 +208,6 @@ export function SubsidiaryProjectBulkBlockManager(
             )}
           </Stack>
         </Box>
-      )}
-
-      {error && !loading && (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          {error}
-        </Alert>
-      )}
-      {lastResult && !error && !loading && (
-        <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setLastResult(null)}>
-          {lastResult}
-        </Alert>
       )}
     </Paper>
   );

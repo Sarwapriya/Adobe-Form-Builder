@@ -10,14 +10,22 @@ equivalent of `backend/src/utils/env.ts`'s `requireEnv`, but centralized.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Anchored to this file's location (backend-py/app/config.py -> backend-py/.env)
+# rather than a bare ".env", which pydantic-settings would otherwise resolve
+# relative to the process's current working directory — meaning the file was
+# silently skipped (and every setting fell back to its default) whenever
+# uvicorn/pytest was launched from anywhere other than backend-py/ itself.
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     # --- SQL Server connection (two paths — see app/db.py) ---
     SQL_CONNECTION_STRING: Optional[str] = None

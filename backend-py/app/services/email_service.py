@@ -164,7 +164,7 @@ def _render_email_html(
     <table role="presentation" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid rgba(20,22,33,0.08);">
       <tr>
         <td style="background:#1428a0;padding:20px 28px;">
-          <span style="color:#ffffff;font-size:16px;font-weight:700;">Form Builder</span>
+          <span style="color:#ffffff;font-size:16px;font-weight:700;">FormIQ</span>
         </td>
       </tr>
       <tr>
@@ -384,15 +384,15 @@ def send_project_locked_notification(db: Session, recipients: list[str], project
 def send_test_email(db: Session, to: str) -> SendResult:
     html = _render_email_html(
         title="SMTP settings test",
-        intro="This is a test email from Form Builder confirming your SMTP settings are working correctly.",
+        intro="This is a test email from FormIQ confirming your SMTP settings are working correctly.",
         footer_note="You can safely ignore this message.",
     )
     return send_email(
         db,
         [to],
         EmailContent(
-            subject="Form Builder — SMTP test email",
-            text="This is a test email from Form Builder confirming your SMTP settings are working correctly.",
+            subject="FormIQ — SMTP test email",
+            text="This is a test email from FormIQ confirming your SMTP settings are working correctly.",
             html=html,
         ),
     )

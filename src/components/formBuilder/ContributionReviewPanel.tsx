@@ -33,6 +33,7 @@ import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { ContributionMergePreviewDialog } from "./ContributionMergePreviewDialog";
 import { ContributionDetails } from "./ContributionDetails";
 import { QaRunDialog } from "../admin/QaRunDialog";
+import { showToast } from "../../store/toastStore";
 
 type RowStatus = "pending" | "awaitingPublish" | "published" | "rejected";
 
@@ -97,8 +98,6 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
   const contributions = useFormBuilderStore((s) => s.contributions);
   const loading = useFormBuilderStore((s) => s.contributionsLoading);
   const refresh = useFormBuilderStore((s) => s.refreshContributions);
-  const [error, setError] = useState<string | null>(null);
-  const [deployWarning, setDeployWarning] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewContribution, setPreviewContribution] = useState<ContributionSummary | null>(null);
   const [qaContribution, setQaContribution] = useState<ContributionSummary | null>(null);
@@ -117,12 +116,11 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
 
   async function handleApprove(id: string) {
     setBusyId(id);
-    setError(null);
     try {
       await approveContribution(formId, id);
       await Promise.all([refresh(), reloadForm(formId)]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to approve contribution");
+      showToast(err instanceof ApiError ? err.message : "Failed to approve contribution", "error");
     } finally {
       setBusyId(null);
     }
@@ -130,21 +128,20 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
 
   async function handleDeploy() {
     setBusyId("__publish__");
-    setError(null);
-    setDeployWarning(null);
     try {
       const result = await apiPublishForm(formId);
       if (result.deployment && !result.deployment.ok) {
-        setDeployWarning(
+        showToast(
           `Deployed. SFTP delivery to the campaign server failed (${result.deployment.error}) — this is expected off the office network; retry once connected.`,
+          "warning",
         );
       }
       await Promise.all([refresh(), reloadForm(formId)]);
     } catch (err) {
       if (err instanceof FormInvalidError) {
-        setError("Deploy failed — the current draft has validation errors (see the panel above). Fix them and try again.");
+        showToast("Deploy failed — the current draft has validation errors (see the panel above). Fix them and try again.", "error");
       } else {
-        setError(err instanceof ApiError ? err.message : "Failed to deploy");
+        showToast(err instanceof ApiError ? err.message : "Failed to deploy", "error");
       }
     } finally {
       setBusyId(null);
@@ -160,13 +157,12 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
     if (!rejectTarget) return;
     const id = rejectTarget.id;
     setBusyId(id);
-    setError(null);
     try {
       await rejectContribution(formId, id, rejectNote.trim() || undefined);
       setRejectTarget(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to reject contribution");
+      showToast(err instanceof ApiError ? err.message : "Failed to reject contribution", "error");
     } finally {
       setBusyId(null);
     }
@@ -200,18 +196,6 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
         nothing goes live until you separately Deploy — approve as many as you like first, then deploy them all at
         once.
       </Typography>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 1.5, borderRadius: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {deployWarning && (
-        <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 2 }} onClose={() => setDeployWarning(null)}>
-          {deployWarning}
-        </Alert>
-      )}
 
       {awaitingPublish.length > 0 && (
         <Alert

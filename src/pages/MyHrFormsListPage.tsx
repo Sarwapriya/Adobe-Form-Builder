@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Box, Chip, CircularProgress, Paper, Stack, Typography } from "@mui/material";
+import { Box, Chip, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import TranslateIcon from "@mui/icons-material/Translate";
 import EditOffIcon from "@mui/icons-material/EditOff";
 import { ApiError } from "../api/apiClient";
@@ -8,6 +8,7 @@ import { listMyForms } from "../api/subsidiaryFormsApi";
 import type { FormListItem } from "../api/formBuilderApi";
 import { ContributionStatusBar } from "../components/formContribution/ContributionStatusBar";
 import { PageHeader } from "../components/common/PageHeader";
+import { showToast } from "../store/toastStore";
 
 /**
  * "HR Forms" — the My Forms submenu page listing every currently *published*
@@ -23,15 +24,13 @@ export function MyHrFormsListPage() {
   const navigate = useNavigate();
   const [forms, setForms] = useState<FormListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    setError(null);
     listMyForms()
       .then(setForms)
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : "Failed to load forms");
+        showToast(err instanceof ApiError ? err.message : "Failed to load forms", "error");
       })
       .finally(() => {
         setLoading(false);
@@ -45,12 +44,6 @@ export function MyHrFormsListPage() {
         title="HR Forms"
         subtitle="Published forms your admin created and allocated to your subsidiary — add translations, questions, or consents for review."
       />
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
-          {error}
-        </Alert>
-      )}
 
       {loading ? (
         <CircularProgress size={24} />
