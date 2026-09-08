@@ -1,0 +1,727 @@
+import { useEffect, useState } from "react";
+import {
+  Avatar,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Divider,
+  Drawer,
+  Grow,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Paper,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import LogoutIcon from "@mui/icons-material/Logout";
+import HistoryIcon from "@mui/icons-material/History";
+import SettingsIcon from "@mui/icons-material/Settings";
+import PeopleIcon from "@mui/icons-material/People";
+import DesignServicesIcon from "@mui/icons-material/DesignServices";
+import TranslateIcon from "@mui/icons-material/Translate";
+import DomainIcon from "@mui/icons-material/Domain";
+import ListAltIcon from "@mui/icons-material/ListAlt";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { alpha } from "@mui/material/styles";
+import type { ReactNode } from "react";
+import { isAdminRole, useAuthStore } from "../auth/authStore";
+import { useAiChatStore } from "../store/aiChatStore";
+import { useThemeModeStore } from "../store/themeModeStore";
+import { useFormBuilderStore } from "../store/formBuilderStore";
+import { useFormContributionStore } from "../store/formContributionStore";
+import { AIChatButton } from "../components/ai/AIChatButton";
+import { AIChatPanel } from "../components/ai/AIChatPanel";
+import { PALETTES } from "./theme";
+
+const EXPANDED_WIDTH = 260;
+const COLLAPSED_WIDTH = 76;
+const COLLAPSE_STORAGE_KEY = "sidebarCollapsed";
+const AI_PANEL_WIDTH = 380;
+
+/** Matches "/admin/form-builder/:id" — deliberately excludes the two static
+ * list sub-routes ("/admin/form-builder/hr", "/admin/form-builder/adhoc"),
+ * which have no form to scope the AI panel to. */
+const ADMIN_FORM_BUILDER_ID_RE = /^\/admin\/form-builder\/(?!hr$|adhoc$)([^/]+)$/;
+/** Matches "/my-forms/adhoc/:id" — deliberately excludes the bare
+ * "/my-forms/adhoc" list page itself. */
+const MY_ADHOC_FORM_ID_RE = /^\/my-forms\/adhoc\/([^/]+)$/;
+
+/** When the current page is one of the two Form Builder editors, the AI
+ * panel's conversation gets scoped to that form (campaign context, and
+ * client-applied actions target its draft) — returns null everywhere else,
+ * which the panel treats as "general chat" (search/reference previous
+ * campaigns, no form to apply an edit to). */
+function editorFormIdFromPath(pathname: string): string | null {
+  return pathname.match(ADMIN_FORM_BUILDER_ID_RE)?.[1] ?? pathname.match(MY_ADHOC_FORM_ID_RE)?.[1] ?? null;
+}
+
+interface NavChild {
+  to: string;
+  label: string;
+  /** Whether this child should read as active for a given pathname — a
+   * function rather than a plain exact/prefix flag because "HR Forms" needs
+   * to stay highlighted on an individual form's translate page
+   * ("/my-forms/:id"), which isn't a literal prefix of its own link target. */
+  isActive: (pathname: string) => boolean;
+}
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: ReactNode;
+  /** Exact-match only — otherwise "/admin" would also read as active while on "/admin/history". */
+  exact: boolean;
+  /** Sub-menu items, expandable under the parent when the sidebar isn't
+   * collapsed. In collapsed (icon-rail) mode the parent just links straight
+   * to the first child instead of showing a menu. */
+  children?: NavChild[];
+}
+
+/** A labeled cluster of nav items, rendered with a small uppercase caption
+ * above it (hidden in collapsed/icon-rail mode, where a divider stands in
+ * instead) — lets the admin section read as "Excel Upload" vs. "Form
+ * Configuration" at a glance instead of one flat list of six items. */
+interface NavSection {
+  label: string;
+  items: NavItem[];
+}
+
+/** Shell for every authenticated page: a collapsible left sidebar (nav +
+ * account) with the current route rendered via <Outlet/>. Mounted once as the
+ * layout route wrapping "/" and "/admin*" (see App.tsx). Collapsed state is
+ * remembered across reloads via localStorage, matching the polish of a
+ * typical SaaS admin shell rather than resetting every visit. */
+export function AppLayout() {
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isAdmin = isAdminRole(user?.role);
+  const panelLabel = isAdmin ? "Admin Panel" : "Subsidiary Panel";
+  // Matches App.tsx's DefaultLanding routing exactly, since that's what a
+  // freshly-logged-in user with no in-progress edits would land on anyway.
+  const dashboardPath = isAdmin ? "/admin/dashboard" : user?.subsidiaryId ? "/dashboard" : "/my-submissions";
+
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [savingBeforeLeave, setSavingBeforeLeave] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  /** The FormIQ logo/name in the sidebar always goes to the signed-in user's
+   * dashboard — but a form builder or contribution/translate editor keeps its
+   * in-progress edits in `useFormBuilderStore`/`useFormContributionStore`
+   * (both global, not tied to the current route), so this checks their
+   * `dirty` flags at click time rather than navigating straight away. */
+  function handleBrandClick() {
+    const builderDirty = useFormBuilderStore.getState().dirty;
+    const contributionDirty = useFormContributionStore.getState().dirty;
+    if (builderDirty || contributionDirty) {
+      setLeaveError(null);
+      setLeaveConfirmOpen(true);
+      return;
+    }
+    navigate(dashboardPath);
+  }
+
+  async function handleSaveAndLeave() {
+    setSavingBeforeLeave(true);
+    setLeaveError(null);
+    try {
+      let ok = true;
+      if (useFormBuilderStore.getState().dirty) ok = await useFormBuilderStore.getState().saveDraft();
+      if (ok && useFormContributionStore.getState().dirty) ok = await useFormContributionStore.getState().saveDraft();
+      if (ok) {
+        setLeaveConfirmOpen(false);
+        navigate(dashboardPath);
+      } else {
+        setLeaveError("Couldn't save your changes — please check the form for errors and try again.");
+      }
+    } finally {
+      setSavingBeforeLeave(false);
+    }
+  }
+
+  function handleDiscardAndLeave() {
+    setLeaveConfirmOpen(false);
+    navigate(dashboardPath);
+  }
+  // Friendlier than the login username wherever we have it — see
+  // User.firstName/lastName's own doc comment. Falls back to username, same
+  // as SubsidiaryDashboardPage.tsx's own greeting.
+  const displayName = user?.firstName ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}` : user?.username;
+  /** Sidebar background matches the page's own light/dark mode for both
+   * roles (near-black in dark mode, near-white in light mode — see theme.ts
+   * and the toggle next to "Log out" below), with a soft role-colored glow
+   * bleeding in from the top — plus the solid accent rail on the drawer's
+   * own edge (below), the logo badge tint, the "Admin/Subsidiary Panel"
+   * label chip, and the active nav item's gradient pill — several
+   * persistent, low-effort cues rather than one single strong one, so which
+   * side of the app you're in is still obvious even without an active nav
+   * item to look at. */
+  const roleAccent = isAdmin ? PALETTES.admin : PALETTES.subsidiary;
+  const roleAccentGradient = `linear-gradient(135deg, ${roleAccent.main} 0%, ${roleAccent.secondary} 100%)`;
+
+  // Light/dark is a user toggle (the switch next to "Log out" below),
+  // independent of which role is signed in — every hardcoded white-on-dark
+  // value the sidebar used when the app was dark-only lives here instead, so
+  // toggling actually flips the sidebar too, not just the page content.
+  const mode = useThemeModeStore((s) => s.mode);
+  const toggleMode = useThemeModeStore((s) => s.toggleMode);
+  const isDarkMode = mode === "dark";
+  const sidebarGradient = isDarkMode
+    ? `radial-gradient(ellipse 480px 260px at 50% -10%, ${alpha(roleAccent.main, 0.35)} 0%, transparent 60%), linear-gradient(180deg, #0e0e15 0%, #08080c 100%)`
+    : `radial-gradient(ellipse 480px 260px at 50% -10%, ${alpha(roleAccent.main, 0.14)} 0%, transparent 60%), linear-gradient(180deg, #ffffff 0%, #f1f2f7 100%)`;
+  const sidebarTokens = isDarkMode
+    ? {
+        text: "rgba(255,255,255,0.85)",
+        textChild: "rgba(255,255,255,0.75)",
+        textMuted: "rgba(255,255,255,0.5)",
+        hoverBg: "rgba(255,255,255,0.08)",
+        divider: "rgba(255,255,255,0.12)",
+        chipBg: "rgba(255,255,255,0.10)",
+        avatarBg: "rgba(255,255,255,0.18)",
+        avatarBgStrong: "rgba(255,255,255,0.25)",
+        contrastText: "#fff",
+      }
+    : {
+        text: "rgba(20,22,33,0.78)",
+        textChild: "rgba(20,22,33,0.65)",
+        textMuted: "rgba(20,22,33,0.5)",
+        hoverBg: "rgba(20,22,33,0.06)",
+        divider: "rgba(20,22,33,0.12)",
+        chipBg: "rgba(20,22,33,0.06)",
+        avatarBg: alpha(roleAccent.main, 0.16),
+        avatarBgStrong: alpha(roleAccent.main, 0.22),
+        contrastText: "#14161f",
+      };
+
+  useEffect(() => {
+    document.title = `FormIQ · ${panelLabel}`;
+  }, [panelLabel]);
+
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true");
+  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+  /** Section-header accordion state (distinct from the sidebar-rail `collapsed`
+   * above) — every section defaults open (see the `?? true` fallback below). */
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
+  }, [collapsed]);
+
+  const editorFormId = editorFormIdFromPath(location.pathname);
+  const aiOpen = useAiChatStore((s) => s.open);
+
+  useEffect(() => {
+    useAiChatStore.getState().setFormId(editorFormId);
+  }, [editorFormId]);
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
+
+  /** Every nav item lives inside a labeled section — admin and subsidiary users
+   * each get their own set: a "Form Configuration" group for the form-builder
+   * side, and a general "Configuration"/"Administration" group for everything
+   * else. Admins never have subsidiaryId set, so exactly one branch below
+   * applies to a given user. */
+  // Standalone, section-less nav item at the very top — the new post-login
+  // landing page (see App.tsx's DefaultLanding) for both roles. Hidden for a
+  // standard user with no subsidiary, same gating the sections below already
+  // use, since the subsidiary dashboard has nothing meaningful to show them.
+  const dashboardNavItem: NavItem | null = isAdmin
+    ? { to: "/admin/dashboard", label: "Dashboard", icon: <DashboardIcon />, exact: true }
+    : user?.subsidiaryId
+      ? { to: "/dashboard", label: "Dashboard", icon: <DashboardIcon />, exact: true }
+      : null;
+
+  const sections: NavSection[] = isAdminRole(user?.role)
+    ? [
+        {
+          label: "Form Configuration",
+          items: [
+            {
+              to: "/admin/form-builder",
+              label: "Form Initiator",
+              icon: <DesignServicesIcon />,
+              exact: false,
+              children: [
+                {
+                  to: "/admin/form-builder/hr",
+                  label: "HR Form Initiator",
+                  isActive: (p: string) => p.startsWith("/admin/form-builder/hr"),
+                },
+                {
+                  to: "/admin/form-builder/adhoc",
+                  label: "Ad-hoc Forms",
+                  isActive: (p: string) => p.startsWith("/admin/form-builder/adhoc"),
+                },
+              ],
+            },
+          ],
+        },
+        {
+          label: "Question Master",
+          items: [{ to: "/admin/question-master", label: "Question Master", icon: <ListAltIcon />, exact: false }],
+        },
+        {
+          label: "Administration",
+          items: [
+            { to: "/admin/configuration", label: "Configuration", icon: <SettingsIcon />, exact: true },
+            { to: "/admin/users", label: "User Management", icon: <PeopleIcon />, exact: true },
+          ],
+        },
+      ]
+    : [
+        ...(user?.subsidiaryId
+          ? [
+              {
+                label: "Form Configuration",
+                items: [
+                  {
+                    to: "/my-forms",
+                    label: "My Forms",
+                    icon: <TranslateIcon />,
+                    exact: false,
+                    children: [
+                      {
+                        to: "/my-forms/adhoc",
+                        label: "Ad-hoc Forms",
+                        isActive: (p: string) => p.startsWith("/my-forms/adhoc"),
+                      },
+                      {
+                        to: "/my-forms/hr",
+                        label: "HR Forms",
+                        isActive: (p: string) => p.startsWith("/my-forms") && !p.startsWith("/my-forms/adhoc"),
+                      },
+                    ],
+                  },
+                  { to: "/my-submissions", label: "My Submissions", icon: <HistoryIcon />, exact: true },
+                ],
+              },
+              {
+                label: "Configuration",
+                items: [{ to: "/my-subsidiary", label: "My Subsidiary", icon: <DomainIcon />, exact: true }],
+              },
+            ]
+          : []),
+      ];
+
+  const drawerWidth = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
+
+  function renderNavItem(item: NavItem) {
+    const hasChildren = !!item.children?.length;
+    const selected = hasChildren
+      ? item.children!.some((c) => c.isActive(location.pathname))
+      : item.exact
+        ? location.pathname === item.to
+        : location.pathname.startsWith(item.to);
+    const isOpen = hasChildren && !collapsed && (expandedMenus[item.to] ?? selected);
+
+    const linkProps =
+      hasChildren && !collapsed
+        ? { onClick: () => setExpandedMenus((m) => ({ ...m, [item.to]: !isOpen })) }
+        : { component: Link, to: hasChildren ? item.children![0].to : item.to };
+
+    const button = (
+      <ListItemButton
+        {...linkProps}
+        selected={selected}
+        sx={{
+          borderRadius: 2,
+          mb: 0.5,
+          minHeight: 44,
+          justifyContent: collapsed ? "center" : "flex-start",
+          color: sidebarTokens.text,
+          "&.Mui-selected": {
+            backgroundImage: roleAccentGradient,
+            color: "#fff",
+          },
+          "&.Mui-selected:hover": { backgroundImage: roleAccentGradient, filter: "brightness(1.1)" },
+          "&:hover": { bgcolor: sidebarTokens.hoverBg },
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: 0, mr: collapsed ? 0 : 1.5, justifyContent: "center", color: "inherit" }}>
+          {item.icon}
+        </ListItemIcon>
+        {!collapsed && (
+          <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }} />
+        )}
+        {hasChildren && !collapsed && (isOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />)}
+      </ListItemButton>
+    );
+
+    return (
+      <Box key={item.to}>
+        {collapsed ? (
+          <Tooltip title={item.label} placement="right">
+            {button}
+          </Tooltip>
+        ) : (
+          button
+        )}
+        {hasChildren && !collapsed && (
+          <Collapse in={isOpen} timeout="auto" unmountOnExit>
+            <List component="div" disablePadding>
+              {item.children!.map((child) => {
+                const childSelected = child.isActive(location.pathname);
+                return (
+                  <ListItemButton
+                    key={child.to}
+                    component={Link}
+                    to={child.to}
+                    selected={childSelected}
+                    sx={{
+                      borderRadius: 2,
+                      mb: 0.5,
+                      ml: 2,
+                      minHeight: 36,
+                      color: sidebarTokens.textChild,
+                      "&.Mui-selected": { backgroundImage: roleAccentGradient, color: "#fff" },
+                      "&.Mui-selected:hover": { backgroundImage: roleAccentGradient, filter: "brightness(1.1)" },
+                      "&:hover": { bgcolor: sidebarTokens.hoverBg },
+                    }}
+                  >
+                    <ListItemText
+                      primary={child.label}
+                      primaryTypographyProps={{ fontWeight: childSelected ? 700 : 500, fontSize: 13 }}
+                    />
+                  </ListItemButton>
+                );
+              })}
+            </List>
+          </Collapse>
+        )}
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+      <Drawer
+        variant="permanent"
+        sx={{
+          width: drawerWidth,
+          flexShrink: 0,
+          whiteSpace: "nowrap",
+          transition: (t) => t.transitions.create("width", { duration: t.transitions.duration.shortest }),
+          "& .MuiDrawer-paper": {
+            width: drawerWidth,
+            overflowX: "hidden",
+            boxSizing: "border-box",
+            border: "none",
+            borderRight: `3px solid ${roleAccent.main}`,
+            backgroundImage: sidebarGradient,
+            color: sidebarTokens.contrastText,
+            transition: (t) => t.transitions.create("width", { duration: t.transitions.duration.shortest }),
+          },
+        }}
+      >
+        <Box
+          role="button"
+          tabIndex={0}
+          onClick={handleBrandClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleBrandClick();
+            }
+          }}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            px: 2,
+            py: 2.5,
+            minHeight: 72,
+            cursor: "pointer",
+            "&:hover": { bgcolor: sidebarTokens.hoverBg },
+          }}
+        >
+          <Tooltip title={collapsed ? panelLabel : ""} placement="right">
+            <Box
+              component="img"
+              src="/logo.png"
+              alt="FormIQ"
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: 2,
+                flexShrink: 0,
+                objectFit: "contain",
+              }}
+            />
+          </Tooltip>
+          {!collapsed && (
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography variant="h6" fontWeight={700} noWrap>
+                FormIQ
+              </Typography>
+              <Typography variant="caption" sx={{ color: sidebarTokens.textMuted, display: "block", lineHeight: 1.2 }} noWrap>
+                Form Builder
+              </Typography>
+              <Chip
+                label={panelLabel}
+                size="small"
+                sx={{
+                  height: 18,
+                  mt: 0.25,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  color: "#fff",
+                  backgroundImage: roleAccentGradient,
+                  "& .MuiChip-label": { px: 0.75 },
+                }}
+              />
+            </Box>
+          )}
+        </Box>
+
+        <Divider sx={{ borderColor: sidebarTokens.divider }} />
+
+        <List sx={{ px: 1.25, py: 1.5, flexGrow: 1 }}>
+          {dashboardNavItem && (
+            <Box sx={{ mb: 1.5 }}>
+              {renderNavItem(dashboardNavItem)}
+              <Divider sx={{ borderColor: sidebarTokens.divider, mt: 1 }} />
+            </Box>
+          )}
+          {sections.map((section, i) => {
+            const sectionOpen = openSections[section.label] ?? true;
+            return (
+              <Box key={section.label} sx={{ mt: i > 0 ? 1.5 : 0 }}>
+                {!collapsed ? (
+                  <Box
+                    onClick={() => setOpenSections((s) => ({ ...s, [section.label]: !sectionOpen }))}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      px: 1.5,
+                      py: 0.5,
+                      cursor: "pointer",
+                      borderRadius: 1,
+                      "&:hover": { bgcolor: sidebarTokens.hoverBg },
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: sidebarTokens.textMuted,
+                        fontWeight: 700,
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {section.label}
+                    </Typography>
+                    {sectionOpen ? (
+                      <ExpandLessIcon sx={{ fontSize: 16, color: sidebarTokens.textMuted }} />
+                    ) : (
+                      <ExpandMoreIcon sx={{ fontSize: 16, color: sidebarTokens.textMuted }} />
+                    )}
+                  </Box>
+                ) : (
+                  i > 0 && <Divider sx={{ borderColor: sidebarTokens.divider, my: 1 }} />
+                )}
+                {collapsed ? (
+                  section.items.map((item) => renderNavItem(item))
+                ) : (
+                  <Collapse in={sectionOpen} timeout="auto" unmountOnExit>
+                    {section.items.map((item) => renderNavItem(item))}
+                  </Collapse>
+                )}
+              </Box>
+            );
+          })}
+        </List>
+
+        <Divider sx={{ borderColor: sidebarTokens.divider }} />
+
+        <Box sx={{ p: 1.25 }}>
+          {collapsed ? (
+            <Tooltip title={`${displayName} · ${user?.role}`} placement="right">
+              <Avatar sx={{ bgcolor: sidebarTokens.avatarBg, color: sidebarTokens.contrastText, mx: "auto", mb: 1 }}>
+                {displayName?.[0]?.toUpperCase() ?? "?"}
+              </Avatar>
+            </Tooltip>
+          ) : (
+            <Chip
+              avatar={
+                <Avatar sx={{ bgcolor: sidebarTokens.avatarBgStrong, color: sidebarTokens.contrastText }}>
+                  {displayName?.[0]?.toUpperCase() ?? "?"}
+                </Avatar>
+              }
+              label={`${displayName} · ${user?.role}`}
+              sx={{
+                width: "100%",
+                justifyContent: "flex-start",
+                color: sidebarTokens.contrastText,
+                bgcolor: sidebarTokens.chipBg,
+                mb: 1,
+                "& .MuiChip-avatar": { ml: 0.5 },
+                "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" },
+              }}
+            />
+          )}
+
+          {/* Light/dark toggle — sits right next to Log out per request, and
+              applies globally (both admin and subsidiary panels use this same
+              layout), not just to this sidebar. */}
+          {collapsed ? (
+            <Tooltip title={isDarkMode ? "Switch to light theme" : "Switch to dark theme"} placement="right">
+              <ListItemButton
+                onClick={toggleMode}
+                sx={{
+                  borderRadius: 2,
+                  mb: 0.5,
+                  minHeight: 40,
+                  justifyContent: "center",
+                  color: sidebarTokens.text,
+                  "&:hover": { bgcolor: sidebarTokens.hoverBg },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 0, justifyContent: "center", color: "inherit" }}>
+                  {isDarkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+                </ListItemIcon>
+              </ListItemButton>
+            </Tooltip>
+          ) : (
+            <ListItemButton
+              onClick={toggleMode}
+              sx={{
+                borderRadius: 2,
+                mb: 0.5,
+                minHeight: 40,
+                color: sidebarTokens.text,
+                "&:hover": { bgcolor: sidebarTokens.hoverBg },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 0, mr: 1.5, justifyContent: "center", color: "inherit" }}>
+                {isDarkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+              </ListItemIcon>
+              <ListItemText primary={isDarkMode ? "Light mode" : "Dark mode"} />
+            </ListItemButton>
+          )}
+
+          <ListItemButton
+            onClick={handleLogout}
+            sx={{
+              borderRadius: 2,
+              minHeight: 40,
+              justifyContent: collapsed ? "center" : "flex-start",
+              color: sidebarTokens.text,
+              "&:hover": { bgcolor: sidebarTokens.hoverBg },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 0, mr: collapsed ? 0 : 1.5, justifyContent: "center", color: "inherit" }}>
+              <LogoutIcon fontSize="small" />
+            </ListItemIcon>
+            {!collapsed && <ListItemText primary="Log out" />}
+          </ListItemButton>
+
+          <IconButton
+            onClick={() => setCollapsed((c) => !c)}
+            size="small"
+            sx={{
+              display: "flex",
+              mx: "auto",
+              mt: 1,
+              color: sidebarTokens.textChild,
+              "&:hover": { bgcolor: sidebarTokens.hoverBg, color: sidebarTokens.contrastText },
+            }}
+            aria-label={collapsed ? "Expand menu" : "Collapse menu"}
+          >
+            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          </IconButton>
+        </Box>
+      </Drawer>
+
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, p: 3 }}>
+        <Box sx={{ maxWidth: 1280, mx: "auto" }}>
+          <Outlet />
+        </Box>
+      </Box>
+
+      {/* Available on every authenticated page under this layout — a
+          master-page fixture, not scoped to the two form editors — so both
+          admin and subsidiary users always have it in the bottom-right
+          corner. Floats *over* the page rather than a persistent drawer that
+          resizes it, so the rest of the page's content keeps its full width
+          whether the assistant is open or minimized. Only the *context* it
+          hands the assistant (which form, if any) changes with the route,
+          via editorFormId above. */}
+      <Grow in={aiOpen} style={{ transformOrigin: "bottom right" }}>
+        <Paper
+          elevation={8}
+          sx={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            width: AI_PANEL_WIDTH,
+            height: "min(70vh, 640px)",
+            zIndex: (t) => t.zIndex.drawer + 2,
+            borderRadius: 3,
+            overflow: "hidden",
+            display: aiOpen ? "flex" : "none",
+            flexDirection: "column",
+          }}
+        >
+          <AIChatPanel />
+        </Paper>
+      </Grow>
+      <AIChatButton />
+
+      <Dialog open={leaveConfirmOpen} onClose={() => (savingBeforeLeave ? undefined : setLeaveConfirmOpen(false))}>
+        <DialogTitle>Unsaved changes</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You have unsaved changes on this page. Save them before going to your dashboard, or discard them and leave
+            anyway?
+          </DialogContentText>
+          {leaveError && (
+            <DialogContentText color="error" sx={{ mt: 1.5 }}>
+              {leaveError}
+            </DialogContentText>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLeaveConfirmOpen(false)} disabled={savingBeforeLeave}>
+            Cancel
+          </Button>
+          <Button onClick={handleDiscardAndLeave} disabled={savingBeforeLeave} color="error">
+            Discard & leave
+          </Button>
+          <Button
+            onClick={() => void handleSaveAndLeave()}
+            disabled={savingBeforeLeave}
+            variant="contained"
+            startIcon={savingBeforeLeave ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            {savingBeforeLeave ? "Saving..." : "Save & leave"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}

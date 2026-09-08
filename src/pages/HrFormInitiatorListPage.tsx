@@ -1,0 +1,319 @@
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import DesignServicesIcon from "@mui/icons-material/DesignServices";
+import { ApiError } from "../api/apiClient";
+import { createForm, deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
+import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
+import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
+import { PageHeader } from "../components/common/PageHeader";
+import { ConfirmDialog } from "../components/common/ConfirmDialog";
+import { FormRowIconActions } from "../components/common/FormRowIconActions";
+import { showToast } from "../store/toastStore";
+
+const STATUS_COLOR: Record<FormStatus, "default" | "success" | "warning"> = {
+  draft: "default",
+  published: "success",
+  unpublished: "warning",
+};
+
+const STATUS_OPTIONS: Array<{ value: FormStatus | ""; label: string }> = [
+  { value: "", label: "All statuses" },
+  { value: "draft", label: "Draft" },
+  { value: "published", label: "Published" },
+  { value: "unpublished", label: "Unpublished" },
+];
+
+/**
+ * "HR Form Initiator" — the Form Initiator submenu page for forms an admin
+ * builds themselves (origin: "admin"), fully separate from the Excel-upload-driven
+ * Uploads list elsewhere in the app and from the sibling "Ad-hoc Forms" submenu
+ * page (AdHocFormInitiatorListPage), which covers subsidiary-initiated
+ * submissions instead. Lets an admin create a new one, which opens straight into
+ * the editor (FormBuilderEditorPage) for its first edit.
+ */
+export function HrFormInitiatorListPage() {
+  const navigate = useNavigate();
+  const [forms, setForms] = useState<FormListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<FormStatus | "">("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
+  const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newSubsidiaryId, setNewSubsidiaryId] = useState("");
+  const [newProjectCode, setNewProjectCode] = useState("");
+  /** Set when "New Form" is opened via a specific row's Copy action (below) —
+   * the dialog still asks Name/Subsidiary/Project Code fresh (per the
+   * feature's own requirement), only the questions/fields/consents are
+   * cloned from this form. Null for the ordinary "New Form" button, which
+   * creates a blank form exactly as before. */
+  const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [confirmDeleteForm, setConfirmDeleteForm] = useState<FormListItem | null>(null);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      const result = await listForms({ status: statusFilter || undefined, origin: "admin" });
+      setForms(result.items);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to load forms", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
+
+  useEffect(() => {
+    if (!createOpen) return;
+    listSubsidiaries().then(setSubsidiaries).catch(() => undefined);
+  }, [createOpen]);
+
+  // Project codes are scoped to whichever subsidiary is currently selected —
+  // listOpenProjectCodes(subsidiaryId) excludes any code an admin has
+  // disabled for that specific subsidiary (SubsidiaryProjectCodeAccessManager
+  // on the Configuration page), on top of the global open/closed state. Empty
+  // until a subsidiary is picked, matching "select subsidiary first, then its
+  // available project codes load" — same cascade UploadHistoryPage's own
+  // upload form uses.
+  useEffect(() => {
+    if (!createOpen || !newSubsidiaryId) {
+      setProjectCodes([]);
+      return;
+    }
+    let cancelled = false;
+    listOpenProjectCodes(newSubsidiaryId)
+      .then((codes) => {
+        if (cancelled) return;
+        setProjectCodes(codes);
+        setNewProjectCode((current) => (codes.some((c) => c.code === current) ? current : ""));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, newSubsidiaryId]);
+
+  function closeCreateDialog() {
+    setCreateOpen(false);
+    setNewName("");
+    setNewSubsidiaryId("");
+    setNewProjectCode("");
+    setCopySourceForm(null);
+  }
+
+  /** Row-level "Copy" action — opens the same New Form dialog, but with this
+   * form pinned as the content source instead of the blank template. */
+  function handleCopy(form: FormListItem) {
+    setCopySourceForm(form);
+    setCreateOpen(true);
+  }
+
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    if (!newName.trim() || !newSubsidiaryId) return;
+
+    setCreating(true);
+    try {
+      const form = await createForm({
+        name: newName.trim(),
+        subsidiaryId: newSubsidiaryId,
+        projectCode: newProjectCode || undefined,
+        copyFromFormId: copySourceForm?.id,
+      });
+      closeCreateDialog();
+      navigate(`/admin/form-builder/${form.id}`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to create form", "error");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!confirmDeleteForm) return;
+    setDeletingId(confirmDeleteForm.id);
+    try {
+      await deleteForm(confirmDeleteForm.id);
+      setConfirmDeleteForm(null);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to delete form", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <Box>
+      <PageHeader
+        icon={<DesignServicesIcon />}
+        title="HR Form Initiator"
+        subtitle="Visually build, preview, and publish web forms — no Excel workbook required."
+        action={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            New Form
+          </Button>
+        }
+      />
+
+      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
+        <TextField
+          select
+          label="Status"
+          size="small"
+          sx={{ minWidth: 180 }}
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as FormStatus | "")}
+          InputLabelProps={{ shrink: true }}
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Paper>
+
+      {loading ? (
+        <CircularProgress size={24} />
+      ) : forms.length === 0 ? (
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="body2" color="text.secondary">
+            No forms yet — click "New Form" to create one.
+          </Typography>
+        </Paper>
+      ) : (
+        <Stack spacing={1}>
+          {forms.map((form) => (
+            <Paper
+              key={form.id}
+              sx={{ p: 2, display: "flex", alignItems: "center", gap: 2, cursor: "pointer" }}
+              onClick={() => navigate(`/admin/form-builder/${form.id}`)}
+            >
+              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <Typography variant="subtitle1" fontWeight={700} noWrap>
+                  {form.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {form.subsidiaryId}
+                  {form.projectCode ? ` · ${form.projectCode}` : ""} · Updated {new Date(form.updatedAt).toLocaleString()}
+                </Typography>
+              </Box>
+              {form.publishedVersionNumber != null && (
+                <Chip label={`v${form.publishedVersionNumber}`} size="small" variant="outlined" />
+              )}
+              <Chip label={form.status} color={STATUS_COLOR[form.status]} size="small" />
+              <FormRowIconActions
+                onCopy={() => handleCopy(form)}
+                onDelete={() => setConfirmDeleteForm(form)}
+                deleteDisabled={deletingId === form.id}
+              />
+            </Paper>
+          ))}
+        </Stack>
+      )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteForm}
+        title="Delete form"
+        message={`Delete "${confirmDeleteForm?.name}"?${confirmDeleteForm && confirmDeleteForm.status !== "draft" ? " Its published output will also be hidden." : ""}`}
+        confirmLabel="Delete"
+        loading={deletingId === confirmDeleteForm?.id}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDeleteForm(null)}
+      />
+
+      <Dialog open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
+        <Box component="form" onSubmit={handleCreate}>
+          <DialogTitle>{copySourceForm ? "New Form (copy)" : "New Form"}</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              {copySourceForm && (
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                  Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
+                  everything afterward.
+                </Alert>
+              )}
+              <TextField
+                label="Campaign name"
+                size="small"
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                required
+              />
+              <TextField
+                select
+                label="Subsidiary"
+                size="small"
+                value={newSubsidiaryId}
+                onChange={(e) => setNewSubsidiaryId(e.target.value)}
+                required
+              >
+                {subsidiaries.map((s) => (
+                  <MenuItem key={s.id} value={s.name}>
+                    {s.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                label="Project Code (optional)"
+                size="small"
+                value={newProjectCode}
+                onChange={(e) => setNewProjectCode(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                disabled={!newSubsidiaryId}
+                helperText={
+                  !newSubsidiaryId
+                    ? "Choose a subsidiary first"
+                    : projectCodes.length === 0
+                      ? "No project codes open for this subsidiary"
+                      : undefined
+                }
+              >
+                <MenuItem value="">None</MenuItem>
+                {projectCodes.map((pc) => (
+                  <MenuItem key={pc.id} value={pc.code}>
+                    {pc.code}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeCreateDialog}>Cancel</Button>
+            <Button type="submit" variant="contained" disabled={!newName.trim() || !newSubsidiaryId || creating}>
+              {creating ? "Creating..." : "Create"}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+    </Box>
+  );
+}

@@ -1,9 +1,9 @@
-import type { FormDefinition } from "../../src/form/formDefinition.ts";
+import type { FormDefinition } from "@formbuilder/shared";
 
-/** Small, fully-specified FormDefinition used across codegen tests: 2 locales (one
- * RTL), a radio question, a checkbox question, a free-text question, a partial
- * ProfileFieldSet (proving optional-field omission), and an XSS-payload answer to
- * verify escaping end-to-end. */
+/** Small, fully-specified FormDefinition used by previewDocument.test.ts (the frontend's
+ * own local copy — the fuller shared-pipeline test suite has its own copy of this same
+ * fixture under packages/shared/tests/codegen/fixtures.ts; duplicated deliberately rather
+ * than exported from the package's public API, which is pipeline code, not test fixtures). */
 export function sampleFormDefinition(): FormDefinition {
   return {
     meta: { subsidiary: "TEST", sourceFileName: "sample.xlsx", defaultLocale: "en_GB" },

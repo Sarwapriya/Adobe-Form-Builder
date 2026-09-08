@@ -1,0 +1,134 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
+import DesignServicesIcon from "@mui/icons-material/DesignServices";
+import { useFormBuilderStore } from "../store/formBuilderStore";
+import { PageHeader } from "../components/common/PageHeader";
+import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
+import { LocaleManagerPanel } from "../components/formBuilder/LocaleManagerPanel";
+import { LocaleEditingSwitcher } from "../components/formBuilder/LocaleEditingSwitcher";
+import { VariantConfigPanel } from "../components/formBuilder/VariantConfigPanel";
+import { BuilderCanvas, PredefinedFieldToggles } from "../components/formBuilder/BuilderCanvas";
+import { QuestionEditorPanel } from "../components/formBuilder/QuestionEditorPanel";
+import { ProfileFieldEditorPanel, type ProfileFieldKey } from "../components/formBuilder/ProfileFieldEditorPanel";
+import { ConsentEditorPanel } from "../components/formBuilder/ConsentEditorPanel";
+import { BuilderValidationPanel } from "../components/formBuilder/BuilderValidationPanel";
+import { BuilderActionBar } from "../components/formBuilder/BuilderActionBar";
+import { ContributionReviewPanel } from "../components/formBuilder/ContributionReviewPanel";
+import { AdHocReviewPanel } from "../components/formBuilder/AdHocReviewPanel";
+
+const PROFILE_FIELD_KEYS = new Set<string>([
+  "firstName",
+  "lastName",
+  "email",
+  "mobileNumber",
+  "privacyPolicy",
+  "marketingOptin",
+  "termsAndConditions",
+  "submitButton",
+] satisfies ProfileFieldKey[]);
+
+/** Admin-added consents beyond the two fixed slots above use dynamic
+ * "consentExtraN" ids (see formBuilderHelpers.createConsent) rather than a fixed
+ * key union, so they're routed by prefix instead of set membership. */
+function isConsentId(key: string): boolean {
+  return key.startsWith("consentExtra");
+}
+
+/**
+ * The main builder screen: campaign heading/subheading, predefined-field
+ * toggles + the drag-and-drop question canvas on the left, a config panel for
+ * whatever's currently selected on the right, and the Preview/Save
+ * Draft/Publish/Unpublish action bar pinned at the bottom. Shared by both Form
+ * Initiator submenu pages (HrFormInitiatorListPage / AdHocFormInitiatorListPage)
+ * — which one an admin came from is inferred from the loaded form's own
+ * `origin`, not the URL, since `/admin/form-builder/:id` doesn't distinguish
+ * them. VariantConfigPanel (Full Form / One-Click) is hidden for `origin ===
+ * "adhoc"` forms — ad-hoc forms are always Full Form only, same rule already
+ * enforced server-side (formBuilderService's defaultConfig) and on the
+ * subsidiary side's own ad-hoc builder.
+ */
+export function FormBuilderEditorPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const loading = useFormBuilderStore((s) => s.loading);
+  const error = useFormBuilderStore((s) => s.error);
+  const definition = useFormBuilderStore((s) => s.definition);
+  const name = useFormBuilderStore((s) => s.name);
+  const subsidiaryId = useFormBuilderStore((s) => s.subsidiaryId);
+  const projectCode = useFormBuilderStore((s) => s.projectCode);
+  const origin = useFormBuilderStore((s) => s.origin);
+  const pendingReview = useFormBuilderStore((s) => s.pendingReview);
+  const loadForm = useFormBuilderStore((s) => s.loadForm);
+  const reset = useFormBuilderStore((s) => s.reset);
+
+  const [selected, setSelected] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (id) void loadForm(id);
+    return () => reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  if (loading || !definition) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+        {loading ? <CircularProgress /> : <Typography color="error">{error ?? "Form not found."}</Typography>}
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <PageHeader
+        icon={<DesignServicesIcon />}
+        title={name || "Edit Form"}
+        subtitle={
+          <>
+            {subsidiaryId}
+            {projectCode ? ` · ${projectCode}` : ""}
+          </>
+        }
+        titleNoWrap
+        onBack={() => navigate(origin === "adhoc" ? "/admin/form-builder/adhoc" : "/admin/form-builder/hr")}
+        backLabel={origin === "adhoc" ? "Back to Ad-hoc Forms" : "Back to HR Form Initiator"}
+      />
+
+      <BuilderValidationPanel />
+
+      {id && pendingReview && <AdHocReviewPanel formId={id} />}
+
+      {id && <ContributionReviewPanel formId={id} />}
+
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2, alignItems: "flex-start" }}>
+        <Box sx={{ flex: "1 1 auto", minWidth: 0, width: "100%" }}>
+          <CampaignHeaderPanel />
+          <LocaleManagerPanel />
+          <LocaleEditingSwitcher />
+          {origin !== "adhoc" && <VariantConfigPanel />}
+          <PredefinedFieldToggles selectedField={selected} onSelectField={setSelected} />
+          <BuilderCanvas
+            selectedQuestionId={PROFILE_FIELD_KEYS.has(selected ?? "") || isConsentId(selected ?? "") ? null : selected}
+            onSelectQuestion={setSelected}
+          />
+        </Box>
+
+        <Paper sx={{ p: 2, width: { xs: "100%", md: 280 }, flexShrink: 0, position: "sticky", top: 16 }}>
+          {selected && PROFILE_FIELD_KEYS.has(selected) ? (
+            <ProfileFieldEditorPanel fieldKey={selected as ProfileFieldKey} />
+          ) : selected && isConsentId(selected) ? (
+            <ConsentEditorPanel consentId={selected} onDeleted={() => setSelected(null)} />
+          ) : selected ? (
+            <QuestionEditorPanel questionId={selected} />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Select a field or question to configure it.
+            </Typography>
+          )}
+        </Paper>
+      </Stack>
+
+      <BuilderActionBar />
+    </Box>
+  );
+}

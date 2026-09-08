@@ -1,0 +1,180 @@
+// @vitest-environment node
+import { describe, expect, it } from "vitest";
+import { resolveFileNames } from "../../src/codegen/fileNames";
+import { buildDataJs } from "../../src/codegen/js/buildDataJs";
+import { defaultBuilderConfig, type BuilderConfig } from "../../src/codegen/types";
+import { sampleFormDefinition } from "./fixtures";
+
+function buildFile(config: BuilderConfig = defaultBuilderConfig()) {
+  const form = sampleFormDefinition();
+  return buildDataJs(form, config, resolveFileNames(form, config));
+}
+
+/** Evaluates the generated bare `const`s (page_error/fields/questions/answers/
+ * validation_messages/country_subsidiary/subsidiary_detail/param — the same names the
+ * byte-identical reference FF.js/OC.js read) and returns them as one object, so tests
+ * can assert on them without re-declaring the reference's exact variable list inline. */
+function evalData(contents: string) {
+  // eslint-disable-next-line no-new-func
+  return new Function(
+    `${contents}\nreturn { page_error, fields, questions, answers, validation_messages, country_subsidiary, subsidiary_detail, param, auto_populate_params };`,
+  )();
+}
+
+describe("buildDataJs", () => {
+  it("produces a data file whose body is valid, safely-embeddable JS declaring the reference's bare const names", () => {
+    const file = buildFile();
+    expect(file.path).toBe("TEST-EN.js");
+    expect(file.contents).toContain("const page_error = ");
+    expect(file.contents).toContain("const fields = ");
+    expect(file.contents).toContain("const questions = ");
+    expect(file.contents).toContain("const answers = ");
+    expect(file.contents).toContain("const validation_messages = ");
+    expect(file.contents).toContain("const country_subsidiary = ");
+    expect(file.contents).toContain("const subsidiary_detail = ");
+    expect(file.contents).toContain("const param = ");
+
+    const data = evalData(file.contents);
+    expect(data.questions.en_GB.Q1.heading).toBe("I am currently using");
+    expect(data.questions.ar_AE.Q1.heading).toBe("أنا أستخدم حاليًا");
+    expect(data.answers.en_GB.Q1.A1).toBe("Galaxy");
+  });
+
+  it("never emits a raw </script> sequence that could break out of the enclosing tag", () => {
+    const file = buildFile();
+    expect(file.contents.toLowerCase()).not.toContain("</script>alert");
+  });
+
+  it("preserves XSS-payload text losslessly once safely evaluated back out", () => {
+    const file = buildFile();
+    const data = evalData(file.contents);
+    expect(data.questions.en_GB.Q2.heading).toBe("Which do you like? <script>alert(1)</script>");
+    expect(data.answers.en_GB.Q2.A1).toBe('"; maliciousCode(); //');
+  });
+
+  it("falls back to the default locale for any text missing in a locale (e.g. Q2/Q3 have no Arabic)", () => {
+    const file = buildFile();
+    const data = evalData(file.contents);
+    expect(data.questions.ar_AE.Q2.heading).toBe("Which do you like? <script>alert(1)</script>");
+    expect(data.fields.ar_AE.submitButton).toBe("إرسال");
+  });
+
+  it("omits profile fields that were never present in the source (firstName/lastName absent)", () => {
+    const file = buildFile();
+    const data = evalData(file.contents);
+    expect(data.fields.en_GB.label.email).toBe("E-mail");
+    expect(data.fields.en_GB.label.firstName).toBe("");
+  });
+
+  it("leaves apiEndpoint blank and analytics disabled by default (no hardcoded Samsung endpoint)", () => {
+    const file = buildFile();
+    const data = evalData(file.contents);
+    expect(data.param.apiEndpoint).toBe("");
+    expect(data.param.analytics.enabled).toBe(false);
+  });
+
+  it("embeds the full country_subsidiary/subsidiary_detail tables (not filtered to one subsidiary)", () => {
+    const file = buildFile();
+    const data = evalData(file.contents);
+    expect(data.country_subsidiary.AE).toBe("SGE");
+    expect(Array.isArray(data.subsidiary_detail.SGE)).toBe(true);
+    expect(data.subsidiary_detail.SGE.some((c: { countryCode: string }) => c.countryCode === "AE")).toBe(true);
+  });
+
+  it("projects termsAndConditions text/url per locale, and leaves both blank when unset", () => {
+    const emptyFile = buildFile();
+    const emptyData = evalData(emptyFile.contents);
+    expect(emptyData.fields.en_GB.termsAndConditions).toBe("");
+    expect(emptyData.fields.en_GB.termsAndConditionsLink.url).toBe("");
+
+    const form = sampleFormDefinition();
+    form.fields.termsAndConditions = {
+      textByLocale: { en_GB: "* Terms and conditions apply." },
+      urlByLocale: { en_GB: "https://example.com/terms.pdf" },
+    };
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+    expect(data.fields.en_GB.termsAndConditions).toBe("* Terms and conditions apply.");
+    expect(data.fields.en_GB.termsAndConditionsLink.url).toBe("https://example.com/terms.pdf");
+    // Falls back to the default locale, same as every other localized field.
+    expect(data.fields.ar_AE.termsAndConditions).toBe("* Terms and conditions apply.");
+  });
+
+  it("projects the same campaign heading/subheading to both variants when no Full Form override is set", () => {
+    const form = sampleFormDefinition();
+    form.fields.headingBeforeBreakByLocale = { en_GB: "Register now" };
+    form.fields.campaignSubheadingByLocale = { en_GB: "Limited time offer" };
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+
+    // headingBeforeBreakFF/campaignSubheadingFF are what the reference FF.js reads;
+    // headingBeforeBreak/campaignSubheading are what OC.js reads (see buildDataJs.ts).
+    expect(data.fields.en_GB.headingBeforeBreakFF).toBe("Register now");
+    expect(data.fields.en_GB.headingBeforeBreak).toBe("Register now");
+    expect(data.fields.en_GB.campaignSubheadingFF).toBe("Limited time offer");
+    expect(data.fields.en_GB.campaignSubheading).toBe("Limited time offer");
+  });
+
+  it("uses the Full Form override for FF's keys while leaving OC's keys on the base text", () => {
+    const form = sampleFormDefinition();
+    form.fields.headingBeforeBreakByLocale = { en_GB: "One-Click heading" };
+    form.fields.headingBeforeBreakFFByLocale = { en_GB: "Full Form heading" };
+    form.fields.campaignSubheadingByLocale = { en_GB: "One-Click subheading" };
+    form.fields.campaignSubheadingFFByLocale = { en_GB: "Full Form subheading" };
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+
+    expect(data.fields.en_GB.headingBeforeBreakFF).toBe("Full Form heading");
+    expect(data.fields.en_GB.headingBeforeBreak).toBe("One-Click heading");
+    expect(data.fields.en_GB.campaignSubheadingFF).toBe("Full Form subheading");
+    expect(data.fields.en_GB.campaignSubheading).toBe("One-Click subheading");
+  });
+
+  it("threads project/channel/channelDetail/source/voucherRequired from BuilderConfig into param", () => {
+    const config: BuilderConfig = {
+      ...defaultBuilderConfig(),
+      project: "F2H26",
+      channel: { fullForm: "COM", oneClick: "EMAIL" },
+      channelDetail: { fullForm: "COMD", oneClick: "EMAILD" },
+      source: { fullForm: "full_form", oneClick: "one_click" },
+      voucherRequired: "Y",
+    };
+    const file = buildFile(config);
+    const data = evalData(file.contents);
+    expect(data.param.project).toBe("F2H26");
+    expect(data.param.channel).toEqual({ fullForm: "COM", oneClick: "EMAIL" });
+    expect(data.param.channelDetail).toEqual({ fullForm: "COMD", oneClick: "EMAILD" });
+    expect(data.param.source).toEqual({ fullForm: "full_form", oneClick: "one_click" });
+    expect(data.param.voucherRequired).toBe("Y");
+  });
+
+  it("emits auto_populate_params only for questions marked both eligible and enabled", () => {
+    const emptyFile = buildFile();
+    expect(evalData(emptyFile.contents).auto_populate_params).toEqual({});
+
+    const form = sampleFormDefinition();
+    // Q1 (radio, order 1): eligible + enabled -> included as "q01".
+    form.questions[0].autoPopulateEligible = true;
+    form.questions[0].autoPopulateEnabled = true;
+    // Q2 (checkbox, order 2): eligible but not enabled -> excluded.
+    form.questions[1].autoPopulateEligible = true;
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+    expect(data.auto_populate_params).toEqual({ q01: "Q1" });
+  });
+
+  it("excludes a text-type question even if both flags are set (no discrete answer to auto-select)", () => {
+    const form = sampleFormDefinition();
+    // Q3 (controlType "text", order 3).
+    form.questions[2].autoPopulateEligible = true;
+    form.questions[2].autoPopulateEnabled = true;
+    const config = defaultBuilderConfig();
+    const file = buildDataJs(form, config, resolveFileNames(form, config));
+    const data = evalData(file.contents);
+    expect(data.auto_populate_params).toEqual({});
+  });
+});

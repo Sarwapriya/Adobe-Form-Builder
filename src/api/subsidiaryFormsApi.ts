@@ -1,0 +1,186 @@
+import type { BuilderConfig, ContributionContent, FormDefinition, ValidationResult } from "@formbuilder/shared";
+import { apiClient, ApiError } from "./apiClient";
+import type { FormDetail, FormListItem, QuestionSeed } from "./formBuilderApi";
+
+/**
+ * Standard-user-facing counterpart to formBuilderApi.ts — `/api/v1/forms`
+ * (subsidiary-scoped, read-mostly) rather than `/api/v1/admin/forms`. Reuses
+ * FormListItem/FormDetail's shapes since the response bodies are identical; only
+ * which forms are reachable differs (see backend's formAccessService.ts).
+ */
+
+export function listMyForms(): Promise<FormListItem[]> {
+  return apiClient.get<FormListItem[]>("/api/v1/forms");
+}
+
+export function getMyFormDetail(formId: string): Promise<FormDetail> {
+  return apiClient.get<FormDetail>(`/api/v1/forms/${formId}`);
+}
+
+/**
+ * A subsidiary user's own self-service "ad-hoc" forms — a brand-new form they
+ * build themselves (My Forms → New Ad-hoc Form), distinct from the read-only
+ * listMyForms/getMyFormDetail above (which only ever cover an existing
+ * *published* admin-authored form). The subsidiary is never sent in the request
+ * body — the server always forces it to the caller's own account.
+ */
+/** `copyFromFormId` clones one of this subsidiary's own previous ad-hoc
+ * forms' current content as the starting point instead of a blank form —
+ * ownership-checked server-side, so it can only ever be one of this same
+ * subsidiary's own ad-hoc forms. */
+export function createAdHocForm(name: string, copyFromFormId?: string): Promise<FormListItem> {
+  return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name, copyFromFormId });
+}
+
+export type { QuestionSeed } from "./formBuilderApi";
+
+export function createAdHocFormWithQuestions(
+  name: string,
+  questions: QuestionSeed[],
+): Promise<FormListItem> {
+  return apiClient.post<FormListItem>("/api/v1/forms/adhoc/with-questions", { name, questions });
+}
+
+export function listMyAdHocForms(): Promise<FormListItem[]> {
+  return apiClient.get<FormListItem[]>("/api/v1/forms/adhoc");
+}
+
+export function getMyAdHocFormDetail(formId: string): Promise<FormDetail> {
+  return apiClient.get<FormDetail>(`/api/v1/forms/adhoc/${formId}`);
+}
+
+export function updateMyAdHocFormDraft(formId: string, definition: FormDefinition, config: BuilderConfig): Promise<void> {
+  return apiClient.patch<void>(`/api/v1/forms/adhoc/${formId}/draft`, { definition, config });
+}
+
+export function submitAdHocFormForReview(formId: string): Promise<void> {
+  return apiClient.post<void>(`/api/v1/forms/adhoc/${formId}/submit-for-review`);
+}
+
+/** Allowed while still draft or pending review; the server rejects this with a
+ * 409 once an admin has published the form (see deleteAdHocForm in
+ * formBuilderService.ts). */
+export function deleteAdHocForm(formId: string): Promise<void> {
+  return apiClient.delete<void>(`/api/v1/forms/adhoc/${formId}`);
+}
+
+export type ContributionStatus = "draft" | "pending" | "approved" | "rejected";
+
+export const CONTRIBUTION_STATUS_LABEL: Record<ContributionStatus, string> = {
+  draft: "Draft",
+  pending: "Pending Approval",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
+export interface ContributionSummary {
+  id: string;
+  formId: string;
+  submittedByUserId: string;
+  status: ContributionStatus;
+  content: ContributionContent;
+  note: string | null;
+  reviewNote: string | null;
+  reviewedByUserId: string | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+  /** Set once a publish actually carries this (already-approved) contribution's
+   * content live — see backend FormContribution.ts. Null for pending/rejected, and
+   * for an approved contribution still sitting in an unpublished draft. */
+  publishedAt: string | null;
+}
+
+export class ContributionInvalidError extends Error {
+  readonly validation: ValidationResult;
+  constructor(validation: ValidationResult) {
+    super("Contribution is not valid");
+    this.name = "ContributionInvalidError";
+    this.validation = validation;
+  }
+}
+
+/** Throws ContributionInvalidError (carrying the blocking Issue[]) on a 422 — every
+ * other failure surfaces as the usual ApiError from apiClient. */
+export async function submitContribution(formId: string, content: ContributionContent, note?: string): Promise<ContributionSummary> {
+  try {
+    return await apiClient.post<ContributionSummary>(`/api/v1/forms/${formId}/contributions`, { content, note });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 422) {
+      const validation = (err.body as { validation?: ValidationResult } | undefined)?.validation;
+      if (validation) throw new ContributionInvalidError(validation);
+    }
+    throw err;
+  }
+}
+
+export function listMyContributions(formId: string): Promise<ContributionSummary[]> {
+  return apiClient.get<ContributionSummary[]>(`/api/v1/forms/${formId}/contributions`);
+}
+
+/** Saves (or updates in place) this user's one in-progress draft for a form —
+ * never queues it for admin review, unlike submitContribution above. Powers the
+ * Translate & Extend page's Ctrl+S/"Save Draft" button. */
+export function saveContributionDraft(formId: string, content: ContributionContent, note?: string): Promise<ContributionSummary> {
+  return apiClient.patch<ContributionSummary>(`/api/v1/forms/${formId}/contributions/draft`, { content, note });
+}
+
+export interface ContributionSummaryWithForm extends ContributionSummary {
+  formName: string;
+}
+
+/** Every contribution this user has ever submitted, across every form — backs the
+ * "My Submissions" history page. `listMyContributions` above only covers one form
+ * at a time (used on that form's own Translate & Extend page). */
+export function listMyAllContributions(): Promise<ContributionSummaryWithForm[]> {
+  return apiClient.get<ContributionSummaryWithForm[]>("/api/v1/forms/contributions/mine");
+}
+
+/**
+ * Backs the subsidiary user's "Dashboard" landing page — scoped to their own
+ * ad-hoc campaigns only (see backend's dashboardService.ts). Unlike the admin
+ * dashboard's "Approved" bucket, an ad-hoc form's own pendingReview/reviewNote
+ * fields already keep these four states mutually exclusive, so there's no
+ * priority rule to know about here.
+ */
+export interface SubsidiaryDashboardCounts {
+  total: number;
+  drafts: number;
+  pendingReview: number;
+  changesRequested: number;
+  published: number;
+}
+
+export type SubsidiaryFormBucket = "pendingReview" | "published" | "changesRequested" | "draft";
+
+export interface RecentCampaignItem {
+  id: string;
+  name: string;
+  bucket: SubsidiaryFormBucket;
+  updatedAt: string;
+}
+
+export interface ContinueWorkingItem {
+  id: string;
+  name: string;
+  updatedAt: string;
+  /** 0 means the draft is ready to submit for review. */
+  issueCount: number;
+}
+
+export interface ActionRequiredItem {
+  id: string;
+  name: string;
+  reviewNote: string;
+  reviewedAt: string | null;
+}
+
+export interface SubsidiaryDashboardSummary {
+  counts: SubsidiaryDashboardCounts;
+  recentCampaigns: RecentCampaignItem[];
+  continueWorking: ContinueWorkingItem[];
+  actionRequired: ActionRequiredItem[];
+}
+
+export function getMyDashboardSummary(): Promise<SubsidiaryDashboardSummary> {
+  return apiClient.get<SubsidiaryDashboardSummary>("/api/v1/forms/dashboard-summary");
+}

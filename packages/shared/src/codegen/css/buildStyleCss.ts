@@ -1,0 +1,181 @@
+import type { FileNames } from "../fileNames";
+import type { GeneratedFile } from "../types";
+// The reference CSS, copied near-verbatim (same class names, layout, and responsive
+// breakpoints) with its dangling asset references already patched to inline data-URI
+// SVGs (see reference.css, the human-readable source this .ts module is generated
+// from) — the reference pointed at absolute AEM paths and bare cancel.png/checked.png
+// files that don't exist anywhere in this repo and would 404 in a standalone form.
+import { REFERENCE_CSS as referenceCss } from "./referenceCssContent";
+
+/**
+ * Language-specific font family overrides. The base CSS uses the English font
+ * families; this block switches to the correct Arabic/Hebrew variants based on
+ * the `dir` attribute.
+ */
+const FONT_OVERRIDES = `
+/* --- Language-specific font overrides --- */
+
+/* Arabic font overrides */
+[dir="rtl"] body,
+[dir="rtl"] html,
+[dir="rtl"] .top_cont h2,
+[dir="rtl"] .top_cont p,
+[dir="rtl"] .form_top_group,
+[dir="rtl"] .form_top_group input,
+[dir="rtl"] .form_top_group select,
+[dir="rtl"] .form_check_title h3,
+[dir="rtl"] .form_bottom_group button,
+[dir="rtl"] .form_bottom_bar button,
+[dir="rtl"] #hrTy,
+[dir="rtl"] #hrTy h3,
+[dir="rtl"] .popup__title,
+[dir="rtl"] .popup__desc,
+[dir="rtl"] .popup--alert .cta,
+[dir="rtl"] .fullform-submit-intent-popup .popup__contents,
+[dir="rtl"] .fullform-submit-intent-popup .cta {
+  font-family: 'SamsungSS Head Light Arabic', 'SamsungSS Body Regular Arabic', 'SamsungSS Head Bold Arabic', 'SamsungSS Body Bold Arabic', arial, sans-serif !important;
+}
+
+/* Hebrew font overrides */
+[dir="rtl"][lang="he"] body,
+[dir="rtl"][lang="he"] html,
+[dir="rtl"][lang="he"] .top_cont h2,
+[dir="rtl"][lang="he"] .top_cont p,
+[dir="rtl"][lang="he"] .form_top_group,
+[dir="rtl"][lang="he"] .form_top_group input,
+[dir="rtl"][lang="he"] .form_top_group select,
+[dir="rtl"][lang="he"] .form_check_title h3,
+[dir="rtl"][lang="he"] .form_bottom_group button,
+[dir="rtl"][lang="he"] .form_bottom_bar button,
+[dir="rtl"][lang="he"] #hrTy,
+[dir="rtl"][lang="he"] #hrTy h3,
+[dir="rtl"][lang="he"] .popup__title,
+[dir="rtl"][lang="he"] .popup__desc,
+[dir="rtl"][lang="he"] .popup--alert .cta,
+[dir="rtl"][lang="he"] .fullform-submit-intent-popup .popup__contents,
+[dir="rtl"][lang="he"] .fullform-submit-intent-popup .cta {
+  font-family: 'SamsungSS Head Light Hebrew', 'SamsungSS Body Regular Hebrew', 'SamsungSS Head Bold Hebrew', 'SamsungSS Body Bold Hebrew', arial, sans-serif !important;
+}
+`;
+
+/**
+ * The reference stylesheet has zero real RTL handling (only an incidental, unrelated
+ * `direction: rtl` on one popup icon) despite the spec requiring proper Arabic/Hebrew
+ * support. This block is new: CSS logical properties handle most of the flip for free,
+ * plus a small `[dir="rtl"]` override section for the handful of physically-positioned
+ * properties (icon offsets, checkbox marker position) that don't have a logical form
+ * already baked into the copied rules above.
+ */
+const RTL_OVERRIDES = `
+/* --- RTL support (not present in the reference stylesheet) --- */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] .form_check_title,
+[dir="rtl"] .form_label {
+  text-align: right;
+}
+
+[dir="rtl"] .form_bottom_check label {
+  padding-left: 0;
+  padding-right: 32px;
+}
+
+[dir="rtl"] .form_bottom_check label::after {
+  left: auto;
+  right: 0;
+}
+
+[dir="rtl"] .input_wrap .btn_clear {
+  right: auto;
+  left: 8px;
+}
+
+[dir="rtl"] .form_bottom_bar {
+  direction: rtl;
+}
+
+/* --- Thank-you / error full-page states (the reference styled these two blocks with
+   inline style="" attributes directly in its HTML; this generator keeps markup free of
+   inline styles, so the equivalent rules live here instead) --- */
+#hrTy,
+#hrErr {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0 auto;
+  max-width: 480px;
+  padding: 24px;
+  text-align: center;
+}
+
+#hrTy h3,
+#hrErr h3 {
+  color: #000;
+  font-family: "SamsungSS Head Bold", arial, sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+#hrTy p,
+#hrErr p {
+  color: #000;
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 15px;
+}
+
+#hrTy a,
+#hrErr a {
+  color: #007bff;
+}
+`;
+
+/**
+ * The reference stylesheet sets `body, html { color: #000; }` but never an explicit
+ * `background-color` — relying on the browser's default white canvas. Modern browsers'
+ * UA stylesheets opt the page into `color-scheme: light dark` by default, so a viewer
+ * whose OS/browser is set to dark mode gets that canvas painted black instead, leaving
+ * the reference's explicit black text invisible against it (this is what the preview
+ * iframe reproduces when the admin/subsidiary app itself is in dark mode — the iframe is
+ * its own document, but inherits the same OS-level dark preference). This campaign form
+ * is meant to render identically regardless of the viewer's OS/browser theme, so pin
+ * both explicitly rather than relying on the UA default.
+ */
+const COLOR_SCHEME_OVERRIDE = `
+/* --- Fixed light appearance (not present in the reference stylesheet) --- */
+html,
+body {
+  background-color: #fff;
+  color-scheme: light;
+}
+`;
+
+/**
+ * `.top_subheading` (the builder's campaign-subheading field, see pageTemplate.ts) is
+ * new markup with no reference-CSS counterpart — it otherwise inherits `.top_cont p`'s
+ * existing font rules (already matches by tag+ancestor), this just adds the spacing
+ * needed to sit between the heading and the required-field note.
+ */
+const SUBHEADING_OVERRIDES = `
+/* --- Campaign subheading (not present in the reference stylesheet) --- */
+.top_cont .top_subheading {
+  margin: 4px 0 12px;
+}
+
+.top_cont .top_subheading:empty {
+  display: none;
+}
+`;
+
+export function buildStyleCss(fileNames: FileNames): GeneratedFile {
+  return {
+    path: fileNames.css,
+    contents: `${referenceCss}\n${COLOR_SCHEME_OVERRIDE}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}\n${SUBHEADING_OVERRIDES}`,
+  };
+}

@@ -1,5 +1,32 @@
-import type { FileNames } from "./fileNames.ts";
-import type { FormVariant, GeneratedFile } from "./types.ts";
+import type { FileNames, FormVariant, GeneratedFile } from "@formbuilder/shared";
+
+export type PreviewColorScheme = "light" | "dark";
+
+/**
+ * Only used for the in-app preview iframe when the app itself is in dark mode
+ * (see useThemeModeStore.ts) — the actual generated/downloaded form always
+ * renders light (see buildStyleCss.ts's `color-scheme: light` override),
+ * since a real campaign visitor's own OS/browser theme shouldn't change what
+ * the live campaign looks like. This block never ships in the downloaded
+ * zip; it exists only in this preview-only inlining glue, purely so the
+ * in-app preview is comfortable to read while the rest of the app is dark.
+ *
+ * Uses the classic `invert(1) hue-rotate(180deg)` trick rather than
+ * hand-writing a dark reskin of every rule in the (large, third-party
+ * reference) stylesheet: on a page with an explicit white background/black
+ * text, `invert()` flips lightness exactly (white<->black, so body text
+ * stays readable against the now-dark background), and `hue-rotate(180deg)`
+ * cancels out the hue shift `invert()` introduces on saturated colors, so
+ * accent colors (buttons, links) stay roughly their original hue instead of
+ * turning into their literal color-wheel opposite. `<img>` tags (real
+ * uploaded answer images, not CSS icon backgrounds) get a second inversion
+ * to cancel the first, so actual photo content isn't affected by the trick.
+ */
+const DARK_PREVIEW_OVERRIDE = `<style>
+html { filter: invert(1) hue-rotate(180deg); background: #fff; }
+img { filter: invert(1) hue-rotate(180deg); }
+</style>
+</head>`;
 
 /**
  * Inlines the generated CSS/data-JS/behavior-JS into a single self-contained HTML
@@ -14,12 +41,23 @@ import type { FormVariant, GeneratedFile } from "./types.ts";
  * `previewLocale` is injected into the iframe by monkey-patching `URLSearchParams`
  * so the behavior JS (which reads `?lang=` from the URL) sees the correct locale
  * even though `blob:` URLs can't carry query parameters.
+ *
+ * The One-Click reference script (`SGE-EN_F2H26_OC.js`) is written for real
+ * per-recipient delivery links — it reads a `?id=` (recipient id) parameter and,
+ * if it's missing, deliberately throws and swaps the whole form out for an
+ * "invalid link" error screen (`validateRequiredUrlParam()`/`showError()`). A
+ * `blob:` preview URL never has one, so an OC preview would always render the
+ * error screen instead of the form. Faking a placeholder id (OC-only — FF reads
+ * the same param but never gates on it, so leaving FF's untouched is safest) is
+ * the same trick as the locale override above: supply what the *unmodified*
+ * reference script expects, rather than special-casing the preview around it.
  */
 export function buildPreviewDocument(
   files: GeneratedFile[],
   variant: FormVariant,
   previewLocale: string,
   fileNames: FileNames,
+  colorScheme: PreviewColorScheme = "light",
 ): string {
   const htmlPath = variant === "ff" ? fileNames.ffHtml : fileNames.ocHtml;
   const jsPath = variant === "ff" ? fileNames.ffJs : fileNames.ocJs;
@@ -29,18 +67,22 @@ export function buildPreviewDocument(
   const behaviorJs = files.find((f) => f.path === jsPath)?.contents ?? "";
   if (!html) throw new Error(`No generated ${htmlPath} file to preview.`);
 
+  const previewId = variant === "oc" ? "preview-recipient" : "";
+
   // Inject a small script before the behavior JS so that `new URLSearchParams(...)`
-  // returns the preview locale when the behavior JS asks for the "lang" parameter.
-  // This bridges the gap: the reference JS only reads language from `?lang=`, but
-  // blob: URLs can't carry query strings.
-  const langOverride =
-    `<script>(function(){var L="${previewLocale}";var O=window.URLSearchParams;` +
+  // returns the preview locale (and, for OC, a placeholder recipient id) when the
+  // behavior JS asks for "lang"/"id" — the reference JS only reads these from the
+  // URL, but blob: URLs can't carry query strings.
+  const paramOverride =
+    `<script>(function(){var L="${previewLocale}";var I="${previewId}";var O=window.URLSearchParams;` +
     `window.URLSearchParams=function(s){var p=new O(s||"");var g=p.get.bind(p);` +
-    `p.get=function(n){return n==="lang"?L:g(n)};return p};` +
+    `p.get=function(n){return n==="lang"?L:n==="id"&&I?I:g(n)};return p};` +
     `window.URLSearchParams.prototype=O.prototype})();</script>\n`;
 
-  return html
+  const withInlinedAssets = html
     .replace(`<link rel="stylesheet" href="${fileNames.css}">`, `<style>${css}</style>`)
     .replace(`<script src="${fileNames.dataJs}"></script>`, `<script>${dataJs}</script>`)
-    .replace(`<script src="${jsPath}"></script>`, `${langOverride}<script>${behaviorJs}</script>`);
+    .replace(`<script src="${jsPath}"></script>`, `${paramOverride}<script>${behaviorJs}</script>`);
+
+  return colorScheme === "dark" ? withInlinedAssets.replace("</head>", DARK_PREVIEW_OVERRIDE) : withInlinedAssets;
 }
