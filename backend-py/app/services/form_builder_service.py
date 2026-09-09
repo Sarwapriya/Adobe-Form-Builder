@@ -375,7 +375,7 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     published_at = _now()
     next_version_row = db.execute(
         text(
-            "SELECT ISNULL(MAX(versionNumber), 0) + 1 AS nextVersion FROM FormVersions "
+            "SELECT ISNULL(MAX(versionNumber), 0) + 1 AS nextVersion FROM fq.FormVersions "
             "WITH (UPDLOCK, HOLDLOCK) WHERE formId = :formId"
         ),
         {"formId": form_id},
@@ -399,7 +399,7 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     # "Published" instead of "Approved".
     db.execute(
         text(
-            "UPDATE FormContributions SET publishedAt = :publishedAt "
+            "UPDATE fq.FormContributions SET publishedAt = :publishedAt "
             "WHERE formId = :formId AND status = 'approved' AND publishedAt IS NULL"
         ),
         {"publishedAt": published_at, "formId": form_id},

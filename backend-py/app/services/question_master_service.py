@@ -122,7 +122,7 @@ def generate_question_master(
 
     next_version_row = db.execute(
         text(
-            "SELECT ISNULL(MAX(version), 0) + 1 AS nextVersion FROM QuestionMasterVersions "
+            "SELECT ISNULL(MAX(version), 0) + 1 AS nextVersion FROM fq.QuestionMasterVersions "
             "WITH (UPDLOCK, HOLDLOCK) WHERE projectCode = :projectCode"
         ),
         {"projectCode": project_code},

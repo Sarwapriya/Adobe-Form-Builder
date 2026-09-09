@@ -90,14 +90,14 @@ def _get_activity_by_month(db: Session) -> list[dict[str, Any]]:
 
     created_rows = db.execute(
         text(
-            "SELECT FORMAT(createdAt, 'yyyy-MM') AS bucket, COUNT(*) AS cnt FROM Forms "
+            "SELECT FORMAT(createdAt, 'yyyy-MM') AS bucket, COUNT(*) AS cnt FROM fq.Forms "
             "WHERE isDeleted = 0 AND createdAt >= :start GROUP BY FORMAT(createdAt, 'yyyy-MM')"
         ),
         {"start": range_start},
     ).all()
     published_rows = db.execute(
         text(
-            "SELECT FORMAT(publishedAt, 'yyyy-MM') AS bucket, COUNT(*) AS cnt FROM FormVersions "
+            "SELECT FORMAT(publishedAt, 'yyyy-MM') AS bucket, COUNT(*) AS cnt FROM fq.FormVersions "
             "WHERE versionNumber = 1 AND publishedAt IS NOT NULL AND publishedAt >= :start "
             "GROUP BY FORMAT(publishedAt, 'yyyy-MM')"
         ),
