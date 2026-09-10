@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-sample-solution
+.git
+.env
+*.tsbuildinfo
+backend-py/.venv
+backend-py/uploads
+backend-py/__pycache__
+Documents
+Final_forms_format

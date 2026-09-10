@@ -1,0 +1,2119 @@
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+ssh: connect to host 20.224.2.229 port 22: Connection timed out
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+The authenticity of host '20.224.2.229 (20.224.2.229)' can't be established.
+ED25519 key fingerprint is SHA256:H6w43d+FQ4hj1+jWzEAXFNKYuiQdBDWTW3ZfCUV8Z3w.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '20.224.2.229' (ED25519) to the list of known hosts.
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Connection closed by 20.224.2.229 port 22
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Permission denied, please try again.
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 04:56:18 UTC 2026
+
+  System load:  0.0                Processes:             116
+  Usage of /:   28.5% of 28.89GB   Users logged in:       0
+  Memory usage: 3%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+35 updates can be applied immediately.
+35 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+
+The programs included with the Ubuntu system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Ubuntu comes with ABSOLUTELY NO WARRANTY, to the extent permitted by
+applicable law.
+
+To run a command as administrator (user "root"), use "sudo <command>".
+See "man sudo_root" for details.
+
+axsdsmeadmin@AX-Innovation-vm:~$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 05:01:56 UTC 2026
+
+  System load:  0.0                Processes:             116
+  Usage of /:   28.5% of 28.89GB   Users logged in:       1
+  Memory usage: 3%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+35 updates can be applied immediately.
+35 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 04:56:19 2026 from 5.195.57.90
+To run a command as administrator (user "root"), use "sudo <command>".
+See "man sudo_root" for details.
+
+axsdsmeadmin@AX-Innovation-vm:~$ cat /etc/os-release
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+NAME="Ubuntu"
+VERSION_ID="22.04"
+VERSION="22.04.5 LTS (Jammy Jellyfish)"
+VERSION_CODENAME=jammy
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=jammy
+axsdsmeadmin@AX-Innovation-vm:~$ docker --version
+Command 'docker' not found, but can be installed with:
+sudo apt install docker.io      # version 29.1.3-0ubuntu3~22.04.2, or
+sudo apt install podman-docker  # version 3.4.4+ds1-1ubuntu1.22.04.3
+axsdsmeadmin@AX-Innovation-vm:~$ sudo apt update
+Ign:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Ign:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+Ign:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+Ign:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+Ign:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Ign:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+Ign:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+Ign:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+Ign:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Ign:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+Ign:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+Ign:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+Err:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+  Could not connect to azure.archive.ubuntu.com:80 (20.54.144.51), connection timed out
+Err:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+  Unable to connect to azure.archive.ubuntu.com:http:
+Err:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+  Unable to connect to azure.archive.ubuntu.com:http:
+Err:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+  Unable to connect to azure.archive.ubuntu.com:http:
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+35 packages can be upgraded. Run 'apt list --upgradable' to see them.
+W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy/InRelease  Could not connect to azure.archive.ubuntu.com:80 (20.54.144.51), connection timed out
+W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy-updates/InRelease  Unable to connect to azure.archive.ubuntu.com:http:
+W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy-backports/InRelease  Unable to connect to azure.archive.ubuntu.com:http:
+W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy-security/InRelease  Unable to connect to azure.archive.ubuntu.com:http:
+W: Some index files failed to download. They have been ignored, or old ones used instead.
+axsdsmeadmin@AX-Innovation-vm:~$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 05:07:20 UTC 2026
+
+  System load:  0.07               Processes:             119
+  Usage of /:   28.5% of 28.89GB   Users logged in:       1
+  Memory usage: 4%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+35 updates can be applied immediately.
+35 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 05:01:57 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ docker --version
+Command 'docker' not found, but can be installed with:
+sudo apt install docker.io      # version 29.1.3-0ubuntu3~22.04.2, or
+sudo apt install podman-docker  # version 3.4.4+ds1-1ubuntu1.22.04.3
+axsdsmeadmin@AX-Innovation-vm:~$ sudo apt update
+Ign:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Ign:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+Ign:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+Ign:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+Ign:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Ign:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+Ign:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+Ign:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+Ign:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Ign:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+Ign:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+Ign:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+Err:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+  Could not connect to azure.archive.ubuntu.com:80 (20.54.144.51), connection timed out
+Err:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+  Unable to connect to azure.archive.ubuntu.com:http:
+Err:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+  Unable to connect to azure.archive.ubuntu.com:http:
+Err:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+  Unable to connect to azure.archive.ubuntu.com:http:
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+35 packages can be upgraded. Run 'apt list --upgradable' to see them.
+W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy/InRelease  Could not connect to azure.archive.ubuntu.com:80 (20.54.144.51), connection timed out
+W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy-updates/InRelease  Unable to connect to azure.archive.ubuntu.com:http:
+W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy-backports/InRelease  Unable to connect to azure.archive.ubuntu.com:http:
+W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy-security/InRelease  Unable to connect to azure.archive.ubuntu.com:http:
+W: Some index files failed to download. They have been ignored, or old ones used instead.
+axsdsmeadmin@AX-Innovation-vm:~$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 06:46:59 UTC 2026
+
+  System load:  0.0                Processes:             114
+  Usage of /:   28.5% of 28.89GB   Users logged in:       0
+  Memory usage: 3%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+35 updates can be applied immediately.
+35 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 05:07:21 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ sudo apt update
+Hit:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Get:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease [128 kB]
+Get:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease [127 kB]
+Get:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease [129 kB]
+Get:5 http://azure.archive.ubuntu.com/ubuntu jammy-updates/main amd64 Packages [3794 kB]
+Get:6 http://azure.archive.ubuntu.com/ubuntu jammy-updates/main Translation-en [563 kB]
+Get:7 http://azure.archive.ubuntu.com/ubuntu jammy-updates/restricted amd64 Packages [6542 kB]
+Get:8 http://azure.archive.ubuntu.com/ubuntu jammy-updates/restricted Translation-en [1256 kB]
+Get:9 http://azure.archive.ubuntu.com/ubuntu jammy-updates/universe amd64 Packages [1282 kB]
+Get:10 http://azure.archive.ubuntu.com/ubuntu jammy-updates/universe Translation-en [323 kB]
+Get:11 http://azure.archive.ubuntu.com/ubuntu jammy-updates/multiverse amd64 Packages [76.8 kB]
+Get:12 http://azure.archive.ubuntu.com/ubuntu jammy-updates/multiverse Translation-en [15.9 kB]
+Get:13 http://azure.archive.ubuntu.com/ubuntu jammy-security/main amd64 Packages [3526 kB]
+Get:14 http://azure.archive.ubuntu.com/ubuntu jammy-security/main Translation-en [495 kB]
+Get:15 http://azure.archive.ubuntu.com/ubuntu jammy-security/restricted amd64 Packages [6305 kB]
+Get:16 http://azure.archive.ubuntu.com/ubuntu jammy-security/restricted Translation-en [1211 kB]
+Get:17 http://azure.archive.ubuntu.com/ubuntu jammy-security/universe amd64 Packages [1048 kB]
+Get:18 http://azure.archive.ubuntu.com/ubuntu jammy-security/universe Translation-en [235 kB]
+Fetched 27.1 MB in 6s (4570 kB/s)
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+52 packages can be upgraded. Run 'apt list --upgradable' to see them.
+axsdsmeadmin@AX-Innovation-vm:~$ sudo apt install docker.io -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  bridge-utils containerd dns-root-data dnsmasq-base pigz runc ubuntu-fan
+Suggested packages:
+  ifupdown aufs-tools cgroupfs-mount | cgroup-lite debootstrap docker-buildx docker-compose-v2 docker-doc rinse zfs-fuse | zfsutils
+The following NEW packages will be installed:
+  bridge-utils containerd dns-root-data dnsmasq-base docker.io pigz runc ubuntu-fan
+0 upgraded, 8 newly installed, 0 to remove and 52 not upgraded.
+Need to get 74.0 MB of archives.
+After this operation, 279 MB of additional disk space will be used.
+Get:1 http://azure.archive.ubuntu.com/ubuntu jammy/universe amd64 pigz amd64 2.6-1 [63.6 kB]
+Get:2 http://azure.archive.ubuntu.com/ubuntu jammy/main amd64 bridge-utils amd64 1.7-1ubuntu3 [34.4 kB]
+Get:3 http://azure.archive.ubuntu.com/ubuntu jammy-updates/main amd64 runc amd64 1.3.4-0ubuntu1~22.04.1 [9569 kB]
+Get:4 http://azure.archive.ubuntu.com/ubuntu jammy-updates/main amd64 containerd amd64 2.2.1-0ubuntu1~22.04.2 [28.3 MB]
+Get:5 http://azure.archive.ubuntu.com/ubuntu jammy-updates/main amd64 dns-root-data all 2024071801~ubuntu0.22.04.1 [6132 B]
+Get:6 http://azure.archive.ubuntu.com/ubuntu jammy-updates/main amd64 dnsmasq-base amd64 2.91-0ubuntu0.22.04.1 [379 kB]
+Get:7 http://azure.archive.ubuntu.com/ubuntu jammy-updates/universe amd64 docker.io amd64 29.1.3-0ubuntu3~22.04.2 [35.7 MB]
+Get:8 http://azure.archive.ubuntu.com/ubuntu jammy/universe amd64 ubuntu-fan all 0.12.16 [35.2 kB]
+Fetched 74.0 MB in 2s (30.7 MB/s)
+Preconfiguring packages ...
+Selecting previously unselected package pigz.
+(Reading database ... 67565 files and directories currently installed.)
+Preparing to unpack .../0-pigz_2.6-1_amd64.deb ...
+Unpacking pigz (2.6-1) ...
+Selecting previously unselected package bridge-utils.
+Preparing to unpack .../1-bridge-utils_1.7-1ubuntu3_amd64.deb ...
+Unpacking bridge-utils (1.7-1ubuntu3) ...
+Selecting previously unselected package runc.
+Preparing to unpack .../2-runc_1.3.4-0ubuntu1~22.04.1_amd64.deb ...
+Unpacking runc (1.3.4-0ubuntu1~22.04.1) ...
+Selecting previously unselected package containerd.
+Preparing to unpack .../3-containerd_2.2.1-0ubuntu1~22.04.2_amd64.deb ...
+Unpacking containerd (2.2.1-0ubuntu1~22.04.2) ...
+Selecting previously unselected package dns-root-data.
+Preparing to unpack .../4-dns-root-data_2024071801~ubuntu0.22.04.1_all.deb ...
+Unpacking dns-root-data (2024071801~ubuntu0.22.04.1) ...
+Selecting previously unselected package dnsmasq-base.
+Preparing to unpack .../5-dnsmasq-base_2.91-0ubuntu0.22.04.1_amd64.deb ...
+Unpacking dnsmasq-base (2.91-0ubuntu0.22.04.1) ...
+Selecting previously unselected package docker.io.
+Preparing to unpack .../6-docker.io_29.1.3-0ubuntu3~22.04.2_amd64.deb ...
+Unpacking docker.io (29.1.3-0ubuntu3~22.04.2) ...
+Selecting previously unselected package ubuntu-fan.
+Preparing to unpack .../7-ubuntu-fan_0.12.16_all.deb ...
+Unpacking ubuntu-fan (0.12.16) ...
+Setting up dnsmasq-base (2.91-0ubuntu0.22.04.1) ...
+Setting up runc (1.3.4-0ubuntu1~22.04.1) ...
+Setting up dns-root-data (2024071801~ubuntu0.22.04.1) ...
+Setting up bridge-utils (1.7-1ubuntu3) ...
+Setting up pigz (2.6-1) ...
+Setting up containerd (2.2.1-0ubuntu1~22.04.2) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/containerd.service → /lib/systemd/system/containerd.service.
+Setting up ubuntu-fan (0.12.16) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/ubuntu-fan.service → /lib/systemd/system/ubuntu-fan.service.
+Setting up docker.io (29.1.3-0ubuntu3~22.04.2) ...
+Adding group `docker' (GID 122) ...
+Done.
+Created symlink /etc/systemd/system/multi-user.target.wants/docker.service → /lib/systemd/system/docker.service.
+Created symlink /etc/systemd/system/sockets.target.wants/docker.socket → /lib/systemd/system/docker.socket.
+Processing triggers for dbus (1.12.20-2ubuntu4.1) ...
+Processing triggers for man-db (2.10.2-1) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+axsdsmeadmin@AX-Innovation-vm:~$ sudo systemctl enable docker
+axsdsmeadmin@AX-Innovation-vm:~$ sudo systemctl status docker
+● docker.service - Docker Application Container Engine
+     Loaded: loaded (/lib/systemd/system/docker.service; enabled; vendor preset: enabled)
+     Active: active (running) since Wed 2026-09-09 06:48:24 UTC; 4min 50s ago
+TriggeredBy: ● docker.socket
+       Docs: https://docs.docker.com
+   Main PID: 47961 (dockerd)
+      Tasks: 9
+     Memory: 24.8M
+        CPU: 449ms
+     CGroup: /system.slice/docker.service
+             └─47961 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.279394101Z" level=info msg="Restoring containers: start."
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.328067006Z" level=info msg="Deleting nftables IPv4 rules" error="exit status 1"
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.337043035Z" level=info msg="Deleting nftables IPv6 rules" error="exit status 1"
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.812451600Z" level=info msg="Loading containers: done."
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.821553179Z" level=info msg="Docker daemon" commit="29.1.3-0ubuntu3~22.04.2" containerd-snapshotter=true storage-driver=overlayfs vers>
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.821703754Z" level=info msg="Initializing buildkit"
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.991604672Z" level=info msg="Completed buildkit initialization"
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.999385913Z" level=info msg="Daemon has completed initialization"
+Sep 09 06:48:24 AX-Innovation-vm dockerd[47961]: time="2026-09-09T06:48:24.999695926Z" level=info msg="API listen on /run/docker.sock"
+Sep 09 06:48:24 AX-Innovation-vm systemd[1]: Started Docker Application Container Engine.
+ ESCOC
+
+
+
+
+
+
+
+
+
+
+
+
+estoring containers: start."
+eleting nftables IPv4 rules" error="exit status 1"
+eleting nftables IPv6 rules" error="exit status 1"
+oading containers: done."
+ocker daemon" commit="29.1.3-0ubuntu3~22.04.2" containerd-snapshotter=true storage-driver=overlayfs version=29.1.3
+nitializing buildkit"
+ompleted buildkit initialization"
+aemon has completed initialization"
+PI listen on /run/docker.sock"
+
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+
+axsdsmeadmin@AX-Innovation-vm:~$ sudo systemctl start docker
+axsdsmeadmin@AX-Innovation-vm:~$ sudo docker run hello-world
+Unable to find image 'hello-world:latest' locally
+latest: Pulling from library/hello-world
+4f55086f7dd0: Pull complete
+d5e71e642bf5: Download complete
+Digest: sha256:5dd0d3e6e255913fc30f90b9f2b1d359cc2cbdb48090cc4b65f1676e203243cc
+Status: Downloaded newer image for hello-world:latest
+
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.
+ 2. The Docker daemon pulled the "hello-world" image from the Docker Hub.
+    (amd64)
+ 3. The Docker daemon created a new container from that image which runs the
+    executable that produces the output you are currently reading.
+ 4. The Docker daemon streamed that output to the Docker client, which sent it
+    to your terminal.
+
+To try something more ambitious, you can run an Ubuntu container with:
+ $ docker run -it ubuntu bash
+
+Share images, automate workflows, and more with a free Docker ID:
+ https://hub.docker.com/
+
+For more examples and ideas, visit:
+ https://docs.docker.com/get-started/
+
+axsdsmeadmin@AX-Innovation-vm:~$ whoami
+axsdsmeadmin
+axsdsmeadmin@AX-Innovation-vm:~$ docker --version
+Docker version 29.1.3, build 29.1.3-0ubuntu3~22.04.2
+axsdsmeadmin@AX-Innovation-vm:~$ sudo apt update
+Hit:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Hit:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+Hit:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+Hit:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+52 packages can be upgraded. Run 'apt list --upgradable' to see them.
+axsdsmeadmin@AX-Innovation-vm:~$ sudo apt install git -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+git is already the newest version (1:2.34.1-1ubuntu1.17).
+git set to manually installed.
+0 upgraded, 0 newly installed, 0 to remove and 52 not upgraded.
+axsdsmeadmin@AX-Innovation-vm:~$ git --version
+git version 2.34.1
+axsdsmeadmin@AX-Innovation-vm:~$ cd ~
+axsdsmeadmin@AX-Innovation-vm:~$ mkdir -p applications
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ mkdir -p formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ git clone git@client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 08:44:37 UTC 2026
+
+  System load:  0.0                Processes:             119
+  Usage of /:   29.4% of 28.89GB   Users logged in:       0
+  Memory usage: 4%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 06:47:00 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ cd formIQ
+-bash: cd: formIQ: No such file or directory
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ git clone git@https://code.sdsdev.co.kr/AX-Innovation/Adobe-Form-Builder.git
+Cloning into 'Adobe-Form-Builder'...
+fatal: protocol 'git@https' is not supported
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ git clone https://code.sdsdev.co.kr/AX-Innovation/Adobe-Form-Builder.git
+Cloning into 'Adobe-Form-Builder'...
+fatal: unable to access 'https://code.sdsdev.co.kr/AX-Innovation/Adobe-Form-Builder.git/': Could not resolve host: code.sdsdev.co.kr
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ git clone https://github.com/Sarwapriya/Adobe-Form-Builder.git
+Cloning into 'Adobe-Form-Builder'...
+remote: Enumerating objects: 8426, done.
+remote: Counting objects: 100% (2349/2349), done.
+remote: Compressing objects: 100% (1503/1503), done.
+remote: Total 8426 (delta 1403), reused 1660 (delta 741), pack-reused 6077 (from 2)
+Receiving objects: 100% (8426/8426), 41.51 MiB | 20.09 MiB/s, done.
+Resolving deltas: 100% (2719/2719), done.
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ ls -la
+total 12
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin 4096 Sep  9 08:49 .
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin 4096 Sep  9 07:10 ..
+drwxr-xr-x 10 axsdsmeadmin axsdsmeadmin 4096 Sep  9 08:49 Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ find . -maxdepth 2 -type f | head -30
+./Adobe-Form-Builder/tsconfig.app.json
+./Adobe-Form-Builder/tsconfig.node.json
+./Adobe-Form-Builder/tsconfig.json
+./Adobe-Form-Builder/.env.example
+./Adobe-Form-Builder/package-lock.json
+./Adobe-Form-Builder/CLAUDE.md
+./Adobe-Form-Builder/index.html
+./Adobe-Form-Builder/.gitignore
+./Adobe-Form-Builder/README.md
+./Adobe-Form-Builder/DEPLOYMENT.md
+./Adobe-Form-Builder/.oxlintrc.json
+./Adobe-Form-Builder/package.json
+./Adobe-Form-Builder/vite.config.ts
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ ls -la
+total 12
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin 4096 Sep  9 08:49 .
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin 4096 Sep  9 07:10 ..
+drwxr-xr-x 10 axsdsmeadmin axsdsmeadmin 4096 Sep  9 08:49 Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ ls -la
+total 224
+drwxr-xr-x 10 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 .
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 ..
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    278 Sep  9 08:49 .env.example
+drwxr-xr-x  8 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 .git
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin     71 Sep  9 08:49 .gitignore
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    119 Sep  9 08:49 .oxlintrc.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin  23814 Sep  9 08:49 CLAUDE.md
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   7755 Sep  9 08:49 DEPLOYMENT.md
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 Documents
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 Final_forms_format
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   1278 Sep  9 08:49 README.md
+drwxr-xr-x  5 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 backend-py
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    351 Sep  9 08:49 index.html
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin 112975 Sep  9 08:49 package-lock.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   1209 Sep  9 08:49 package.json
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 packages
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 public
+drwxr-xr-x 12 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 src
+drwxr-xr-x  4 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 tests
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    633 Sep  9 08:49 tsconfig.app.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    119 Sep  9 08:49 tsconfig.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    517 Sep  9 08:49 tsconfig.node.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    558 Sep  9 08:49 vite.config.ts
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ cat package.jason
+cat: package.jason: No such file or directory
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ cat package.json
+{
+  "name": "formiq",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run build --workspace=packages/shared && tsc -b && vite build",
+    "lint": "oxlint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview",
+    "dev:shared": "npm run dev --workspace=packages/shared",
+    "test:shared": "npm run test --workspace=packages/shared"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@formbuilder/shared": "*",
+    "@mui/icons-material": "^6.4.0",
+    "@mui/material": "^6.4.0",
+    "@mui/x-data-grid": "^7.23.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^6.28.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.4",
+    "jsdom": "^27.4.0",
+    "oxlint": "^1.76.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  }
+}
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker --version
+Docker version 29.1.3, build 29.1.3-0ubuntu3~22.04.2
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ nano Dockerfile
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build -t formiq:1.0
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+docker: 'docker build' requires 1 argument
+
+Usage:  docker build [OPTIONS] PATH | URL | -
+
+Run 'docker build --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker images
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker version 29.1.3, build ...
+docker: 'docker version' accepts no arguments
+
+Usage:  docker version [OPTIONS]
+
+Run 'docker version --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build -t
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+flag needs an argument: 't' in -t
+
+Usage:  docker build [OPTIONS] PATH | URL | -
+
+Run 'docker build --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build version
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+unable to prepare context: path "version" not found
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker buildx version
+docker: unknown command: docker buildx
+
+Run 'docker --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker buildx ls
+docker: unknown command: docker buildx
+
+Run 'docker --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker info
+Client:
+ Version:    29.1.3
+ Context:    default
+ Debug Mode: false
+ Plugins:
+  trust: Manage trust on Docker images (Docker Inc.)
+    Version:  29.1.3
+    Path:     /usr/libexec/docker/cli-plugins/docker-trust
+
+Server:
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker compose version
+docker: unknown command: docker compose
+
+Run 'docker --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 09:49:46 UTC 2026
+
+  System load:  0.0                Processes:             119
+  Usage of /:   29.5% of 28.89GB   Users logged in:       0
+  Memory usage: 5%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 08:44:38 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ sudo usermode -aG docker $USER
+sudo: usermode: command not found
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ sudo usermod -aG docker $USER
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ exit
+logout
+Connection to 20.224.2.229 closed.
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 09:51:36 UTC 2026
+
+  System load:  0.0                Processes:             121
+  Usage of /:   29.5% of 28.89GB   Users logged in:       0
+  Memory usage: 5%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 09:49:47 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+axsdsmeadmin@AX-Innovation-vm:~$ cd Adobe-Form-Builder
+-bash: cd: Adobe-Form-Builder: No such file or directory
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker info
+Client:
+ Version:    29.1.3
+ Context:    default
+ Debug Mode: false
+ Plugins:
+  trust: Manage trust on Docker images (Docker Inc.)
+    Version:  29.1.3
+    Path:     /usr/libexec/docker/cli-plugins/docker-trust
+
+Server:
+ Containers: 1
+  Running: 0
+  Paused: 0
+  Stopped: 1
+ Images: 1
+ Server Version: 29.1.3
+ Storage Driver: overlayfs
+  driver-type: io.containerd.snapshotter.v1
+ Logging Driver: json-file
+ Cgroup Driver: systemd
+ Cgroup Version: 2
+ Plugins:
+  Volume: local
+  Network: bridge host ipvlan macvlan null overlay
+  Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog
+ CDI spec directories:
+  /etc/cdi
+  /var/run/cdi
+ Swarm: inactive
+ Runtimes: io.containerd.runc.v2 runc
+ Default Runtime: runc
+ Init Binary: docker-init
+ containerd version:
+ runc version:
+ init version:
+ Security Options:
+  apparmor
+  seccomp
+   Profile: builtin
+  cgroupns
+ Kernel Version: 6.8.0-1065-azure
+ Operating System: Ubuntu 22.04.5 LTS
+ OSType: linux
+ Architecture: x86_64
+ CPUs: 2
+ Total Memory: 7.515GiB
+ Name: AX-Innovation-vm
+ ID: 0a19ea6b-6e97-482b-ae9e-d337e91a5d1f
+ Docker Root Dir: /var/lib/docker
+ Debug Mode: false
+ Experimental: false
+ Insecure Registries:
+  ::1/128
+  127.0.0.0/8
+ Live Restore Enabled: false
+ Firewall Backend: iptables
+
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker: unknown command: docker buildx
+Command 'docker:' not found, did you mean:
+  command 'docker' from snap docker (29.6.1)
+  command 'dockerd' from deb docker.io (29.1.3-0ubuntu3~22.04.2)
+  command 'docker' from deb docker.io (29.1.3-0ubuntu3~22.04.2)
+  command 'docker' from deb podman-docker (3.4.4+ds1-1ubuntu1.22.04.3)
+See 'snap info <snapname>' for additional versions.
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ sudo apt update
+Hit:1 http://azure.archive.ubuntu.com/ubuntu jammy InRelease
+Hit:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates InRelease
+Hit:3 http://azure.archive.ubuntu.com/ubuntu jammy-backports InRelease
+Hit:4 http://azure.archive.ubuntu.com/ubuntu jammy-security InRelease
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+52 packages can be upgraded. Run 'apt list --upgradable' to see them.
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ sudo apt install docker-buildx docker-compose-v2client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 10:04:25 UTC 2026
+
+  System load:  0.04               Processes:             122
+  Usage of /:   29.5% of 28.89GB   Users logged in:       1
+  Memory usage: 5%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 09:51:37 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ sudo apt install docker-buildx docker-compose-v2 -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following NEW packages will be installed:
+  docker-buildx docker-compose-v2
+0 upgraded, 2 newly installed, 0 to remove and 52 not upgraded.
+Need to get 31.7 MB of archives.
+After this operation, 138 MB of additional disk space will be used.
+Get:1 http://azure.archive.ubuntu.com/ubuntu jammy-updates/universe amd64 docker-buildx amd64 0.30.1-0ubuntu1~22.04.1 [16.9 MB]
+Get:2 http://azure.archive.ubuntu.com/ubuntu jammy-updates/universe amd64 docker-compose-v2 amd64 2.40.3+ds1-0ubuntu1~22.04.1 [14.9 MB]
+Fetched 31.7 MB in 1s (57.1 MB/s)
+Selecting previously unselected package docker-buildx.
+(Reading database ... 67936 files and directories currently installed.)
+Preparing to unpack .../docker-buildx_0.30.1-0ubuntu1~22.04.1_amd64.deb ...
+Unpacking docker-buildx (0.30.1-0ubuntu1~22.04.1) ...
+Selecting previously unselected package docker-compose-v2.
+Preparing to unpack .../docker-compose-v2_2.40.3+ds1-0ubuntu1~22.04.1_amd64.deb ...
+Unpacking docker-compose-v2 (2.40.3+ds1-0ubuntu1~22.04.1) ...
+Setting up docker-compose-v2 (2.40.3+ds1-0ubuntu1~22.04.1) ...
+Setting up docker-buildx (0.30.1-0ubuntu1~22.04.1) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker compose version
+Docker Compose version 2.40.3+ds1-0ubuntu1~22.04.1
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker buildxclient_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 10:30:05 UTC 2026
+
+  System load:  0.0                Processes:             119
+  Usage of /:   30.0% of 28.89GB   Users logged in:       0
+  Memory usage: 5%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 10:04:26 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker buildx version
+github.com/docker/buildx 0.30.1 0.30.1-0ubuntu1~22.04.1
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ pwd
+/home/axsdsmeadmin/applications/formIQ/Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ ls -la
+total 228
+drwxr-xr-x 10 axsdsmeadmin axsdsmeadmin   4096 Sep  9 09:02 .
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 ..
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    278 Sep  9 08:49 .env.example
+drwxr-xr-x  8 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 .git
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin     71 Sep  9 08:49 .gitignore
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    119 Sep  9 08:49 .oxlintrc.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin  23814 Sep  9 08:49 CLAUDE.md
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   7755 Sep  9 08:49 DEPLOYMENT.md
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    278 Sep  9 09:02 Dockerfile
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 Documents
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 Final_forms_format
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   1278 Sep  9 08:49 README.md
+drwxr-xr-x  5 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 backend-py
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    351 Sep  9 08:49 index.html
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin 112975 Sep  9 08:49 package-lock.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   1209 Sep  9 08:49 package.json
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 packages
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 public
+drwxr-xr-x 12 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 src
+drwxr-xr-x  4 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 tests
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    633 Sep  9 08:49 tsconfig.app.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    119 Sep  9 08:49 tsconfig.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    517 Sep  9 08:49 tsconfig.node.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    558 Sep  9 08:49 vite.config.ts
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build -t
+flag needs an argument: 't' in -t
+
+Usage:  docker buildx build [OPTIONS] PATH | URL | -
+
+Run 'docker buildx build --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build version
+[+] Building 0.0s (0/0)                                                                                                                                                                           docker:default
+ERROR: failed to build: unable to prepare context: path "version" not found
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build -t formiq:1.0 .
+[+] Building 37.3s (13/14)                                                                                                                                                                        docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.1s
+ => => transferring dockerfile: 317B                                                                                                                                                                        0.0s
+ => WARN: ConsistentInstructionCasing: Command 'From' should match the case of the command majority (uppercase) (line 2)                                                                                    0.1s
+ => [internal] load metadata for docker.io/library/nginx:alpine                                                                                                                                             1.2s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                                                                                                                           1.2s
+ => [internal] load .dockerignore                                                                                                                                                                           0.1s
+ => => transferring context: 2B                                                                                                                                                                             0.0s
+ => [builder 1/7] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293                                                                             5.5s
+ => => resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293                                                                                     0.1s
+ => => sha256:fff4e2c1b189bf87d63ad8bd07f7f4eb288d6f2b6a07a8bb44c60e8c075d2096 445B / 445B                                                                                                                  0.1s
+ => => sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122 1.26MB / 1.26MB                                                                                                              0.3s
+ => => sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287 43.23MB / 43.23MB                                                                                                            1.6s
+ => => sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb 3.86MB / 3.86MB                                                                                                              0.5s
+ => => extracting sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb                                                                                                                   0.7s
+ => => extracting sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287                                                                                                                   2.9s
+ => => extracting sha256:b2cbbfe903b0821005780971ddc5892edcc4ce74c5a48d82e1d2b382edac3122                                                                                                                   0.1s
+ => => extracting sha256:fff4e2c1b189bf87d63ad8bd07f7f4eb288d6f2b6a07a8bb44c60e8c075d2096                                                                                                                   0.1s
+ => [stage-1 1/2] FROM docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                               4.9s
+ => => resolve docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                                       0.1s
+ => => sha256:6636b9fc203ce74d0b07a1d3f48cfa0151b23fa5e787232908e560673a66b553 20.52MB / 20.52MB                                                                                                            0.7s
+ => => sha256:8f924cf5086c7b8a67e8b3e03b22851c1de8e11b0433c21904ef340d89e5014e 1.40kB / 1.40kB                                                                                                              0.2s
+ => => sha256:51900e10fb9cfad93aa74360e5f938efcbe6d3396a380867b7561c84e5cd2daf 1.21kB / 1.21kB                                                                                                              0.3s
+ => => sha256:bc98d76756163f687c200ed6114df3904623bbb5e7698b420efaf8ef3c81dfcf 404B / 404B                                                                                                                  0.1s
+ => => sha256:58c524ea09ced2269cb14533d95b80de9fea9532abbf171585d8acee413893f2 956B / 956B                                                                                                                  0.1s
+ => => sha256:af7dd138f4591521064c208da6af07f487ebc3e5b350989c0ec2017b3e5208e3 628B / 628B                                                                                                                  0.1s
+ => => sha256:850bf2dcecff7924b238f0b7cbae7b456e5206453b784fe6b4adfc949add274a 4.40MB / 4.40MB                                                                                                              0.5s
+ => => sha256:55afa1ecc21d2bb5e5045f32dafee56272ffd89860bac26f6c32123439af26a4 3.85MB / 3.85MB                                                                                                              0.5s
+ => => extracting sha256:55afa1ecc21d2bb5e5045f32dafee56272ffd89860bac26f6c32123439af26a4                                                                                                                   0.3s
+ => => extracting sha256:850bf2dcecff7924b238f0b7cbae7b456e5206453b784fe6b4adfc949add274a                                                                                                                   0.5s
+ => => extracting sha256:af7dd138f4591521064c208da6af07f487ebc3e5b350989c0ec2017b3e5208e3                                                                                                                   0.1s
+ => => extracting sha256:58c524ea09ced2269cb14533d95b80de9fea9532abbf171585d8acee413893f2                                                                                                                   0.1s
+ => => extracting sha256:bc98d76756163f687c200ed6114df3904623bbb5e7698b420efaf8ef3c81dfcf                                                                                                                   0.1s
+ => => extracting sha256:51900e10fb9cfad93aa74360e5f938efcbe6d3396a380867b7561c84e5cd2daf                                                                                                                   0.1s
+ => => extracting sha256:8f924cf5086c7b8a67e8b3e03b22851c1de8e11b0433c21904ef340d89e5014e                                                                                                                   0.1s
+ => => extracting sha256:6636b9fc203ce74d0b07a1d3f48cfa0151b23fa5e787232908e560673a66b553                                                                                                                   1.3s
+ => [internal] load build context                                                                                                                                                                           1.3s
+ => => transferring context: 48.62MB                                                                                                                                                                        1.0s
+ => [builder 2/7] WORKDIR /app                                                                                                                                                                              1.8s
+ => [builder 3/7] COPY package*.json ./                                                                                                                                                                     0.1s
+ => [builder 4/7] COPY packages ./packages                                                                                                                                                                  0.1s
+ => [builder 5/7] RUN npm ci                                                                                                                                                                               25.6s
+ => [builder 6/7] COPY . .                                                                                                                                                                                  1.0s
+ => ERROR [builder 7/7] RUN npm run build                                                                                                                                                                   1.3s
+------
+ > [builder 7/7] RUN npm run build:
+0.649
+0.649 > formiq@0.1.0 build
+0.649 > npm run build --workspace=packages/shared && tsc -b && vite build
+0.649
+0.959
+0.959 > @formbuilder/shared@0.1.0 build
+0.959 > tsup && tsc -p tsconfig.build.json
+0.959
+1.190 Error: Cannot find module @rollup/rollup-linux-x64-musl. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.
+1.190     at requireWithFriendlyError (/app/node_modules/rollup/dist/native.js:121:9)
+1.190     at Object.<anonymous> (/app/node_modules/rollup/dist/native.js:130:76)
+1.190     at Module._compile (node:internal/modules/cjs/loader:1521:14)
+1.190     at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+1.190     at Module.load (node:internal/modules/cjs/loader:1266:32)
+1.190     at Module._load (node:internal/modules/cjs/loader:1091:12)
+1.190     at Module.require (node:internal/modules/cjs/loader:1289:19)
+1.190     at require (node:internal/modules/helpers:182:18)
+1.190     at Object.<anonymous> (/app/node_modules/rollup/dist/shared/parseAst.js:12:19)
+1.190     at Module._compile (node:internal/modules/cjs/loader:1521:14)
+1.206 npm error Lifecycle script `build` failed with error:
+1.207 npm error code 1
+1.208 npm error path /app/packages/shared
+1.208 npm error workspace @formbuilder/shared@0.1.0
+1.208 npm error location /app/packages/shared
+1.208 npm error command failed
+1.208 npm error command sh -c tsup && tsc -p tsconfig.build.json
+------
+
+ 1 warning found (use docker --debug to expand):
+ - ConsistentInstructionCasing: Command 'From' should match the case of the command majority (uppercase) (line 2)
+Dockerfile:8
+--------------------
+   6 |     RUN npm ci
+   7 |     COPY . .
+   8 | >>> RUN npm run build
+   9 |
+  10 |     #production stage
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 10:45:51 UTC 2026
+
+  System load:  0.0                Processes:             120
+  Usage of /:   33.1% of 28.89GB   Users logged in:       1
+  Memory usage: 7%                 IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 10:30:06 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ nano Dockerfile
+
+
+Use "fg" to return to nano.
+
+[1]+  Stopped                 nano Dockerfile
+
+
+Use "fg" to return to nano.
+
+[1]+  Stopped                 nano Dockerfile
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ nano Dockerfile
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build --no-cache -t formiq:1.0 .
+[+] Building 36.1s (13/14)                                                                                                                                                                        docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.0s
+ => => transferring dockerfile: 348B                                                                                                                                                                        0.0s
+ => WARN: ConsistentInstructionCasing: Command 'From' should match the case of the command majority (uppercase) (line 2)                                                                                    0.0s
+ => [internal] load metadata for docker.io/library/nginx:alpine                                                                                                                                             0.6s
+ => [internal] load metadata for docker.io/library/node:20-bookworm-slim                                                                                                                                    1.2s
+ => [internal] load .dockerignore                                                                                                                                                                           0.0s
+ => => transferring context: 2B                                                                                                                                                                             0.0s
+ => CACHED [stage-1 1/2] FROM docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                        0.2s
+ => => resolve docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                                       0.1s
+ => [builder 1/7] FROM docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                      5.2s
+ => => resolve docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                              0.1s
+ => => sha256:3c02fd806613748139b8b8a14a69ae3518a1b0e863c57c35aada3b92ed87fb31 447B / 447B                                                                                                                  0.1s
+ => => sha256:64cfb949317c9824fd081d55c59a7225bfe1f650c6395ba42d7ed0ccf51993d2 1.71MB / 1.71MB                                                                                                              0.4s
+ => => sha256:e54aec64c365815cd7b91e718f00ac6e625562b1de09036b38614621b42c7582 3.31kB / 3.31kB                                                                                                              0.3s
+ => => sha256:804d4d68057cbb26cbcde9a735148ebc6589911bad32cf9dbddb5b0ba878bf1f 41.42MB / 41.42MB                                                                                                            1.3s
+ => => sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4 28.24MB / 28.24MB                                                                                                            1.0s
+ => => extracting sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4                                                                                                                   1.6s
+ => => extracting sha256:e54aec64c365815cd7b91e718f00ac6e625562b1de09036b38614621b42c7582                                                                                                                   0.1s
+ => => extracting sha256:804d4d68057cbb26cbcde9a735148ebc6589911bad32cf9dbddb5b0ba878bf1f                                                                                                                   1.8s
+ => => extracting sha256:64cfb949317c9824fd081d55c59a7225bfe1f650c6395ba42d7ed0ccf51993d2                                                                                                                   0.1s
+ => => extracting sha256:3c02fd806613748139b8b8a14a69ae3518a1b0e863c57c35aada3b92ed87fb31                                                                                                                   0.0s
+ => [internal] load build context                                                                                                                                                                           0.2s
+ => => transferring context: 28.55kB                                                                                                                                                                        0.0s
+ => [builder 2/7] WORKDIR /app                                                                                                                                                                              1.7s
+ => [builder 3/7] COPY package*.json ./                                                                                                                                                                     0.2s
+ => [builder 4/7] COPY packages ./packages                                                                                                                                                                  0.1s
+ => [builder 5/7] RUN npm install --include=optional                                                                                                                                                       25.4s
+ => [builder 6/7] COPY . .                                                                                                                                                                                  0.9s
+ => ERROR [builder 7/7] RUN npm run build                                                                                                                                                                   1.0s
+------
+ > [builder 7/7] RUN npm run build:
+0.525
+0.525 > formiq@0.1.0 build
+0.525 > npm run build --workspace=packages/shared && tsc -b && vite build
+0.525
+0.746
+0.746 > @formbuilder/shared@0.1.0 build
+0.746 > tsup && tsc -p tsconfig.build.json
+0.746
+0.925 Error: Cannot find module @rollup/rollup-linux-x64-gnu. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.
+0.925     at requireWithFriendlyError (/app/node_modules/rollup/dist/native.js:121:9)
+0.925     at Object.<anonymous> (/app/node_modules/rollup/dist/native.js:130:76)
+0.925     at Module._compile (node:internal/modules/cjs/loader:1521:14)
+0.925     at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+0.925     at Module.load (node:internal/modules/cjs/loader:1266:32)
+0.925     at Module._load (node:internal/modules/cjs/loader:1091:12)
+0.925     at Module.require (node:internal/modules/cjs/loader:1289:19)
+0.925     at require (node:internal/modules/helpers:182:18)
+0.925     at Object.<anonymous> (/app/node_modules/rollup/dist/shared/parseAst.js:12:19)
+0.925     at Module._compile (node:internal/modules/cjs/loader:1521:14)
+0.936 npm error Lifecycle script `build` failed with error:
+0.937 npm error code 1
+0.937 npm error path /app/packages/shared
+0.938 npm error workspace @formbuilder/shared@0.1.0
+0.938 npm error location /app/packages/shared
+0.938 npm error command failed
+0.938 npm error command sh -c tsup && tsc -p tsconfig.build.json
+------
+
+ 1 warning found (use docker --debug to expand):
+ - ConsistentInstructionCasing: Command 'From' should match the case of the command majority (uppercase) (line 2)
+Dockerfile:8
+--------------------
+   6 |     RUN npm install --include=optional
+   7 |     COPY . .
+   8 | >>> RUN npm run build
+   9 |
+  10 |     #production stage
+--------------------
+
+
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build --no-cache -t formiq:1.0 .
+[+] Building 84.9s (15/15) FINISHED                                                                                                                                                               docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.0s
+ => => transferring dockerfile: 347B                                                                                                                                                                        0.0s
+ => [internal] load metadata for docker.io/library/node:20-bookworm-slim                                                                                                                                    0.6s
+ => [internal] load metadata for docker.io/library/nginx:alpine                                                                                                                                             0.6s
+ => [internal] load .dockerignore                                                                                                                                                                           0.0s
+ => => transferring context: 2B                                                                                                                                                                             0.0s
+ => [builder 1/7] FROM docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                      0.1s
+ => => resolve docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                              0.1s
+ => CACHED [stage-1 1/2] FROM docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                        0.1s
+ => => resolve docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                                       0.1s
+ => [internal] load build context                                                                                                                                                                           0.1s
+ => => transferring context: 28.55kB                                                                                                                                                                        0.0s
+ => CACHED [builder 2/7] WORKDIR /app                                                                                                                                                                       0.0s
+ => [builder 3/7] COPY package.json ./                                                                                                                                                                      0.1s
+ => [builder 4/7] COPY packages ./packages                                                                                                                                                                  0.2s
+ => [builder 5/7] RUN npm install --include=optional                                                                                                                                                       58.1s
+ => [builder 6/7] COPY . .                                                                                                                                                                                  1.0s
+ => [builder 7/7] RUN npm run build                                                                                                                                                                        22.5s
+ => [stage-1 2/2] COPY --from=builder /app/dist /user/share/nginx/html                                                                                                                                      0.1s
+ => exporting to image                                                                                                                                                                                      0.7s
+ => => exporting layers                                                                                                                                                                                     0.4s
+ => => exporting manifest sha256:f8c65377df13369ecf2188145e15a473dd3ffed02593142d2659a1b3e42620c7                                                                                                           0.0s
+ => => exporting config sha256:32e8d8404c903ab2a865d4eecd9ddba5df2d529ef1a269052af7ff2e396c067f                                                                                                             0.0s
+ => => exporting attestation manifest sha256:dfb3e3f32c53aa0ba0a01806ec1f7a86a48893515dee01d8a91b1c876a687941                                                                                               0.1s
+ => => exporting manifest list sha256:17da4c0e4f1f82cdd1cd362210c983769b144137d6e05dca808f24c29251bccf                                                                                                      0.0s
+ => => naming to docker.io/library/formiq:1.0                                                                                                                                                               0.0s
+ => => unpacking to docker.io/library/formiq:1.0                                                                                                                                                            0.1s
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker images
+                                                                                                                                                                                             i Info →   U  In Use
+IMAGE                ID             DISK USAGE   CONTENT SIZE   EXTRA
+formiq:1.0           17da4c0e4f1f        105MB         29.9MB
+
+
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build --no-cache -t formiq:1.0 .
+[+] Building 82.8s (15/15) FINISHED                                                                                                                                                               docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.0s
+ => => transferring dockerfile: 347B                                                                                                                                                                        0.0s
+ => [internal] load metadata for docker.io/library/nginx:alpine                                                                                                                                             0.4s
+ => [internal] load metadata for docker.io/library/node:20-bookworm-slim                                                                                                                                    0.4s
+ => [internal] load .dockerignore                                                                                                                                                                           0.0s
+ => => transferring context: 2B                                                                                                                                                                             0.0s
+ => [builder 1/7] FROM docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                      0.1s
+ => => resolve docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                              0.1s
+ => CACHED [stage-1 1/2] FROM docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                        0.1s
+ => => resolve docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                                       0.1s
+ => [internal] load build context                                                                                                                                                                           0.1s
+ => => transferring context: 28.55kB                                                                                                                                                                        0.0s
+ => CACHED [builder 2/7] WORKDIR /app                                                                                                                                                                       0.0s
+ => [builder 3/7] COPY package.json ./                                                                                                                                                                      0.1s
+ => [builder 4/7] COPY packages ./packages                                                                                                                                                                  0.1s
+ => [builder 5/7] RUN npm install --include=optional                                                                                                                                                       56.3s
+ => [builder 6/7] COPY . .                                                                                                                                                                                  1.0s
+ => [builder 7/7] RUN npm run build                                                                                                                                                                        22.4s
+ => [stage-1 2/2] COPY --from=builder /app/dist /user/share/nginx/html                                                                                                                                      0.1s
+ => exporting to image                                                                                                                                                                                      0.7s
+ => => exporting layers                                                                                                                                                                                     0.4s
+ => => exporting manifest sha256:67f220465175d290ebb12ba97b361b8bdb51ddfaf95c57dc8d1f6f69bb545fbf                                                                                                           0.0s
+ => => exporting config sha256:0e28f8ca4f27886ea9e18ffb7a909028d5532fbbfd8b53f634982eb1677780ec                                                                                                             0.0s
+ => => exporting attestation manifest sha256:d5d61d2a2311579d05103a5a478f7ce5f223112fb19d8f4cabe0c661a3668754                                                                                               0.1s
+ => => exporting manifest list sha256:74fab064bd966ba7fa77bcb1f2c13a012367269fe1f4ab28cd5ee567c642f5da                                                                                                      0.1s
+ => => naming to docker.io/library/formiq:1.0                                                                                                                                                               0.0s
+ => => unpacking to docker.io/library/formiq:1.0                                                                                                                                                            0.1s
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker images
+                                                                                                                                                                                             i Info →   U  In Use
+IMAGE                ID             DISK USAGE   CONTENT SIZE   EXTRA
+formiq:1.0           74fab064bd96        105MB         29.9MB
+hello-world:latest   5dd0d3e6e255       25.9kB         9.49kB    U
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run -d\ --name formiq \ -p 8080:69 \ --restart unless-stopped \ formiq:1.0
+unknown shorthand flag: ' ' in - --name
+
+Usage:  docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
+
+Run 'docker run --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run -d --name formiq -p 8080:69 --restart unless-stopped formiq:1.0
+d0df80ecf1025a465ea904f7cbddd4ccdb540f52dddc7b3b9fefe4de6e8d47ae
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps
+CONTAINER ID   IMAGE        COMMAND                  CREATED         STATUS                        PORTS     NAMES
+d0df80ecf102   formiq:1.0   "/docker-entrypoint.…"   8 seconds ago   Restarting (1) 1 second ago             formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ curl http://localhost:8080
+curl: (7) Failed to connect to localhost port 8080 after 0 ms: Connection refused
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker logs formiq
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:05:58 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:05:58 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:05:59 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:00 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:01 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:03 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:06 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:13 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:26 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:52 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:07:44 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps -a
+CONTAINER ID   IMAGE         COMMAND                  CREATED         STATUS                          PORTS     NAMES
+d0df80ecf102   formiq:1.0    "/docker-entrypoint.…"   3 minutes ago   Restarting (1) 50 seconds ago             formiq
+78d73d03daff   hello-world   "/hello"                 4 hours ago     Exited (0) 4 hours ago                    happy_bartik
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker logs --tail 100 formiq
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:00 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:01 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:03 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:06 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:13 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:26 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:06:52 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:07:44 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:08:44 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:09:45 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps -a
+CONTAINER ID   IMAGE         COMMAND                  CREATED         STATUS                         PORTS     NAMES
+d0df80ecf102   formiq:1.0    "/docker-entrypoint.…"   8 minutes ago   Restarting (1) 6 seconds ago             formiq
+78d73d03daff   hello-world   "/hello"                 4 hours ago     Exited (0) 4 hours ago                   happy_bartik
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker rm hello-world
+Error response from daemon: No such container: hello-world
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker rm 78d73d03daff
+78d73d03daff
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps -a
+CONTAINER ID   IMAGE        COMMAND                  CREATED          STATUS                          PORTS     NAMES
+d0df80ecf102   formiq:1.0   "/docker-entrypoint.…"   11 minutes ago   Restarting (1) 27 seconds ago             formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ curl http://localhost:8080
+
+
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run -d --name formiq -p 8080:80 --restart unless-stopped formiq:1.0
+docker: Error response from daemon: Conflict. The container name "/formiq" is already in use by container "d0df80ecf1025a465ea904f7cbddd4ccdb540f52dddc7b3b9fefe4de6e8d47ae". You have to remove (or rename) that container to be able to reuse that name.
+
+Run 'docker run --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 11:25:49 UTC 2026
+
+  System load:  0.03               Processes:             125
+  Usage of /:   41.1% of 28.89GB   Users logged in:       1
+  Memory usage: 12%                IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 10:45:52 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ docker ps -a
+CONTAINER ID   IMAGE        COMMAND                  CREATED          STATUS                          PORTS     NAMES
+d0df80ecf102   formiq:1.0   "/docker-entrypoint.…"   20 minutes ago   Restarting (1) 12 seconds ago             formiq
+axsdsmeadmin@AX-Innovation-vm:~$ nano Dockerfile
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker images
+                                                                                                                                                                                             i Info →   U  In Use
+IMAGE                ID             DISK USAGE   CONTENT SIZE   EXTRA
+formiq:1.0           74fab064bd96        105MB         29.9MB    U
+hello-world:latest   5dd0d3e6e255       25.9kB         9.49kB
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker rmi hello-world
+Untagged: hello-world:latest
+Deleted: sha256:5dd0d3e6e255913fc30f90b9f2b1d359cc2cbdb48090cc4b65f1676e203243cc
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker images
+                                                                                                                                                                                             i Info →   U  In Use
+IMAGE        ID             DISK USAGE   CONTENT SIZE   EXTRA
+formiq:1.0   74fab064bd96        105MB         29.9MB    U
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build --no-cache -t formiq:1.0 .
+[+] Building 83.6s (15/15) FINISHED                                                                                                                                                               docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.0s
+ => => transferring dockerfile: 347B                                                                                                                                                                        0.0s
+ => [internal] load metadata for docker.io/library/nginx:alpine                                                                                                                                             0.7s
+ => [internal] load metadata for docker.io/library/node:20-bookworm-slim                                                                                                                                    0.7s
+ => [internal] load .dockerignore                                                                                                                                                                           0.0s
+ => => transferring context: 2B                                                                                                                                                                             0.0s
+ => [builder 1/7] FROM docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                      0.1s
+ => => resolve docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                              0.1s
+ => CACHED [stage-1 1/2] FROM docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                        0.1s
+ => => resolve docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                                       0.1s
+ => [internal] load build context                                                                                                                                                                           0.1s
+ => => transferring context: 28.55kB                                                                                                                                                                        0.0s
+ => CACHED [builder 2/7] WORKDIR /app                                                                                                                                                                       0.0s
+ => [builder 3/7] COPY package.json ./                                                                                                                                                                      0.1s
+ => [builder 4/7] COPY packages ./packages                                                                                                                                                                  0.1s
+ => [builder 5/7] RUN npm install --include=optional                                                                                                                                                       56.7s
+ => [builder 6/7] COPY . .                                                                                                                                                                                  1.0s
+ => [builder 7/7] RUN npm run build                                                                                                                                                                        22.6s
+ => [stage-1 2/2] COPY --from=builder /app/dist /user/share/nginx/html                                                                                                                                      0.1s
+ => exporting to image                                                                                                                                                                                      0.7s
+ => => exporting layers                                                                                                                                                                                     0.3s
+ => => exporting manifest sha256:faced0213382bd97a56b69551071cb394b4bdb95bfe4a7afcf1909b7ed4a6b4e                                                                                                           0.0s
+ => => exporting config sha256:f0d3db02f7cd23423bdde012e17bf7ebf8ca2c83a5cb71796293b64d1def085f                                                                                                             0.0s
+ => => exporting attestation manifest sha256:f2784d68f7e4484dcba9c52252d474c1b2bd5e411bcab09abcc1d81a24bbae78                                                                                               0.1s
+ => => exporting manifest list sha256:33295c8f965b21c181eaaf1aa728aab2d41f5781eb9f82e5c8afe510178ff129                                                                                                      0.0s
+ => => naming to docker.io/library/formiq:1.0                                                                                                                                                               0.0s
+ => => unpacking to docker.io/library/formiq:1.0                                                                                                                                                            0.1s
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run -d --name formiq -p 8080:80 --restart unless-stopped formiq:1.0
+docker: Error response from daemon: Conflict. The container name "/formiq" is already in use by container "d0df80ecf1025a465ea904f7cbddd4ccdb540f52dddc7b3b9fefe4de6e8d47ae". You have to remove (or rename) that container to be able to reuse that name.
+
+Run 'docker run --help' for more information
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker rm -f formiq
+formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build --no-cache -t formiq:1.0 .
+[+] Building 91.1s (15/15) FINISHED                                                                                                                                                               docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.0s
+ => => transferring dockerfile: 347B                                                                                                                                                                        0.0s
+ => [internal] load metadata for docker.io/library/node:20-bookworm-slim                                                                                                                                    0.4s
+ => [internal] load metadata for docker.io/library/nginx:alpine                                                                                                                                             0.4s
+ => [internal] load .dockerignore                                                                                                                                                                           0.0s
+ => => transferring context: 2B                                                                                                                                                                             0.0s
+ => [builder 1/7] FROM docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                      0.1s
+ => => resolve docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                              0.1s
+ => CACHED [stage-1 1/2] FROM docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                        0.1s
+ => => resolve docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                                       0.1s
+ => [internal] load build context                                                                                                                                                                           0.1s
+ => => transferring context: 28.23kB                                                                                                                                                                        0.0s
+ => CACHED [builder 2/7] WORKDIR /app                                                                                                                                                                       0.0s
+ => [builder 3/7] COPY package.json ./                                                                                                                                                                      0.1s
+ => [builder 4/7] COPY packages ./packages                                                                                                                                                                  0.2s
+ => [builder 5/7] RUN npm install --include=optional                                                                                                                                                       64.5s
+ => [builder 6/7] COPY . .                                                                                                                                                                                  1.0s
+ => [builder 7/7] RUN npm run build                                                                                                                                                                        22.5s
+ => [stage-1 2/2] COPY --from=builder /app/dist /user/share/nginx/html                                                                                                                                      0.1s
+ => exporting to image                                                                                                                                                                                      0.7s
+ => => exporting layers                                                                                                                                                                                     0.3s
+ => => exporting manifest sha256:f169bba7b6def693ebb092670de5929eafcfa1f51b33eb3f2ea4bcacf0c8ef8e                                                                                                           0.0s
+ => => exporting config sha256:970cc93a7788863513748b4db505a74deaef09c242b1104b15e9e1f4728c376e                                                                                                             0.0s
+ => => exporting attestation manifest sha256:2228bc1decb6af07232ebd83ab080625450b73be030696e3cda4a14b16215280                                                                                               0.1s
+ => => exporting manifest list sha256:ab52a9837a72b22aae0d29501db7e1375a3ea355de97cb0401c4ba6b8063021d                                                                                                      0.0s
+ => => naming to docker.io/library/formiq:1.0                                                                                                                                                               0.0s
+ => => unpacking to docker.io/library/formiq:1.0                                                                                                                                                            0.1s
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run -d --name formiq -p 8080:80 --restart unless-stopped formiq:1.0
+933170b2ba5643b8d7d1951afc6553a5da4c13e2d295157aa7ebf0673cafc186
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps
+CONTAINER ID   IMAGE        COMMAND                  CREATED         STATUS                                  PORTS     NAMES
+933170b2ba56   formiq:1.0   "/docker-entrypoint.…"   9 seconds ago   Restarting (1) Less than a second ago             formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ curl http://localhost:8080
+curl: (7) Failed to connect to localhost port 8080 after 0 ms: Connection refused
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 11:53:54 UTC 2026
+
+  System load:  0.0                Processes:             123
+  Usage of /:   46.1% of 28.89GB   Users logged in:       0
+  Memory usage: 16%                IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 11:25:50 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker logs --tail 30 formiq
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:52:00 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:53:00 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: IPv6 listen already enabled
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2026/09/09 11:54:00 [emerg] 1#1: unknown directive "deamon" in command line
+nginx: [emerg] unknown directive "deamon" in command line
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker inspect formiq:1.0 --format '{{json .Config.Cmd}}'
+["nginx","-g","deamon off;"]
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ -p 8080:80
+-p: command not found
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run --rm formiq:1.0 nginx -t
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run --rm formiq:1.0 nginx -g 'daemon off;' -t
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run --rm formiq:1.0 nginx -v
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+nginx version: nginx/1.31.5
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker inspect formiq:1.0 --format 'Entrypoint={{json .Config.Entrypoint}} Cmd={{json .Config.Cmd}}'
+Entrypoint=["/docker-entrypoint.sh"] Cmd=["nginx","-g","deamon off;"]
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ nano Dockerfile
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker rm -f formiq
+formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build --no-cache -t formiq:1.0 .
+[+] Building 1.0s (15/15) FINISHED                                                                                                                                                                docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.0s
+ => => transferring dockerfile: 359B                                                                                                                                                                        0.0s
+ => [internal] load metadata for docker.io/library/nginx:alpine                                                                                                                                             0.7s
+ => [internal] load metadata for docker.io/library/node:20-bookworm-slim                                                                                                                                    0.7s
+ => [internal] load .dockerignore                                                                                                                                                                           0.0s
+ => => transferring context: 2B                                                                                                                                                                             0.0s
+ => CANCELED [builder 1/7] FROM docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                             0.1s
+ => => resolve docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                              0.1s
+ => [internal] load build context                                                                                                                                                                           0.1s
+ => => transferring context: 28.57kB                                                                                                                                                                        0.0s
+ => CANCELED [stage-1 1/3] FROM docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                      0.1s
+ => => resolve docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                                       0.1s
+ => CACHED [builder 2/7] WORKDIR /app                                                                                                                                                                       0.0s
+ => CACHED [builder 3/7] COPY package.json ./                                                                                                                                                               0.0s
+ => CACHED [builder 4/7] COPY packages ./packages                                                                                                                                                           0.0s
+ => CACHED [builder 5/7] RUN npm install --include=optional                                                                                                                                                 0.0s
+ => CACHED [builder 6/7] COPY . .                                                                                                                                                                           0.0s
+ => CACHED [builder 7/7] RUN npm run build                                                                                                                                                                  0.0s
+ => CACHED [stage-1 2/3] COPY --from=builder /app/dist /user/share/nginx/html                                                                                                                               0.0s
+ => ERROR [stage-1 3/3] COPY nginx.conf /etc/nginx/conf.d/default.conf                                                                                                                                      0.0s
+------
+ > [stage-1 3/3] COPY nginx.conf /etc/nginx/conf.d/default.conf:
+------
+Dockerfile:13
+--------------------
+  11 |     FROM nginx:alpine
+  12 |     COPY --from=builder /app/dist /user/share/nginx/html
+  13 | >>> COPY nginx.conf /etc/nginx/conf.d/default.conf
+  14 |     EXPOSE 80
+  15 |
+--------------------
+ERROR: failed to build: failed to solve: failed to compute cache key: failed to calculate checksum of ref 6whkdd62e3odn63z9r136sbey::dpktg4tqxzubxsuh6ezl13cy9: "/nginx.conf": not found
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ pwd
+/home/axsdsmeadmin/applications/formIQ/Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ ls -la
+total 228
+drwxr-xr-x 10 axsdsmeadmin axsdsmeadmin   4096 Sep  9 12:04 .
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 ..
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    278 Sep  9 08:49 .env.example
+drwxr-xr-x  8 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 .git
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin     71 Sep  9 08:49 .gitignore
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    119 Sep  9 08:49 .oxlintrc.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin  23814 Sep  9 08:49 CLAUDE.md
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   7755 Sep  9 08:49 DEPLOYMENT.md
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    320 Sep  9 12:04 Dockerfile
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 Documents
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 Final_forms_format
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   1278 Sep  9 08:49 README.md
+drwxr-xr-x  5 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 backend-py
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    351 Sep  9 08:49 index.html
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin 112975 Sep  9 08:49 package-lock.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin   1209 Sep  9 08:49 package.json
+drwxr-xr-x  3 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 packages
+drwxr-xr-x  2 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 public
+drwxr-xr-x 12 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 src
+drwxr-xr-x  4 axsdsmeadmin axsdsmeadmin   4096 Sep  9 08:49 tests
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    633 Sep  9 08:49 tsconfig.app.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    119 Sep  9 08:49 tsconfig.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    517 Sep  9 08:49 tsconfig.node.json
+-rw-r--r--  1 axsdsmeadmin axsdsmeadmin    558 Sep  9 08:49 vite.config.ts
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ nano nginx.conf
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ ls -l nginx.conf
+-rw-r--r-- 1 axsdsmeadmin axsdsmeadmin 143 Sep  9 12:08 nginx.conf
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ cat nginx.conf
+server {
+        listen 80;
+        server_name _;
+        root /user/share/nginx/html;
+        index index.html;
+
+        location / {
+                try_files $uri $uri/ /index.html;
+        }
+}
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ cat Dockerfile
+# Build stage
+FROM node:20-bookworm-slim AS builder
+WORKDIR /app
+COPY package.json ./
+COPY packages ./packages
+RUN npm install --include=optional
+COPY . .
+RUN npm run build
+
+#production stage
+FROM nginx:alpine
+COPY --from=builder /app/dist /user/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker build --no-cache -t formiq:1.0 .
+[+] Building 85.3s (16/16) FINISHED                                                                                                                                                               docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.0s
+ => => transferring dockerfile: 359B                                                                                                                                                                        0.0s
+ => [internal] load metadata for docker.io/library/node:20-bookworm-slim                                                                                                                                    0.6s
+ => [internal] load metadata for docker.io/library/nginx:alpine                                                                                                                                             0.6s
+ => [internal] load .dockerignore                                                                                                                                                                           0.0s
+ => => transferring context: 2B                                                                                                                                                                             0.0s
+ => [builder 1/7] FROM docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                      0.1s
+ => => resolve docker.io/library/node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0                                                                              0.1s
+ => [internal] load build context                                                                                                                                                                           0.1s
+ => => transferring context: 28.42kB                                                                                                                                                                        0.0s
+ => CACHED [stage-1 1/3] FROM docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                        0.1s
+ => => resolve docker.io/library/nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3                                                                                       0.1s
+ => CACHED [builder 2/7] WORKDIR /app                                                                                                                                                                       0.0s
+ => [builder 3/7] COPY package.json ./                                                                                                                                                                      0.2s
+ => [builder 4/7] COPY packages ./packages                                                                                                                                                                  0.1s
+ => [builder 5/7] RUN npm install --include=optional                                                                                                                                                       58.3s
+ => [builder 6/7] COPY . .                                                                                                                                                                                  1.0s
+ => [builder 7/7] RUN npm run build                                                                                                                                                                        22.4s
+ => [stage-1 2/3] COPY --from=builder /app/dist /user/share/nginx/html                                                                                                                                      0.1s
+ => [stage-1 3/3] COPY nginx.conf /etc/nginx/conf.d/default.conf                                                                                                                                            0.2s
+ => exporting to image                                                                                                                                                                                      0.9s
+ => => exporting layers                                                                                                                                                                                     0.4s
+ => => exporting manifest sha256:caf68a052b0a02697edf22c607254bc6d536cd620117ec9c90a2a1199ec29313                                                                                                           0.1s
+ => => exporting config sha256:697d13c3d06bf77f95fda3c708fbfdbc9e460bf40e1118c16b8160dd50220996                                                                                                             0.0s
+ => => exporting attestation manifest sha256:a1a52b9295e4a658e8073986cf8b459d325eed7d25a59110535459142eaf4e3f                                                                                               0.1s
+ => => exporting manifest list sha256:cdcb31f6dd6d096e90104ba8251d8ad3f7e2f0220f6b97939cff6ed57eec90b5                                                                                                      0.0s
+ => => naming to docker.io/library/formiq:1.0                                                                                                                                                               0.0s
+ => => unpacking to docker.io/library/formiq:1.0                                                                                                                                                            0.1s
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker rm -f formiq
+Error response from daemon: No such container: formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker run -d --name formiq -p 8080:80 --restart unless-stopped formiq:1.0
+0df66cb304cfdd8aa98d9901ffc621cc7bcba0b707975524901a5f712e647472
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps
+CONTAINER ID   IMAGE        COMMAND                  CREATED         STATUS         PORTS                                     NAMES
+0df66cb304cf   formiq:1.0   "/docker-entrypoint.…"   5 seconds ago   Up 4 seconds   0.0.0.0:8080->80/tcp, [::]:8080->80/tcp   formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ curl http://localhost:8080
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FormIQ</title>
+    <script type="module" crossorigin src="/assets/index-D9PFxost.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cgs0OcHt.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ -p 8080:80
+-p: command not found
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 12:18:53 UTC 2026
+
+  System load:  0.0                Processes:             126
+  Usage of /:   48.6% of 28.89GB   Users logged in:       1
+  Memory usage: 18%                IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 11:53:54 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ sudo ss -lntp | grep 8080
+LISTEN 0      16384        0.0.0.0:8080       0.0.0.0:*    users:(("docker-proxy",pid=67105,fd=7))
+LISTEN 0      16384           [::]:8080          [::]:*    users:(("docker-proxy",pid=67110,fd=7))
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps
+CONTAINER ID   IMAGE        COMMAND                  CREATED         STATUS         PORTS                                     NAMES
+0df66cb304cf   formiq:1.0   "/docker-entrypoint.…"   7 minutes ago   Up 7 minutes   0.0.0.0:8080->80/tcp, [::]:8080->80/tcp   formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ sudo ufw status
+Status: inactive
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 12:32:22 UTC 2026
+
+  System load:  0.03               Processes:             127
+  Usage of /:   48.6% of 28.89GB   Users logged in:       0
+  Memory usage: 18%                IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 12:18:54 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ sudo ss -lntp | grep 8080
+LISTEN 0      16384        0.0.0.0:8080       0.0.0.0:*    users:(("docker-proxy",pid=67105,fd=7))
+LISTEN 0      16384           [::]:8080          [::]:*    users:(("docker-proxy",pid=67110,fd=7))
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ curl http:10.120.20.4:8080
+curl: (3) URL using bad/illegal format or missing URL
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 12:44:29 UTC 2026
+
+  System load:  0.0                Processes:             127
+  Usage of /:   48.6% of 28.89GB   Users logged in:       1
+  Memory usage: 18%                IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 12:32:23 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ cd applications
+axsdsmeadmin@AX-Innovation-vm:~/applications$ cd formIQ
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ$ cd Adobe-Form-Builder
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ curl http://127.0.0.1:8080
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FormIQ</title>
+    <script type="module" crossorigin src="/assets/index-D9PFxost.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cgs0OcHt.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ curl http://10.120.20.4:8080
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FormIQ</title>
+    <script type="module" crossorigin src="/assets/index-D9PFxost.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cgs0OcHt.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ docker ps
+CONTAINER ID   IMAGE        COMMAND                  CREATED          STATUS          PORTS                                     NAMES
+0df66cb304cf   formiq:1.0   "/docker-entrypoint.…"   32 minutes ago   Up 32 minutes   0.0.0.0:8080->80/tcp, [::]:8080->80/tcp   formiq
+axsdsmeadmin@AX-Innovation-vm:~/applications/formIQ/Adobe-Form-Builder$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ssh axsdsmeadmin@20.224.2.229
+*************************************************************************
+* This System is strictly restricted to authorized users only.
+* Any illegal access or use shall be punished with a related-law.
+* SAMSUNG SDS Inc *
+*************************************************************************
+axsdsmeadmin@20.224.2.229's password:
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1065-azure x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Wed Sep  9 12:55:33 UTC 2026
+
+  System load:  0.0                Processes:             127
+  Usage of /:   48.6% of 28.89GB   Users logged in:       0
+  Memory usage: 18%                IPv4 address for eth0: 10.120.20.4
+  Swap usage:   0%
+
+
+Expanded Security Maintenance for Applications is not enabled.
+
+52 updates can be applied immediately.
+52 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+2 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Wed Sep  9 12:44:30 2026 from 5.195.57.90
+axsdsmeadmin@AX-Innovation-vm:~$ docker ps -al
+CONTAINER ID   IMAGE        COMMAND                  CREATED          STATUS          PORTS                                     NAMES
+0df66cb304cf   formiq:1.0   "/docker-entrypoint.…"   43 minutes ago   Up 42 minutes   0.0.0.0:8080->80/tcp, [::]:8080->80/tcp   formiq
+axsdsmeadmin@AX-Innovation-vm:~$ client_loop: send disconnect: Connection reset
+PS C:\Users\User> ,5.195.57.90
