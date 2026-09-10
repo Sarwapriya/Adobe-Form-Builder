@@ -1,4 +1,20 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// VITE_API_BASE_URL is inlined at build time (see DEPLOYMENT.md) — if the
+// frontend was built without it set, import.meta.env.VITE_API_BASE_URL is
+// `undefined`, and naively template-stringing that into a URL produces the
+// literal path segment "undefined" (e.g. `/undefined/api/v1/auth/login`)
+// instead of a clear failure. Falling back to "" makes every request relative
+// to the page's own origin instead — correct when the backend is reverse-
+// proxied under the same origin as the frontend, and a much more diagnosable
+// failure (a normal 404, not a mangled URL) when it isn't.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+
+if (!import.meta.env.VITE_API_BASE_URL) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "VITE_API_BASE_URL was not set at build time — API requests will be sent relative to this page's " +
+      "own origin. If the backend isn't reverse-proxied under this same origin, every request will fail.",
+  );
+}
 
 let accessToken: string | null = null;
 
