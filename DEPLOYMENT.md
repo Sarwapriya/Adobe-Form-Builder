@@ -88,6 +88,42 @@ This produces a static `dist/` directory — deploy it to any static host/CDN. T
   `npm run build --workspace=packages/shared &&` in front of whatever build
   command your static-hosting CI is configured to run.
 
+### Docker (recommended for a single-VM deployment)
+
+The repo-root `Dockerfile` builds the SPA and serves it via nginx, which also
+**reverse-proxies `/api/` to the backend container** (see `nginx.conf`) — the
+browser only ever talks to the frontend's port; nginx forwards to the backend
+internally over a shared Docker network. This means:
+
+- Leave `VITE_API_BASE_URL` **unset** when building the frontend image — every
+  API call becomes a relative `/api/...` URL, so there's no build-time port/
+  host to keep in sync with wherever the backend happens to be running.
+- Frontend and backend end up on the same origin from the browser's
+  perspective, which sidesteps the CORS/cookie-`SameSite` topology question
+  in §4 below entirely — no `samesite="none"` code change needed even across
+  separate containers.
+
+```bash
+docker network create formiq-net
+
+docker build -f backend-py/Dockerfile -t formiq-backend .
+docker run -d --name formiq-backend --network formiq-net --restart unless-stopped \
+  --env-file backend-py/.env -v $(pwd)/backend-py/uploads:/app/uploads \
+  formiq-backend
+
+docker build -t formiq-frontend .
+docker run -d --name formiq --network formiq-net --restart unless-stopped \
+  -p 8080:80 formiq-frontend
+```
+
+Only port `8080` needs to be open in your VM's firewall/NSG — the backend's
+`4001` never needs to be exposed to the internet at all, since nginx reaches
+it by container name (`formiq-backend`) over the internal Docker network.
+
+Only pass `--build-arg VITE_API_BASE_URL=http://<host>:<port>` if the backend
+is deployed on a genuinely separate host with no shared nginx to proxy
+through — then it behaves like the general baked-in-at-build-time case above.
+
 ## 4. Cookie/CORS topology (important)
 
 Refresh-token and CSRF cookies are set with `SameSite=Strict`. Browsers only

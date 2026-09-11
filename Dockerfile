@@ -1,14 +1,12 @@
-# Frontend (repo root) — static SPA served by nginx.
-#
-# VITE_API_BASE_URL is inlined into the JS bundle at BUILD time, not read at
-# container runtime (see DEPLOYMENT.md) — it MUST be passed as a --build-arg
-# pointing at the backend's real, publicly-reachable URL:
-#
-#   docker build -t formiq-frontend \
-#     --build-arg VITE_API_BASE_URL=http://20.224.2.229:4001 .
-#
-# Rebuilding the image is the only way to change it — setting the env var on
-# `docker run` (or in a compose file) after the fact does nothing.
+# Frontend (repo root) — static SPA served by nginx, which also reverse-
+# proxies /api/ to the backend container (see nginx.conf) so the browser only
+# ever talks to ONE port — this one. Leave VITE_API_BASE_URL unset (the
+# default): every API call is then a relative /api/... URL, resolved by
+# nginx, not baked to a specific backend host/port at build time. Only pass
+# --build-arg VITE_API_BASE_URL=... if the backend is deployed on a genuinely
+# separate host from this frontend (no shared nginx to proxy through) — in
+# that case it's inlined into the JS bundle at BUILD time (Vite convention),
+# so rebuilding the image is the only way to change it.
 
 # node:20-bookworm-slim (glibc), not alpine — and `npm install`, not `npm ci`
 # with the committed package-lock.json. That lockfile was generated on
