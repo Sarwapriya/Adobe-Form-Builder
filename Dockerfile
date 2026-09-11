@@ -27,7 +27,7 @@ RUN npm install --include=optional
 
 COPY . .
 
-RUN npm run build --workspace=packages/shared && tsc -b
+RUN npm run build --workspace=packages/shared && npx tsc -b
 
 ARG SUBPATH=""
 ENV VITE_API_BASE_URL=${SUBPATH}
