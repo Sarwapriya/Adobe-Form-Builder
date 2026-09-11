@@ -35,6 +35,13 @@ function DefaultLanding() {
   return <Navigate to="/my-submissions" replace />;
 }
 
+// Vite's `base` build option (see Dockerfile's SUBPATH build-arg, for hosting
+// this app under a path prefix like /formiq on a shared multi-project hub)
+// always comes through as a trailing-slashed BASE_URL ("/", "/formiq/"); React
+// Router's `basename` wants no trailing slash, so this normalizes between the
+// two rather than hand-syncing a second constant that could drift from it.
+const ROUTER_BASENAME = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 export default function App() {
   const silentRefresh = useAuthStore((s) => s.silentRefresh);
   const user = useAuthStore((s) => s.user);
@@ -58,7 +65,7 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <ErrorBoundary>
-        <BrowserRouter>
+        <BrowserRouter basename={ROUTER_BASENAME}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 

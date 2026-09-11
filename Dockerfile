@@ -1,12 +1,15 @@
 # Frontend (repo root) — static SPA served by nginx, which also reverse-
-# proxies /api/ to the backend container (see nginx.conf) so the browser only
-# ever talks to ONE port — this one. Leave VITE_API_BASE_URL unset (the
-# default): every API call is then a relative /api/... URL, resolved by
-# nginx, not baked to a specific backend host/port at build time. Only pass
-# --build-arg VITE_API_BASE_URL=... if the backend is deployed on a genuinely
-# separate host from this frontend (no shared nginx to proxy through) — in
-# that case it's inlined into the JS bundle at BUILD time (Vite convention),
-# so rebuilding the image is the only way to change it.
+# proxies /api/ to the backend container (see nginx.conf.template) so the
+# browser only ever talks to ONE port — this one.
+#
+# SUBPATH controls whether this app is served from the domain root (default,
+# e.g. http://20.224.2.229:8080/) or from underneath a path prefix on a
+# shared multi-project hub (e.g. https://ax-hub.samsung.com/formiq/) — pass
+# `--build-arg SUBPATH=/formiq` for the latter. It drives three things at
+# once: Vite's `base` (so built asset URLs are correctly prefixed),
+# VITE_API_BASE_URL (so API calls go to <prefix>/api/... instead of /api/...),
+# and nginx's own location blocks (see nginx.conf.template). Baked in at BUILD
+# time — rebuilding the image is the only way to change it.
 
 # node:20-bookworm-slim (glibc), not alpine — and `npm install`, not `npm ci`
 # with the committed package-lock.json. That lockfile was generated on
@@ -24,11 +27,16 @@ RUN npm install --include=optional
 
 COPY . .
 
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
-RUN npm run build
+RUN npm run build --workspace=packages/shared && tsc -b
+
+ARG SUBPATH=""
+ENV VITE_API_BASE_URL=${SUBPATH}
+RUN npx vite build --base="${SUBPATH}/"
 
 FROM nginx:alpine
+ARG SUBPATH=""
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf.template /tmp/nginx.conf.template
+RUN sed "s#__SUBPATH__#${SUBPATH}#g" /tmp/nginx.conf.template > /etc/nginx/conf.d/default.conf \
+    && rm /tmp/nginx.conf.template
 EXPOSE 80

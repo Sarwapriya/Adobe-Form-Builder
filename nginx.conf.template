@@ -1,0 +1,32 @@
+server {
+    listen 80;
+    server_name _;
+    index index.html;
+
+    # Reverse-proxies the backend under this SAME origin/port, so the browser
+    # never talks to the backend's own port directly. "formiq-backend" is the
+    # backend container's name — both containers must share a Docker network
+    # (see Dockerfile/DEPLOYMENT.md) for nginx to resolve it.
+    #
+    # __SUBPATH__ is substituted by the Dockerfile at build time (empty string
+    # for a root deployment, e.g. "/formiq" for a shared-hub deployment under
+    # that path prefix) — collapsing this line to plain "/api/"/"/" below
+    # exactly reproduces a root deployment, so the two cases share one file.
+    location __SUBPATH__/api/ {
+        proxy_pass http://formiq-backend:4001/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # `alias`, not `root` — strips __SUBPATH__ before mapping to the
+    # filesystem (dist/ has no knowledge of the prefix; only the built HTML/JS
+    # asset URLs do, via Vite's `base`). React Router (client-side routing) —
+    # any path under __SUBPATH__/ that isn't a real static file falls back to
+    # __SUBPATH__/index.html instead of nginx returning its own 404.
+    location __SUBPATH__/ {
+        alias /usr/share/nginx/html/;
+        try_files $uri $uri/ __SUBPATH__/index.html;
+    }
+}

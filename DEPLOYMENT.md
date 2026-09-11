@@ -91,9 +91,10 @@ This produces a static `dist/` directory — deploy it to any static host/CDN. T
 ### Docker (recommended for a single-VM deployment)
 
 The repo-root `Dockerfile` builds the SPA and serves it via nginx, which also
-**reverse-proxies `/api/` to the backend container** (see `nginx.conf`) — the
-browser only ever talks to the frontend's port; nginx forwards to the backend
-internally over a shared Docker network. This means:
+**reverse-proxies `/api/` to the backend container** (see
+`nginx.conf.template`) — the browser only ever talks to the frontend's port;
+nginx forwards to the backend internally over a shared Docker network. This
+means:
 
 - Leave `VITE_API_BASE_URL` **unset** when building the frontend image — every
   API call becomes a relative `/api/...` URL, so there's no build-time port/
@@ -119,6 +120,43 @@ docker run -d --name formiq --network formiq-net --restart unless-stopped \
 Only port `8080` needs to be open in your VM's firewall/NSG — the backend's
 `4001` never needs to be exposed to the internet at all, since nginx reaches
 it by container name (`formiq-backend`) over the internal Docker network.
+
+### Serving under a path prefix (shared hub domain)
+
+If this app is reached via a path prefix on a shared domain — e.g.
+`ax-hub.samsung.com/formiq` — rather than its own domain/port, a thin
+top-level gateway (one nginx, on whatever host owns that domain) should
+forward that path prefix to this app's own containers, unmodified:
+
+```nginx
+# On the gateway host (NOT this repo)
+location /formiq/ {
+    proxy_pass http://<this-vm-ip-or-hostname>:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Note there's no trailing slash after the port in `proxy_pass` — the full
+`/formiq/...` path is forwarded through unchanged.
+
+This repo's own `Dockerfile`/`nginx.conf.template` handle their end of that
+via a single `SUBPATH` build arg, which drives Vite's `base` (so built asset
+URLs come out correctly prefixed — a browser resolves an unprefixed absolute
+URL like `/assets/x.js` against the domain root, not the current subpath, so
+this is unavoidable, not just cosmetic), `VITE_API_BASE_URL` (so API calls go
+to `/formiq/api/...`), and nginx's own location blocks, all at once:
+
+```bash
+docker build -t formiq-frontend --build-arg SUBPATH=/formiq .
+docker run -d --name formiq --network formiq-net --restart unless-stopped \
+  -p 8080:80 formiq-frontend
+```
+
+Leaving `SUBPATH` unset (or empty) reproduces the plain root deployment
+above byte-for-byte — the same image/Dockerfile serves both cases.
 
 Only pass `--build-arg VITE_API_BASE_URL=http://<host>:<port>` if the backend
 is deployed on a genuinely separate host with no shared nginx to proxy
