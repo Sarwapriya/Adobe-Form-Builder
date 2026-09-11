@@ -459,7 +459,7 @@ export function AppLayout() {
           <Tooltip title={collapsed ? panelLabel : ""} placement="right">
             <Box
               component="img"
-              src="/logo.png"
+              src={`${import.meta.env.BASE_URL}logo.png`}
               alt="FormIQ"
               sx={{
                 width: 36,

@@ -59,7 +59,12 @@ export function LoginPage() {
         }}
       >
         <Stack alignItems="center" spacing={1} sx={{ mb: 3, textAlign: "center" }}>
-          <Box component="img" src="/logo.png" alt="FormIQ" sx={{ width: 180, height: 180, objectFit: "contain" }} />
+          <Box
+            component="img"
+            src={`${import.meta.env.BASE_URL}logo.png`}
+            alt="FormIQ"
+            sx={{ width: 180, height: 180, objectFit: "contain" }}
+          />
           <Typography variant="body2" color="text.secondary" sx={{ pt: 1 }}>
             Sign in to create and manage campaign forms from one place.
           </Typography>
