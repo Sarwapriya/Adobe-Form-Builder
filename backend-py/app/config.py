@@ -62,6 +62,14 @@ class Settings(BaseSettings):
 
     FORMBUILDER_NOTIFY_EMAIL: Optional[str] = None
 
+    # --- MCP-SQL (Model Context Protocol server the AI assistant chat calls
+    # for live-database Q&A — see app/services/mcp_sql_client.py). No admin-UI
+    # config layer yet (unlike FabriX/Groq) since this is a single trusted
+    # internal server with no auth today; add one later if that changes. ---
+    MCP_SQL_SERVER_URL: Optional[str] = None
+    MCP_SQL_ENABLED: bool = True
+    MCP_SQL_TIMEOUT_SECONDS: int = 30
+
     # --- DKMS (PII encryption/hashing service) ---
     # Base URL only (no trailing /dkms/v1/... suffix) — app/security/dkms_client.py
     # appends the specific endpoint path. taskId is sent on every encrypt call, per

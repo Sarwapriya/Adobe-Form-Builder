@@ -31,6 +31,7 @@ from app.services.aiCampaignTools import (
     search_questions,
     validate_form,
 )
+from app.services import mcp_sql_client
 from app.services.aiProviderService import send_message as send_ai_message
 from app.services.aiSystemPrompt import build_system_prompt
 
@@ -150,7 +151,8 @@ async def send_chat_message(
             if campaign:
                 campaign_context_json = json.dumps(campaign)
 
-        base_turns = _build_base_turns(campaign_context_json, prior_history, auth)
+        mcp_tools_section = await _build_mcp_tools_section()
+        base_turns = _build_base_turns(campaign_context_json, prior_history, auth, mcp_tools_section)
         user_turn = {"role": "user", "content": _section("USER MESSAGE", request["message"])}
 
         initial = await send_ai_message({"messages": [*base_turns, user_turn]}, db)
@@ -242,10 +244,46 @@ def _load_history(db: Session, conversation_id: str) -> list[AIConversationMessa
     return rows
 
 
+async def _build_mcp_tools_section() -> Optional[str]:
+    """Describes the MCP-SQL server's live tool set to the LLM, so it can
+    issue a generic `MCP_TOOL` call naming one of them — see the module
+    docstring on mcp_sql_client.py for why this is a real MCP client rather
+    than another entry in this app's own fenced-JSON tool convention. Returns
+    None (section omitted entirely) when MCP-SQL isn't configured/reachable,
+    rather than describing a capability that doesn't actually work."""
+    if not mcp_sql_client.is_enabled():
+        return None
+    listed = await mcp_sql_client.list_tools()
+    if not listed["ok"] or not listed["tools"]:
+        return None
+
+    lines = [
+        "The following tools are available via a connected database-query service (MCP), giving you "
+        "broader, more flexible access to the live database than the fixed FormIQ tools above. Use "
+        "these ALONGSIDE SEARCH_CAMPAIGNS/GET_CAMPAIGN/SEARCH_QUESTIONS/FIND_SIMILAR_CAMPAIGNS/"
+        "FIND_SIMILAR_QUESTIONS, not instead of them — they're especially useful when: the FormIQ "
+        "tools return no match or too few results, the user asks a question spanning many campaigns at "
+        "once (e.g. \"what questions have we used for NPS campaigns across all subsidiaries\"), or "
+        "answering well requires combining/filtering data in a way those fixed tools don't support. "
+        "When a user is creating a new campaign, checking these tools too — not just the FormIQ ones — "
+        "gives you a fuller picture of relevant prior campaigns and their exact questions to reuse or "
+        "adapt, which is the whole point of consulting history before proposing something new. Call one with:",
+        '```json',
+        '{"tool": "MCP_TOOL", "args": {"name": "<tool name below>", "arguments": { ... per that tool\'s input schema ... }}}',
+        '```',
+        "",
+    ]
+    for t in listed["tools"]:
+        lines.append(f"- {t['name']}: {t['description']}")
+        lines.append(f"  input schema: {json.dumps(t['inputSchema'])}")
+    return "\n".join(lines)
+
+
 def _build_base_turns(
     campaign_context_json: Optional[str],
     history_rows: list[AIConversationMessage],
     auth: dict,
+    mcp_tools_section: Optional[str] = None,
 ) -> list[dict[str, str]]:
     user_ctx = _build_user_context(auth)
     system_content = (
@@ -255,6 +293,8 @@ def _build_base_turns(
         + "use their own subsidiaryId from the context above."
     )
     turns: list[dict[str, str]] = [{"role": "system", "content": system_content}]
+    if mcp_tools_section:
+        turns.append({"role": "system", "content": _section("DATABASE QUERY TOOLS", mcp_tools_section)})
     if campaign_context_json:
         turns.append({"role": "system", "content": _section("CAMPAIGN DATA", campaign_context_json)})
     for row in history_rows:
@@ -340,6 +380,11 @@ async def _execute_readonly_tool(
         return find_similar_questions(db, ctx, args)
     if tool == "VALIDATE_FORM":
         return validate_form(db, ctx, args)
+    if tool == "MCP_TOOL":
+        mcp_result = await mcp_sql_client.call_tool(args.get("name", ""), args.get("arguments") or {})
+        if not mcp_result["ok"]:
+            return {"error": mcp_result["error"]}
+        return mcp_result["result"]
     raise ValueError(f"not a read-only tool: {tool}")
 
 
