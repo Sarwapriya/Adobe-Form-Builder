@@ -22,7 +22,7 @@ from app.services.admin_settings_service import get_admin_setting, set_admin_set
 SftpEnvironment = Literal["staging", "production"]
 
 DEFAULT_PORT = 22
-DEFAULT_REMOTE_PATH = "/incoming/ACC/Operations/LocalHR/DWF/ToProcess"
+DEFAULT_REMOTE_PATH = "/incoming/ACC/Operations/HRForms/ToProcess"
 
 
 @dataclass

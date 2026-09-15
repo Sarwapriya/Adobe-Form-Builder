@@ -111,7 +111,7 @@ function SftpTargetPanel({
             value={form.remotePath}
             onChange={(e) => setForm((f) => ({ ...f, remotePath: e.target.value }))}
             required
-            placeholder="/incoming/ACC/Operations/LocalHR/DWF/ToProcess"
+            placeholder="/incoming/ACC/Operations/HRForms/ToProcess"
           />
         </Stack>
         <Button type="submit" size="small" variant="contained" disabled={!form.host.trim() || !form.username.trim() || !form.privateKeyPath.trim() || saving}>
