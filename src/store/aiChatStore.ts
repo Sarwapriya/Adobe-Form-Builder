@@ -24,6 +24,27 @@ import { useAuthStore } from "../auth/authStore";
  * intentionally read as opposites of each other, same as the sidebar. */
 const OPEN_STORAGE_KEY = "aiChatCollapsed";
 
+/** `crypto.randomUUID()` only exists in a "secure context" (HTTPS or
+ * localhost) — on a plain-HTTP deployment it's `undefined`, so calling it
+ * throws `TypeError: crypto.randomUUID is not a function` and aborts
+ * `sendMessage` before any request goes out. `crypto.getRandomValues` has no
+ * such restriction, so it's used here to build a v4 UUID by hand instead;
+ * these ids are only ever used as client-local React list keys, never sent
+ * to the backend or relied on for anything security-sensitive. */
+function generateMessageId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 /** Client-local chat turn shape for rendering — deliberately simpler than the
  * backend's AIConversationMessageView (no need to mirror role: "system"|"tool"
  * turns, which the UI never renders directly). `references` is populated on
@@ -165,7 +186,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
     if (!trimmed) return;
 
     const { formId, conversationId } = get();
-    const userMessage: AiChatMessage = { id: crypto.randomUUID(), role: "user", text: trimmed };
+    const userMessage: AiChatMessage = { id: generateMessageId(), role: "user", text: trimmed };
     set((s) => ({ messages: [...s.messages, userMessage], loading: true, error: null }));
 
     try {
@@ -175,7 +196,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
         message: trimmed,
       });
       const assistantMessage: AiChatMessage = {
-        id: crypto.randomUUID(),
+        id: generateMessageId(),
         role: "assistant",
         text: response.message,
         references: response.references.length > 0 ? response.references : undefined,
