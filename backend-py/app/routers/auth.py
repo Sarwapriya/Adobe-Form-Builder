@@ -52,7 +52,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         # Only requires HTTPS in production — local HTTP development would
         # never receive the cookie back if this were unconditionally true.
         secure=settings.is_production,
-        samesite="strict",
+        samesite=settings.COOKIE_SAMESITE,
         path=REFRESH_COOKIE_PATH,
         max_age=REFRESH_TOKEN_TTL_SECONDS,
     )

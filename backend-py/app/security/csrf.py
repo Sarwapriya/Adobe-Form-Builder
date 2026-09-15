@@ -29,7 +29,7 @@ def issue_csrf_cookie(response: Response) -> None:
         value=token,
         httponly=False,
         secure=settings.is_production,
-        samesite="strict",
+        samesite=settings.COOKIE_SAMESITE,
         path="/",
     )
 

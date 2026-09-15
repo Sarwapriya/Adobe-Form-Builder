@@ -176,14 +176,17 @@ completely unrelated domains are not). Two deployment shapes:
   frontend build.
 - **Unrelated domains** — e.g. a frontend host that assigns you
   `myapp.vercel.app` and a backend host that assigns you
-  `myapi.onrender.com`. These do **not** share a registrable domain, so
-  `SameSite=Strict` cookies will never be sent cross-site — login would
-  appear to work (the initial response arrives fine) but the session
-  wouldn't persist (refresh/logout would silently fail). If you must deploy
-  this way, `app/routers/auth.py`'s and `app/middleware/csrf.py`'s cookie
-  options need `samesite="none"` instead of `"strict"` (still `secure=True`,
-  still HTTPS-only) — a deliberate code change, not just config, so decide
-  your deployment topology before you need it.
+  `myapi.onrender.com` (or, just as commonly, two bare IP addresses/ports on
+  a VM with no shared domain at all). These do **not** share a registrable
+  domain, so `SameSite=Strict` cookies will never be sent cross-site — login
+  would appear to work (the initial response arrives fine, since it doesn't
+  depend on a cookie yet) but the session wouldn't persist: a page refresh
+  (or any call to `/auth/refresh`) silently fails to send the cookie back,
+  which the frontend can't distinguish from "not logged in", so the user
+  gets bounced to `/login`. If you must deploy this way, set
+  `COOKIE_SAMESITE=none` in `backend-py/.env` (see `.env.example`) — this
+  still requires `NODE_ENV=production` and real HTTPS on both hosts, since
+  browsers reject a `SameSite=None` cookie that isn't also `Secure`.
 
 ## 5. Local development workflow
 

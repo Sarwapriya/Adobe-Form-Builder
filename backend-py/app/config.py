@@ -92,6 +92,17 @@ class Settings(BaseSettings):
     NODE_ENV: Optional[str] = None
     PORT: int = 4001
 
+    # SameSite attribute for the refresh-token/CSRF cookies (app/routers/auth.py,
+    # app/security/csrf.py). Defaults to "strict", which only works when the
+    # frontend and backend share a registrable domain (see DEPLOYMENT.md §4).
+    # When they're on unrelated hosts/domains, browsers never send a
+    # SameSite=Strict cookie cross-site — login appears to succeed but the
+    # session cookie never gets sent back, so a page refresh (or /auth/refresh)
+    # silently logs the user out. Set to "none" in that topology — it requires
+    # secure=True (i.e. NODE_ENV=production and HTTPS) or browsers reject the
+    # cookie outright.
+    COOKIE_SAMESITE: str = "strict"
+
     # --- One-time admin seed (TODO(phase N): seed script equivalent) ---
     ADMIN_USER: Optional[str] = None
     ADMIN_EMAIL: Optional[str] = None
