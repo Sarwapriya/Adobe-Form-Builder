@@ -121,9 +121,14 @@ def deploy_generated_files(db: Session, files: list[SftpDeployFile]) -> SftpDepl
 def _load_private_key(path: str) -> paramiko.PKey:
     """Tries each key type paramiko supports in turn, matching
     `ssh2-sftp-client`'s auto-detection (the Node side never requires the
-    admin to specify a key format)."""
+    admin to specify a key format). DSA/DSS deliberately excluded — it's been
+    obsolete for years (OpenSSH disabled it by default well before this was
+    written) and newer paramiko releases (5.x) dropped `DSSKey` from the
+    module entirely, which made referencing it here unconditionally crash
+    with `AttributeError` before ever attempting RSA/Ed25519/ECDSA — i.e. no
+    key of any type could ever load, not just DSA ones."""
     last_error: Exception | None = None
-    for loader in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey, paramiko.DSSKey):
+    for loader in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
         try:
             return loader.from_private_key_file(path)
         except Exception as err:  # noqa: BLE001
