@@ -4,11 +4,13 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
 import { useAuthStore } from "../auth/authStore";
 import { showToast } from "../store/toastStore";
+import { useThemeModeStore } from "../store/themeModeStore";
 
 export function LoginPage() {
   const status = useAuthStore((s) => s.status);
   const error = useAuthStore((s) => s.error);
   const login = useAuthStore((s) => s.login);
+  const mode = useThemeModeStore((s) => s.mode);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -61,7 +63,7 @@ export function LoginPage() {
         <Stack alignItems="center" spacing={1} sx={{ mb: 3, textAlign: "center" }}>
           <Box
             component="img"
-            src={`${import.meta.env.BASE_URL}logo.png`}
+            src={`${import.meta.env.BASE_URL}${mode === "dark" ? "logo-dark.png" : "logo.png"}`}
             alt="FormIQ"
             sx={{ width: 180, height: 180, objectFit: "contain" }}
           />
