@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.middleware.rate_limit import AUTH_RATE_LIMIT, limiter
+from app.security import dkms_client
 from app.security.csrf import issue_csrf_cookie, require_csrf_token
 from app.security.deps import require_auth
 from app.services.auth_service import (
@@ -102,8 +103,14 @@ async def login(request: Request, body: LoginRequest, db: Session = Depends(get_
             username=user.username,
             role=user.role,
             subsidiaryId=user.subsidiaryId,
-            firstName=user.firstName,
-            lastName=user.lastName,
+            # user.firstName/lastName are DKMS ciphertext at rest — must be
+            # decrypted before going out in the JSON body, same as
+            # issue_access_token already does for the JWT payload. Without
+            # this the frontend shows raw ciphertext as the display name
+            # immediately after login (a page refresh looked fine since
+            # silentRefresh reads the — correctly decrypted — JWT instead).
+            firstName=dkms_client.decrypt_or_none(user.firstName),
+            lastName=dkms_client.decrypt_or_none(user.lastName),
         ),
     )
     response = JSONResponse(content=payload.model_dump())
