@@ -8,6 +8,7 @@ functions.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -151,7 +152,7 @@ async def send_chat_message(
             if campaign:
                 campaign_context_json = json.dumps(campaign)
 
-        mcp_tools_section = await _build_mcp_tools_section()
+        mcp_tools_section = await _build_mcp_tools_section(auth["role"])
         base_turns = _build_base_turns(campaign_context_json, prior_history, auth, mcp_tools_section)
         user_turn = {"role": "user", "content": _section("USER MESSAGE", request["message"])}
 
@@ -244,13 +245,25 @@ def _load_history(db: Session, conversation_id: str) -> list[AIConversationMessa
     return rows
 
 
-async def _build_mcp_tools_section() -> Optional[str]:
+async def _build_mcp_tools_section(role: str) -> Optional[str]:
     """Describes the MCP-SQL server's live tool set to the LLM, so it can
     issue a generic `MCP_TOOL` call naming one of them — see the module
     docstring on mcp_sql_client.py for why this is a real MCP client rather
     than another entry in this app's own fenced-JSON tool convention. Returns
     None (section omitted entirely) when MCP-SQL isn't configured/reachable,
-    rather than describing a capability that doesn't actually work."""
+    rather than describing a capability that doesn't actually work.
+
+    Admin/superadmin only: unlike the fixed FormIQ tools above (which filter
+    by the caller's subsidiaryId via _list_caller_forms/get_caller_form_detail),
+    MCP's tools are raw schema/SQL access with no concept of the caller at
+    all — exposing them to a subsidiary-scoped standard user would let them
+    read data outside their own subsidiary. Mirrors this app's existing
+    "admins see everything, standard users are subsidiary-scoped" model
+    (dashboards, Question Master) rather than inventing a new tier of trust.
+    Enforced again in _execute_readonly_tool's MCP_TOOL branch as a
+    defense-in-depth backstop."""
+    if not is_admin_role(role):
+        return None
     if not mcp_sql_client.is_enabled():
         return None
     listed = await mcp_sql_client.list_tools()
@@ -381,11 +394,48 @@ async def _execute_readonly_tool(
     if tool == "VALIDATE_FORM":
         return validate_form(db, ctx, args)
     if tool == "MCP_TOOL":
-        mcp_result = await mcp_sql_client.call_tool(args.get("name", ""), args.get("arguments") or {})
-        if not mcp_result["ok"]:
-            return {"error": mcp_result["error"]}
-        return mcp_result["result"]
+        return await _execute_mcp_tool(ctx, args)
     raise ValueError(f"not a read-only tool: {tool}")
+
+
+# MCP-SQL tools that execute arbitrary/parameterized T-SQL with no built-in
+# restriction to SELECT — the only two _MUTATING_SQL_KEYWORDS below actually
+# needs to guard, since every other MCP-SQL tool (list_connections,
+# get_database_schema, get_table_sample, find_related_tables,
+# get_query_execution_plan, refresh_schema_cache) is inherently read-only by
+# what it does, not by what text it's handed.
+_MCP_SQL_EXECUTION_TOOLS = {"execute_sql_query", "execute_parameterized_query"}
+
+# Best-effort, not a real SQL parser — a cheap FormIQ-side backstop in case
+# the MCP server's own DB credentials aren't strictly read-only (the spec
+# frames the MCP server itself as the DB-access authority, so this is
+# defense-in-depth, not the primary control).
+_MUTATING_SQL_KEYWORDS = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|MERGE|EXEC|EXECUTE|GRANT|REVOKE|CREATE)\b",
+    re.IGNORECASE,
+)
+
+
+async def _execute_mcp_tool(ctx: AiToolCallerContext, args: dict[str, Any]) -> Any:
+    """Admin-only (see _build_mcp_tools_section's doc comment for why) —
+    re-checked here as a defense-in-depth backstop in case a non-admin
+    conversation somehow contains a fenced MCP_TOOL call (stale history,
+    prompt injection), since this function is the one place every such call
+    actually reaches the network."""
+    if not is_admin_role(ctx["role"]):
+        return {"error": "MCP-SQL tools are only available to admin accounts"}
+
+    name = args.get("name", "")
+    arguments = args.get("arguments") or {}
+    if name in _MCP_SQL_EXECUTION_TOOLS:
+        query_text = arguments.get("query") or arguments.get("query_template") or ""
+        if _MUTATING_SQL_KEYWORDS.search(query_text):
+            return {"error": "This assistant is read-only; mutating SQL statements are not permitted."}
+
+    mcp_result = await mcp_sql_client.call_tool(name, arguments)
+    if not mcp_result["ok"]:
+        return {"error": mcp_result["error"]}
+    return mcp_result["result"]
 
 
 async def _handle_mutating_tool(

@@ -82,6 +82,10 @@ CONFIRMATION_DISCIPLINE = """
 Do not claim an action was completed, a question was added, a campaign was created, or any other change was made until the backend has actually confirmed that action succeeded. Proposing a change and the change taking effect are two different steps — always speak in terms of "I've proposed..." or "you can confirm this to..." until you have explicit confirmation that it happened.
 """.strip()
 
+FACTS_VS_SUGGESTIONS_DISCIPLINE = """
+When an answer combines real data from a tool result with your own inference or recommendation, clearly distinguish the two — never present a suggestion as if it were a retrieved fact. State what a tool/database result actually showed plainly and directly; preface anything you're inferring, recommending, or generalizing beyond that with language like "Based on what I'm seeing..." or "I'd suggest..." so the user can always tell which parts are verified data and which are your own judgment.
+""".strip()
+
 
 def build_system_prompt() -> str:
     """Builds the complete system-prompt text sent as the first turn of every AI conversation."""
@@ -96,6 +100,8 @@ def build_system_prompt() -> str:
         SECTION_FRAMING,
         "",
         CONFIRMATION_DISCIPLINE,
+        "",
+        FACTS_VS_SUGGESTIONS_DISCIPLINE,
         "",
         CAMPAIGN_TERMINOLOGY_DISCIPLINE,
         "",
