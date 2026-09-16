@@ -92,6 +92,18 @@ class Settings(BaseSettings):
     NODE_ENV: Optional[str] = None
     PORT: int = 4001
 
+    # Mirrors the frontend Dockerfile's SUBPATH build arg (e.g. "/formiq" for
+    # a shared-hub deployment) — purely a frontend/nginx concept until now,
+    # but the refresh-token cookie's Path attribute (see auth.py) needs it
+    # too: a browser matches a cookie's Path against the actual external
+    # request URL it made (e.g. "/formiq/api/v1/auth/refresh"), not whatever
+    # path the request is rewritten to internally by nginx before reaching
+    # this backend — so a cookie scoped to the bare "/api/v1/auth" is never
+    # sent back on a subpath deployment, breaking session refresh entirely
+    # despite the backend itself only ever seeing subpath-free paths. Leave
+    # unset/empty for a root deployment (default, unchanged behavior).
+    SUBPATH: str = ""
+
     # SameSite attribute for the refresh-token/CSRF cookies (app/routers/auth.py,
     # app/security/csrf.py). Defaults to "strict", which only works when the
     # frontend and backend share a registrable domain (see DEPLOYMENT.md §4).

@@ -41,8 +41,14 @@ router = APIRouter()
 
 REFRESH_COOKIE_NAME = "refreshToken"
 # Scoped so the browser only ever sends this cookie back to the auth
-# endpoints that actually need it, not every request to the API.
-REFRESH_COOKIE_PATH = "/api/v1/auth"
+# endpoints that actually need it, not every request to the API. Prefixed
+# with settings.SUBPATH (e.g. "/formiq") on a shared-hub deployment — a
+# cookie's Path is matched by the browser against the real external request
+# URL, which still carries the subpath even though nginx strips it before
+# the request reaches this backend; without the prefix here, a subpath
+# deployment's refresh cookie would never be sent back at all (see
+# config.py's SUBPATH doc comment for the full explanation).
+REFRESH_COOKIE_PATH = f"{settings.SUBPATH.rstrip('/')}/api/v1/auth"
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
