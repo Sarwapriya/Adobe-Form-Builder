@@ -40,6 +40,12 @@ def is_enabled() -> bool:
     return bool(settings.MCP_SQL_ENABLED and settings.MCP_SQL_SERVER_URL)
 
 
+def _auth_headers() -> Optional[dict[str, str]]:
+    if settings.MCP_SQL_AUTH_TOKEN:
+        return {"Authorization": f"Bearer {settings.MCP_SQL_AUTH_TOKEN}"}
+    return None
+
+
 async def list_tools(*, use_cache: bool = True) -> dict[str, Any]:
     """Returns `{"ok": True, "tools": [{"name", "description", "inputSchema"}, ...]}`
     or `{"ok": False, "error": str}`. Never raises."""
@@ -59,7 +65,7 @@ async def list_tools(*, use_cache: bool = True) -> dict[str, Any]:
 
     try:
         async with streamablehttp_client(
-            settings.MCP_SQL_SERVER_URL, timeout=settings.MCP_SQL_TIMEOUT_SECONDS
+            settings.MCP_SQL_SERVER_URL, headers=_auth_headers(), timeout=settings.MCP_SQL_TIMEOUT_SECONDS
         ) as (read, write, _get_session_id):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -96,7 +102,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
     try:
         async with streamablehttp_client(
-            settings.MCP_SQL_SERVER_URL, timeout=settings.MCP_SQL_TIMEOUT_SECONDS
+            settings.MCP_SQL_SERVER_URL, headers=_auth_headers(), timeout=settings.MCP_SQL_TIMEOUT_SECONDS
         ) as (read, write, _get_session_id):
             async with ClientSession(read, write) as session:
                 await session.initialize()

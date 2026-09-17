@@ -64,9 +64,16 @@ class Settings(BaseSettings):
 
     # --- MCP-SQL (Model Context Protocol server the AI assistant chat calls
     # for live-database Q&A — see app/services/mcp_sql_client.py). No admin-UI
-    # config layer yet (unlike FabriX/Groq) since this is a single trusted
-    # internal server with no auth today; add one later if that changes. ---
+    # config layer yet (unlike FabriX/Groq), env vars only.
+    # MCP_SQL_SERVER_URL: on the VM, point this at the container's internal
+    # Docker-network address (e.g. http://mcp-mssql:8000/mcp) — it's on the
+    # same `formiq-net` network as the backend, so this avoids round-tripping
+    # through the public gateway. Running the backend locally (outside that
+    # Docker network) instead needs the public gateway URL
+    # (http://ax-hub.samsung.com/mcp-mssql) plus MCP_SQL_AUTH_TOKEN below,
+    # since the gateway route is bearer-token protected.
     MCP_SQL_SERVER_URL: Optional[str] = None
+    MCP_SQL_AUTH_TOKEN: Optional[str] = None
     MCP_SQL_ENABLED: bool = True
     MCP_SQL_TIMEOUT_SECONDS: int = 30
 
