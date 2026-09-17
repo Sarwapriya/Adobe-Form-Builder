@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import type { AnswerDefinition, LocaleCode } from "@formbuilder/shared";
 import { localeDir } from "../../utils/localeDir";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 
 /** A brand-new answer option this subsidiary user is proposing for an EXISTING
  * question (not one added via AddQuestionDialog, which carries its own answers
@@ -22,6 +23,7 @@ export function AddAnswerDialog({
   locales: string[];
   onAdd: (answer: AnswerDefinition) => void;
 }) {
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [locale, setLocale] = useState(defaultLocale);
   const [textByLocale, setTextByLocale] = useState<Record<string, string>>({});
 
@@ -49,7 +51,7 @@ export function AddAnswerDialog({
   const canAdd = (textByLocale[defaultLocale] ?? "").trim() !== "";
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+    <Dialog {...responsiveDialogProps} open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle>Add an option</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>

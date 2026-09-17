@@ -40,6 +40,7 @@ import {
 import { downloadBlob } from "../utils/download";
 import { PageHeader } from "../components/common/PageHeader";
 import { showToast } from "../store/toastStore";
+import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
 /**
  * Admin-only: generates a versioned "Question Master" .xlsx per project code —
@@ -51,6 +52,7 @@ import { showToast } from "../store/toastStore";
  */
 export function QuestionMasterPage() {
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [projectCode, setProjectCode] = useState("");
 
   const [readiness, setReadiness] = useState<QuestionMasterReadinessItem[]>([]);
@@ -313,7 +315,7 @@ export function QuestionMasterPage() {
         </>
       )}
 
-      <Dialog open={generateOpen} onClose={() => (!generating ? setGenerateOpen(false) : undefined)} maxWidth="xs" fullWidth>
+      <Dialog {...responsiveDialogProps} open={generateOpen} onClose={() => (!generating ? setGenerateOpen(false) : undefined)} maxWidth="xs" fullWidth>
         <DialogTitle>Generate Question Master — {projectCode}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -339,7 +341,7 @@ export function QuestionMasterPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={notLockedNoticeOpen} onClose={() => setNotLockedNoticeOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog {...responsiveDialogProps} open={notLockedNoticeOpen} onClose={() => setNotLockedNoticeOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <WarningAmberIcon color="warning" />
           Still not locked this project

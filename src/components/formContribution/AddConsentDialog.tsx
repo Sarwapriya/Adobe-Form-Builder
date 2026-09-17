@@ -3,6 +3,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, St
 import type { ConsentDefinition, LocaleCode } from "@formbuilder/shared";
 import { useFormContributionStore } from "../../store/formContributionStore";
 import { localeDir } from "../../utils/localeDir";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 
 /** A brand-new consent checkbox this subsidiary user is proposing — same
  * per-locale text convention as AddQuestionDialog (this is genuinely new content,
@@ -23,6 +24,7 @@ export function AddConsentDialog({
   locales: string[];
 }) {
   const addConsent = useFormContributionStore((s) => s.addConsent);
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [locale, setLocale] = useState(defaultLocale);
   const [textByLocale, setTextByLocale] = useState<Record<string, string>>({});
   const [linkUrlByLocale, setLinkUrlByLocale] = useState<Record<string, string>>({});
@@ -67,7 +69,7 @@ export function AddConsentDialog({
   const dir = localeDir(locale);
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+    <Dialog {...responsiveDialogProps} open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle>Add a consent</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>

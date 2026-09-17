@@ -26,6 +26,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { alpha } from "@mui/material/styles";
 import { ApiError } from "../../api/apiClient";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 import {
   createQaRun,
   downloadQaReport,
@@ -91,6 +92,7 @@ export function QaRunDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [variant, setVariant] = useState<QaRunVariant>(availableVariants[0] ?? "ff");
   const [runs, setRuns] = useState<QaRun[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
@@ -192,7 +194,7 @@ export function QaRunDialog({
   const isRunActive = selectedRun?.status === "pending" || selectedRun?.status === "running";
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog {...responsiveDialogProps} open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Typography variant="h6" fontWeight={700}>
           QA automation

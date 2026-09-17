@@ -28,6 +28,7 @@ import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
 import { showToast } from "../store/toastStore";
+import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
 const STATUS_COLOR: Record<FormStatus, "default" | "success" | "warning"> = {
   draft: "default",
@@ -58,6 +59,7 @@ const STATUS_OPTIONS: Array<{ value: FormStatus | ""; label: string }> = [
 export function AdHocFormInitiatorListPage() {
   const navigate = useNavigate();
   const [forms, setForms] = useState<FormListItem[]>([]);
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<FormStatus | "">("");
   const [pendingReviewOnly, setPendingReviewOnly] = useState(false);
@@ -252,7 +254,7 @@ export function AdHocFormInitiatorListPage() {
         onCancel={() => setConfirmDeleteForm(null)}
       />
 
-      <Dialog open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
+      <Dialog {...responsiveDialogProps} open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
         <Box component="form" onSubmit={handleCreate}>
           <DialogTitle>New Form (copy)</DialogTitle>
           <DialogContent>

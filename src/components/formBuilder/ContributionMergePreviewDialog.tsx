@@ -5,6 +5,7 @@ import { applyContribution, generateSolution, resolveFileNames, type BuilderConf
 import { buildPreviewDocument } from "../../codegen/previewDocument";
 import type { ContributionSummary } from "../../api/formBuilderApi";
 import { useThemeModeStore } from "../../store/themeModeStore";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 
 /**
  * Admin-facing preview of a single subsidiary contribution merged onto the
@@ -30,6 +31,7 @@ export function ContributionMergePreviewDialog({
   baseDefinition: FormDefinition | null;
   baseConfig: BuilderConfig | null;
 }) {
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [variant, setVariant] = useState<FormVariant>("ff");
   const [locale, setLocale] = useState<string>("");
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export function ContributionMergePreviewDialog({
   }, [open, definition, baseConfig, variant, locale, previewColorScheme]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>
+    <Dialog {...responsiveDialogProps} open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 2 }}>
         <Box sx={{ flexGrow: 1 }}>Preview with contribution applied</Box>
         {availableVariants.length > 1 && (

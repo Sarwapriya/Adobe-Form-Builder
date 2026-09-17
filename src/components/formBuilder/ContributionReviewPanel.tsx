@@ -34,6 +34,7 @@ import { ContributionMergePreviewDialog } from "./ContributionMergePreviewDialog
 import { ContributionDetails } from "./ContributionDetails";
 import { QaRunDialog } from "../admin/QaRunDialog";
 import { showToast } from "../../store/toastStore";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 
 type RowStatus = "pending" | "awaitingPublish" | "published" | "rejected";
 
@@ -98,6 +99,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
   const contributions = useFormBuilderStore((s) => s.contributions);
   const loading = useFormBuilderStore((s) => s.contributionsLoading);
   const refresh = useFormBuilderStore((s) => s.refreshContributions);
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewContribution, setPreviewContribution] = useState<ContributionSummary | null>(null);
   const [qaContribution, setQaContribution] = useState<ContributionSummary | null>(null);
@@ -333,7 +335,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
         />
       )}
 
-      <Dialog open={!!rejectTarget} onClose={() => setRejectTarget(null)} maxWidth="sm" fullWidth>
+      <Dialog {...responsiveDialogProps} open={!!rejectTarget} onClose={() => setRejectTarget(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <CancelIcon color="error" fontSize="small" />
           Reject contribution

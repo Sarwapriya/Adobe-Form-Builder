@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  AppBar,
   Avatar,
   Box,
   Button,
@@ -20,8 +21,10 @@ import {
   ListItemIcon,
   ListItemText,
   Paper,
+  Toolbar,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -38,6 +41,8 @@ import DomainIcon from "@mui/icons-material/Domain";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
+import MenuIcon from "@mui/icons-material/Menu";
+import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { alpha } from "@mui/material/styles";
 import type { ReactNode } from "react";
@@ -216,15 +221,24 @@ export function AppLayout() {
     document.title = `FormIQ · ${panelLabel}`;
   }, [panelLabel]);
 
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true");
+  const [rawCollapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true");
+  // Below the "md" breakpoint the sidebar becomes an off-canvas overlay
+  // instead of a permanent icon-rail-or-full-width fixture — the desktop
+  // rail-collapse preference is irrelevant there, so `collapsed` (consumed
+  // by every render-time check below) always evaluates to false on mobile,
+  // always showing full nav labels inside the overlay.
+  const isMobile = useMediaQuery((theme) => theme.breakpoints.down("md"));
+  const collapsed = !isMobile && rawCollapsed;
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   /** Section-header accordion state (distinct from the sidebar-rail `collapsed`
    * above) — every section defaults open (see the `?? true` fallback below). */
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
-  }, [collapsed]);
+    localStorage.setItem(COLLAPSE_STORAGE_KEY, String(rawCollapsed));
+  }, [rawCollapsed]);
 
   const editorFormId = editorFormIdFromPath(location.pathname);
   const aiOpen = useAiChatStore((s) => s.open);
@@ -339,7 +353,13 @@ export function AppLayout() {
     const linkProps =
       hasChildren && !collapsed
         ? { onClick: () => setExpandedMenus((m) => ({ ...m, [item.to]: !isOpen })) }
-        : { component: Link, to: hasChildren ? item.children![0].to : item.to };
+        : {
+            component: Link,
+            to: hasChildren ? item.children![0].to : item.to,
+            onClick: () => {
+              if (isMobile) setMobileNavOpen(false);
+            },
+          };
 
     const button = (
       <ListItemButton
@@ -389,6 +409,9 @@ export function AppLayout() {
                     component={Link}
                     to={child.to}
                     selected={childSelected}
+                    onClick={() => {
+                      if (isMobile) setMobileNavOpen(false);
+                    }}
                     sx={{
                       borderRadius: 2,
                       mb: 0.5,
@@ -415,9 +438,25 @@ export function AppLayout() {
   }
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      {isMobile && (
+        <AppBar position="sticky" color="default" elevation={1} sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
+          <Toolbar>
+            <IconButton edge="start" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
+              <MenuIcon />
+            </IconButton>
+            <Typography variant="h6" fontWeight={700} sx={{ ml: 1 }}>
+              FormIQ
+            </Typography>
+          </Toolbar>
+        </AppBar>
+      )}
+      <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0 }}>
       <Drawer
-        variant="permanent"
+        variant={isMobile ? "temporary" : "permanent"}
+        open={isMobile ? mobileNavOpen : true}
+        onClose={() => setMobileNavOpen(false)}
+        ModalProps={{ keepMounted: true }}
         sx={{
           width: drawerWidth,
           flexShrink: 0,
@@ -640,27 +679,34 @@ export function AppLayout() {
             {!collapsed && <ListItemText primary="Log out" />}
           </ListItemButton>
 
-          <IconButton
-            onClick={() => setCollapsed((c) => !c)}
-            size="small"
-            sx={{
-              display: "flex",
-              mx: "auto",
-              mt: 1,
-              color: sidebarTokens.textChild,
-              "&:hover": { bgcolor: sidebarTokens.hoverBg, color: sidebarTokens.contrastText },
-            }}
-            aria-label={collapsed ? "Expand menu" : "Collapse menu"}
-          >
-            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
-          </IconButton>
+          {/* Rail-collapse toggle only makes sense on desktop's permanent
+              sidebar — on mobile `collapsed` is always forced false (see
+              above), so this would silently flip the desktop preference
+              without any visible effect for a mobile user. */}
+          {!isMobile && (
+            <IconButton
+              onClick={() => setCollapsed((c) => !c)}
+              size="small"
+              sx={{
+                display: "flex",
+                mx: "auto",
+                mt: 1,
+                color: sidebarTokens.textChild,
+                "&:hover": { bgcolor: sidebarTokens.hoverBg, color: sidebarTokens.contrastText },
+              }}
+              aria-label={collapsed ? "Expand menu" : "Collapse menu"}
+            >
+              {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+            </IconButton>
+          )}
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, p: 3 }}>
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, p: { xs: 1.5, sm: 3 } }}>
         <Box sx={{ maxWidth: 1280, mx: "auto" }}>
           <Outlet />
         </Box>
+      </Box>
       </Box>
 
       {/* Available on every authenticated page under this layout — a
@@ -676,10 +722,10 @@ export function AppLayout() {
           elevation={8}
           sx={{
             position: "fixed",
-            bottom: 24,
-            right: 24,
-            width: AI_PANEL_WIDTH,
-            height: "min(70vh, 640px)",
+            bottom: { xs: 16, sm: 24 },
+            right: { xs: 16, sm: 24 },
+            width: { xs: "calc(100vw - 32px)", sm: AI_PANEL_WIDTH },
+            height: { xs: "80vh", sm: "min(70vh, 640px)" },
             zIndex: (t) => t.zIndex.drawer + 2,
             borderRadius: 3,
             overflow: "hidden",
@@ -692,7 +738,11 @@ export function AppLayout() {
       </Grow>
       <AIChatButton />
 
-      <Dialog open={leaveConfirmOpen} onClose={() => (savingBeforeLeave ? undefined : setLeaveConfirmOpen(false))}>
+      <Dialog
+        {...responsiveDialogProps}
+        open={leaveConfirmOpen}
+        onClose={() => (savingBeforeLeave ? undefined : setLeaveConfirmOpen(false))}
+      >
         <DialogTitle>Unsaved changes</DialogTitle>
         <DialogContent>
           <DialogContentText>

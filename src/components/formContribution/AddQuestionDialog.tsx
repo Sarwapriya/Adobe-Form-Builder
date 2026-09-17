@@ -4,6 +4,7 @@ import type { AnswerDefinition, ControlType, LocaleCode, QuestionDefinition } fr
 import { CONTROL_TYPE_LABEL } from "../formBuilder/formBuilderHelpers";
 import { useFormContributionStore } from "../../store/formContributionStore";
 import { localeDir } from "../../utils/localeDir";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 
 const ADD_QUESTION_TYPES: ControlType[] = ["shortText", "text", "dropdown", "radio", "checkbox"];
 const CHOICE_TYPES: ControlType[] = ["radio", "checkbox", "dropdown"];
@@ -28,6 +29,7 @@ export function AddQuestionDialog({
   locales: string[];
 }) {
   const addQuestion = useFormContributionStore((s) => s.addQuestion);
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [locale, setLocale] = useState(defaultLocale);
   const [controlType, setControlType] = useState<ControlType>("shortText");
   const [headingByLocale, setHeadingByLocale] = useState<Record<string, string>>({});
@@ -109,7 +111,7 @@ export function AddQuestionDialog({
   const dir = localeDir(locale);
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+    <Dialog {...responsiveDialogProps} open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle>Add a question</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>

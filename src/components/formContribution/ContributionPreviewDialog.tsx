@@ -5,6 +5,7 @@ import { applyContribution, generateSolution, resolveFileNames, type Contributio
 import { buildPreviewDocument } from "../../codegen/previewDocument";
 import { useFormContributionStore } from "../../store/formContributionStore";
 import { useThemeModeStore } from "../../store/themeModeStore";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 
 /**
  * Client-side preview of the published form with this session's in-progress
@@ -28,6 +29,7 @@ export function ContributionPreviewDialog({ open, onClose }: { open: boolean; on
   const deletedAnswerIds = useFormContributionStore((s) => s.deletedAnswerIds);
   const workingLocale = useFormContributionStore((s) => s.locale);
   const previewColorScheme = useThemeModeStore((s) => s.mode);
+  const responsiveDialogProps = useResponsiveDialogProps();
 
   const [variant, setVariant] = useState<FormVariant>("ff");
   const [locale, setLocale] = useState<string>("");
@@ -91,7 +93,7 @@ export function ContributionPreviewDialog({ open, onClose }: { open: boolean; on
   }, [open, definition, baseConfig, variant, locale, previewColorScheme]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>
+    <Dialog {...responsiveDialogProps} open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 2 }}>
         <Box sx={{ flexGrow: 1 }}>Preview</Box>
         {availableVariants.length > 1 && (

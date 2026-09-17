@@ -43,6 +43,7 @@ import { useAuthStore } from "../auth/authStore";
 import { PageHeader } from "../components/common/PageHeader";
 import { NotificationEmailFields } from "../components/common/NotificationEmailFields";
 import { showToast } from "../store/toastStore";
+import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
 const ROLE_COLOR: Record<AdminUserRole, "default" | "primary" | "secondary"> = {
   standard: "default",
@@ -409,6 +410,7 @@ function DeleteUserDialog({
   onClose: () => void;
   onDeleted: () => void | Promise<void>;
 }) {
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [deleting, setDeleting] = useState(false);
 
   async function handleConfirm() {
@@ -424,7 +426,7 @@ function DeleteUserDialog({
   }
 
   return (
-    <Dialog open onClose={deleting ? undefined : onClose} maxWidth="xs" fullWidth>
+    <Dialog {...responsiveDialogProps} open onClose={deleting ? undefined : onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Delete user</DialogTitle>
       <DialogContent>
         <Typography>
@@ -475,6 +477,7 @@ function EditUserDialog({
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [username, setUsername] = useState(user.username);
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState<AdminUserRole>(user.role);
@@ -507,7 +510,7 @@ function EditUserDialog({
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog {...responsiveDialogProps} open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Edit user</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>

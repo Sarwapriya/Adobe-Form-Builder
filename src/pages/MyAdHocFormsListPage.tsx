@@ -24,6 +24,7 @@ import type { ContributionProgress, FormListItem } from "../api/formBuilderApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
 import { ContributionStatusBar } from "../components/formContribution/ContributionStatusBar";
+import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
 type AdHocStatusLabel = "Draft" | "Pending review" | "Rejected" | "Published";
 
@@ -76,6 +77,7 @@ function adHocProgress(form: FormListItem): ContributionProgress | null {
 export function MyAdHocFormsListPage() {
   const navigate = useNavigate();
   const [adHocForms, setAdHocForms] = useState<FormListItem[]>([]);
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -213,7 +215,7 @@ export function MyAdHocFormsListPage() {
         )}
       </Paper>
 
-      <Dialog open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
+      <Dialog {...responsiveDialogProps} open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
         <DialogTitle>{copySourceForm ? "New Ad-hoc Form (copy)" : "New Ad-hoc Form"}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>

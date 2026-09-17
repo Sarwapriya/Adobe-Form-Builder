@@ -69,7 +69,7 @@ export function ConfigurationPage() {
         subtitle="Manage project codes and subsidiaries, and control which are open for Form Initiator campaigns."
       />
 
-      <Tabs value={tab} onChange={handleTabChange} sx={{ mb: 2 }}>
+      <Tabs value={tab} onChange={handleTabChange} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ mb: 2 }}>
         <Tab value="campaigns" label="Campaigns" />
         <Tab value="access" label="Access & Locales" />
         <Tab value="notifications" label="Notifications" />

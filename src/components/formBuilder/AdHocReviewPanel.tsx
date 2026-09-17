@@ -21,6 +21,7 @@ import { ApiError } from "../../api/apiClient";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { QaRunDialog } from "../admin/QaRunDialog";
 import { showToast } from "../../store/toastStore";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 
 /**
  * Admin review queue for a subsidiary user's own "ad-hoc" form submission (see
@@ -36,6 +37,7 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
   const loadForm = useFormBuilderStore((s) => s.loadForm);
   const subsidiaryId = useFormBuilderStore((s) => s.subsidiaryId);
 
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -121,7 +123,7 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
         />
       )}
 
-      <Dialog open={approveOpen} onClose={() => setApproveOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog {...responsiveDialogProps} open={approveOpen} onClose={() => setApproveOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <CheckCircleIcon color="success" fontSize="small" />
           Approve &amp; publish
@@ -153,7 +155,7 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={rejectOpen} onClose={() => setRejectOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog {...responsiveDialogProps} open={rejectOpen} onClose={() => setRejectOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <CancelIcon color="error" fontSize="small" />
           Reject submission

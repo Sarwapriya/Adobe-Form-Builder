@@ -5,6 +5,7 @@ import { generateSolution, resolveFileNames, type FormVariant } from "@formbuild
 import { buildPreviewDocument } from "../../codegen/previewDocument";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { useThemeModeStore } from "../../store/themeModeStore";
+import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 
 /**
  * Client-side preview, entirely in-memory against the current draft — reuses
@@ -17,6 +18,7 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
   const definition = useFormBuilderStore((s) => s.definition);
   const config = useFormBuilderStore((s) => s.config);
   const previewColorScheme = useThemeModeStore((s) => s.mode);
+  const responsiveDialogProps = useResponsiveDialogProps();
   const [variant, setVariant] = useState<FormVariant>("ff");
   const [locale, setLocale] = useState<string>(definition?.meta.defaultLocale ?? "en_GB");
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
   }, [open, definition, config, variant, locale, previewColorScheme]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>
+    <Dialog {...responsiveDialogProps} open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 2 }}>
         <Box sx={{ flexGrow: 1 }}>Preview</Box>
         {availableVariants.length > 1 && (
