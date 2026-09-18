@@ -7,15 +7,18 @@ from __future__ import annotations
 
 from app.models.user import is_admin_role
 
-# Admins have MCP-SQL's full tool set available (see aiAssistantService.py's
-# _build_mcp_tools_section/_execute_mcp_tool) — direct, flexible database
-# access that supersedes these fixed lookup tools, so they're omitted from an
-# admin's prompt entirely rather than describing two overlapping ways to find
-# the same data. Standard (subsidiary-scoped) users keep these instead: MCP's
-# raw-SQL tools have no concept of the caller's subsidiary, and there's no
-# reliable way to constrain arbitrary LLM-generated SQL to one subsidiary
-# after the fact — these hand-written functions enforce that scoping in
-# tested Python, so they remain the safe path for non-admins.
+# Available to every role (including admins, alongside MCP-SQL — see
+# ADMIN_MCP_SUPPLEMENT_NOTE below). These are single, instant, pre-tested
+# Python function calls — far more reliable than asking the LLM to write raw
+# SQL for the common "find/reuse a past campaign or question" case, and the
+# only path for standard users (MCP's raw-SQL tools have no concept of the
+# caller's subsidiary, and there's no reliable way to constrain
+# LLM-generated SQL to one subsidiary after the fact, so these hand-written,
+# subsidiary-scoped functions remain the only safe option for non-admins).
+# An earlier version of this prompt fully replaced these with MCP for admins;
+# that regressed reliability (FabriX's 5s timeout budget doesn't comfortably
+# fit MCP's multi-step get_database_schema-then-execute_sql_query pattern for
+# what used to be one call), so admins now get both.
 FORMIQ_LOOKUP_TOOL_DESCRIPTIONS = """
 - SEARCH_CAMPAIGNS { searchText?: string, projectCode?: string, status?: "draft"|"published"|"unpublished" } — find campaigns (forms) by keyword, name, or project code. Use this when the user mentions a campaign type or topic (e.g. "HR forms", "handraiser", "NPS"). Only pass searchText unless the user explicitly asks for a specific status or project code.
 - GET_CAMPAIGN { formId: string } — get a campaign's name, status, locales, and its questions (id, heading, type, required). Requires a valid UUID formId from a prior search result.
@@ -25,11 +28,11 @@ FORMIQ_LOOKUP_TOOL_DESCRIPTIONS = """
 - FIND_SIMILAR_QUESTIONS { formId?: string, questionId?: string, text?: string } — find questions similar to a given question or piece of text.
 """.strip()
 
-ADMIN_LOOKUP_REPLACEMENT_NOTE = """
-For campaign/question lookups, AND for any other question the user asks about data in the connected databases — not just campaigns/forms — use the database-query tools described in the DATABASE QUERY TOOLS section below (list_connections, get_database_schema, execute_sql_query, etc.) instead of a fixed lookup tool. You have full, direct database access; there is no separate fixed SEARCH_CAMPAIGNS/GET_CAMPAIGN-style tool for you. Two connections are configured:
-- "secondary" (crm-ax) — THIS APP'S OWN data: FormIQ's own forms/campaigns/questions/users, in tables under the `fq.` schema (fq.Forms, fq.FormVersions, fq.FormContributions, fq.Users, fq.AdminSettings, fq.AIConversations, etc.), plus a separate `cid.` schema (customer-insight-dashboard data, unrelated to FormIQ). Use this connection for anything about FormIQ campaigns/forms/questions/users/admin settings.
+ADMIN_MCP_SUPPLEMENT_NOTE = """
+You ALSO have direct database access via the database-query tools described in the DATABASE QUERY TOOLS section below (list_connections, get_database_schema, execute_sql_query, etc.) — use these ALONGSIDE SEARCH_CAMPAIGNS/GET_CAMPAIGN/SEARCH_QUESTIONS/FIND_SIMILAR_CAMPAIGNS/FIND_SIMILAR_QUESTIONS above, not instead of them: prefer the fixed tools above for ordinary campaign/question lookups (they're faster and more reliable), and reach for the database-query tools when those return no match or too few results, the question spans data those fixed tools don't cover, or the user asks about something that isn't a FormIQ campaign/question at all. Two connections are configured:
+- "secondary" (crm-ax) — THIS APP'S OWN data: FormIQ's own forms/campaigns/questions/users, in tables under the `fq.` schema (fq.Forms, fq.FormVersions, fq.FormContributions, fq.Users, fq.AdminSettings, fq.AIConversations, etc.), plus a separate `cid.` schema (customer-insight-dashboard data, unrelated to FormIQ).
 - "primary" (dwf-microsite-db-prd) — a SEPARATE, unrelated production database for the live DWF campaign microsite system (tables like CampaignMain, CampaignFormContent, CampaignFeedBack, DWF_CAMPAIGN, DWF_CAMPAIGN_FEEDBACK, etc.). Use this connection when the user asks about "DWF campaigns" specifically, campaign feedback/submissions, or anything else that sounds like the live microsite rather than FormIQ's own admin data.
-ALWAYS call get_database_schema for the connection you intend to query first and use the EXACT table/column names it returns — never guess a table name (e.g. a lowercase "campaigns" table does not exist in either database; the real tables are named as above). If you're unsure which connection has what the user is asking about, call list_connections and/or check both schemas before answering.
+ALWAYS call get_database_schema for the connection you intend to query first and use the EXACT table/column names it returns — never guess a table name (e.g. a lowercase "campaigns" table does not exist in either database; the real tables are named as above).
 """.strip()
 
 OTHER_READONLY_TOOL_DESCRIPTIONS = """
@@ -49,7 +52,9 @@ MUTATING_TOOL_DESCRIPTIONS = """
 
 
 def _build_tool_descriptions(role: str) -> str:
-    lookup_section = ADMIN_LOOKUP_REPLACEMENT_NOTE if is_admin_role(role) else FORMIQ_LOOKUP_TOOL_DESCRIPTIONS
+    lookup_section = FORMIQ_LOOKUP_TOOL_DESCRIPTIONS
+    if is_admin_role(role):
+        lookup_section = f"{lookup_section}\n\n{ADMIN_MCP_SUPPLEMENT_NOTE}"
     return "\n".join([
         "Read-only tools (executed immediately; results are given back to you as a TOOL RESULTS section):",
         lookup_section,

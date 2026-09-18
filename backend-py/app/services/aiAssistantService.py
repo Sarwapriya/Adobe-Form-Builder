@@ -286,11 +286,15 @@ async def _build_mcp_tools_section(role: str) -> Optional[str]:
 
     if is_admin:
         intro = (
-            "The following tools are available via a connected database-query service (MCP) — this is "
-            "your primary way to look up campaign/question data (there is no separate fixed "
-            "SEARCH_CAMPAIGNS-style tool for you). Call get_database_schema first if you don't already "
-            "know the relevant table/column names, then use execute_sql_query/execute_parameterized_query "
-            "(SELECT only — this assistant is read-only) to fetch what you need. Call one with:"
+            "The following tools are available via a connected database-query service (MCP), giving you "
+            "broader, more flexible access to the live database than the fixed SEARCH_CAMPAIGNS/GET_CAMPAIGN/"
+            "etc. tools above. Prefer those fixed tools for ordinary campaign/question lookups — they're "
+            "faster and more reliable — and reach for these when they return no match, the question spans "
+            "data those tools don't cover, or the user asks about something that isn't a FormIQ campaign/"
+            "question at all (see the notes above for what's in each connected database). Call "
+            "get_database_schema first if you don't already know the relevant table/column names, then use "
+            "execute_sql_query/execute_parameterized_query (SELECT only — this assistant is read-only) to "
+            "fetch what you need. Call one with:"
         )
     else:
         intro = (
