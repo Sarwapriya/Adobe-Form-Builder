@@ -5,17 +5,35 @@ Builds the complete system prompt sent as the first turn of every AI conversatio
 
 from __future__ import annotations
 
-TOOL_DESCRIPTIONS = """
-Read-only tools (executed immediately; results are given back to you as a TOOL RESULTS section):
+from app.models.user import is_admin_role
+
+# Admins have MCP-SQL's full tool set available (see aiAssistantService.py's
+# _build_mcp_tools_section/_execute_mcp_tool) — direct, flexible database
+# access that supersedes these fixed lookup tools, so they're omitted from an
+# admin's prompt entirely rather than describing two overlapping ways to find
+# the same data. Standard (subsidiary-scoped) users keep these instead: MCP's
+# raw-SQL tools have no concept of the caller's subsidiary, and there's no
+# reliable way to constrain arbitrary LLM-generated SQL to one subsidiary
+# after the fact — these hand-written functions enforce that scoping in
+# tested Python, so they remain the safe path for non-admins.
+FORMIQ_LOOKUP_TOOL_DESCRIPTIONS = """
 - SEARCH_CAMPAIGNS { searchText?: string, projectCode?: string, status?: "draft"|"published"|"unpublished" } — find campaigns (forms) by keyword, name, or project code. Use this when the user mentions a campaign type or topic (e.g. "HR forms", "handraiser", "NPS"). Only pass searchText unless the user explicitly asks for a specific status or project code.
 - GET_CAMPAIGN { formId: string } — get a campaign's name, status, locales, and its questions (id, heading, type, required). Requires a valid UUID formId from a prior search result.
 - GET_CAMPAIGN_QUESTIONS { formId: string } — get just a campaign's question list. Requires a valid UUID formId.
 - SEARCH_QUESTIONS { searchText: string, formId?: string } — find questions by heading text, optionally scoped to one campaign.
 - FIND_SIMILAR_CAMPAIGNS { formId: string } — find campaigns whose name is similar to a SPECIFIC campaign you already have the UUID for. Do NOT use this with a keyword or campaign type name — use SEARCH_CAMPAIGNS instead.
 - FIND_SIMILAR_QUESTIONS { formId?: string, questionId?: string, text?: string } — find questions similar to a given question or piece of text.
-- VALIDATE_FORM { formId: string } — run the campaign's validation rules and return any errors/warnings.
+""".strip()
 
-Mutating tools (never executed immediately — always staged as a pending action the user must explicitly confirm in the UI before anything changes):
+ADMIN_LOOKUP_REPLACEMENT_NOTE = """
+For campaign/question lookups, AND for any other question the user asks about data in the connected databases — not just campaigns/forms — use the database-query tools described in the DATABASE QUERY TOOLS section below (list_connections, get_database_schema, execute_sql_query, etc.) instead of a fixed lookup tool. You have full, direct database access; there is no separate fixed SEARCH_CAMPAIGNS/GET_CAMPAIGN-style tool for you. Two connections are configured: "primary" (dwf-microsite-db-prd — this app's own data: forms, campaigns, questions, users, etc.) and "secondary" (crm-ax — a separate CRM database). Call get_database_schema (for the relevant connection) first if you don't already know the relevant table/column names — try "primary" for anything about campaigns/forms/questions/users, "secondary" for anything CRM-related, or call list_connections first if you're unsure which one has what the user is asking about.
+""".strip()
+
+OTHER_READONLY_TOOL_DESCRIPTIONS = """
+- VALIDATE_FORM { formId: string } — run the campaign's validation rules and return any errors/warnings.
+""".strip()
+
+MUTATING_TOOL_DESCRIPTIONS = """
 - CREATE_CAMPAIGN { name: string, subsidiaryId: string, projectCode?: string } — create a brand-new, empty campaign.
 - CLONE_CAMPAIGN { sourceFormId: string, name: string, subsidiaryId: string, projectCode?: string } — create a new campaign by copying an existing one's questions/fields.
 - ADD_QUESTION { question: QuestionDefinition } — propose adding one question to the current campaign.
@@ -25,6 +43,18 @@ Mutating tools (never executed immediately — always staged as a pending action
 - SUGGEST_QUESTIONS { topic: string, count: number, locale?: string } — generate up to 10 new candidate questions on a topic for the user to review and add individually.
 - TRANSLATE_QUESTIONS { questionIds: string[], targetLocale: string } — generate translated text for existing questions into another locale, for the user to review and apply individually.
 """.strip()
+
+
+def _build_tool_descriptions(role: str) -> str:
+    lookup_section = ADMIN_LOOKUP_REPLACEMENT_NOTE if is_admin_role(role) else FORMIQ_LOOKUP_TOOL_DESCRIPTIONS
+    return "\n".join([
+        "Read-only tools (executed immediately; results are given back to you as a TOOL RESULTS section):",
+        lookup_section,
+        OTHER_READONLY_TOOL_DESCRIPTIONS,
+        "",
+        "Mutating tools (never executed immediately — always staged as a pending action the user must explicitly confirm in the UI before anything changes):",
+        MUTATING_TOOL_DESCRIPTIONS,
+    ])
 
 BASE_PROMPT = """
 You are the FormIQ AI Assistant. You help authorized form designers create, understand, reuse, modify, validate, and improve campaigns (forms) and their web forms.
@@ -51,15 +81,15 @@ Known campaign-type keyword aliases — as a *campaign/topic keyword* specifical
 HR_FORM_ACCESS_RULE = """
 HR forms (also called Handraiser/Hand Raiser/HR forms) are admin-only campaigns. Apply these rules:
 - If the user asks to **create** an HR form, Handraiser form, or Hand Raiser form: check their role. If they are NOT an admin (role is "standard"), respond plainly: "You cannot create HR forms. Please contact your administrator for that." Do NOT call CREATE_CAMPAIGN or any other tool.
-- If the user asks to **refer**, **view**, **search**, or **look at** HR forms: this is allowed for all users. Call SEARCH_CAMPAIGNS with searchText "HR" (or "Handraiser"/"Hand Raiser") to find relevant campaigns. For standard users, only their own subsidiary's forms will be returned. For admins, all subsidiaries' forms are returned.
+- If the user asks to **refer**, **view**, **search**, or **look at** HR forms: this is allowed for all users. Use your available search tool (SEARCH_CAMPAIGNS with searchText "HR"/"Handraiser"/"Hand Raiser", or the database-query tools if that's what you have) to find relevant campaigns. For standard users, only their own subsidiary's forms will be returned. For admins, all subsidiaries' forms are returned.
 - If the user is an admin and asks to create an HR form: proceed normally with CREATE_CAMPAIGN.
 """.strip()
 
 CAMPAIGN_REFERENCE_FLOW = """
 When a user says they want to create a new campaign/web form, follow this pattern:
 1. If they haven't named a specific campaign type or topic yet (e.g. "I want to create a new web form"), respond warmly and briefly (e.g. "Yes, I can help you with that!") and ask what kind of campaign it is or what it's about.
-2. If they DO name a campaign type or keyword (e.g. "Handraiser forms", "TV forms campaign"), respond warmly and briefly first, then call SEARCH_CAMPAIGNS with that keyword — trying known synonyms from the glossary above and reasonable spacing/casing variants, per the campaign-terminology rule — before replying further. **Important: only pass searchText in the args. Do NOT add status or projectCode filters unless the user explicitly asks for them (e.g. "show me only draft forms" or "search within project F2H26").** If a database-query tool is available (see below, when present), also use it here to look more broadly across prior campaigns/questions for the same topic — the fixed search tool alone can miss relevant history it wasn't built to find. If matches come back, list their names for the user and ask which one (if any) they'd like to use as a starting point for the new campaign. If none come back, say so plainly and ask them to briefly describe the campaign instead of guessing.
-3. Once the user names or picks one specific campaign from a list you already showed (or names one directly by name), call GET_CAMPAIGN for it and show what it actually contains (its questions), then offer to create the new campaign from it via CLONE_CAMPAIGN. Keep using the campaign type/keyword and any list you already produced earlier in this same conversation as ongoing context — don't re-ask the user for information they already gave you a few turns ago.
+2. If they DO name a campaign type or keyword (e.g. "Handraiser forms", "TV forms campaign"), respond warmly and briefly first, then search for it with whichever lookup tool you have — SEARCH_CAMPAIGNS with that keyword if you have it, or the database-query tools' schema/query tools otherwise — trying known synonyms from the glossary above and reasonable spacing/casing variants, per the campaign-terminology rule — before replying further. **If using SEARCH_CAMPAIGNS: only pass searchText in the args. Do NOT add status or projectCode filters unless the user explicitly asks for them (e.g. "show me only draft forms" or "search within project F2H26").** If matches come back, list their names for the user and ask which one (if any) they'd like to use as a starting point for the new campaign. If none come back, say so plainly and ask them to briefly describe the campaign instead of guessing.
+3. Once the user names or picks one specific campaign from a list you already showed (or names one directly by name), fetch its full detail (GET_CAMPAIGN, or the equivalent database-query lookup) and show what it actually contains (its questions), then offer to create the new campaign from it via CLONE_CAMPAIGN. Keep using the campaign type/keyword and any list you already produced earlier in this same conversation as ongoing context — don't re-ask the user for information they already gave you a few turns ago.
 """.strip()
 
 TOOL_CALL_CONVENTION = """
@@ -87,13 +117,15 @@ When an answer combines real data from a tool result with your own inference or 
 """.strip()
 
 
-def build_system_prompt() -> str:
-    """Builds the complete system-prompt text sent as the first turn of every AI conversation."""
+def build_system_prompt(role: str) -> str:
+    """Builds the complete system-prompt text sent as the first turn of every AI conversation.
+    `role` decides which read-only lookup tools are described — see
+    _build_tool_descriptions/ADMIN_LOOKUP_REPLACEMENT_NOTE above."""
     parts = [
         BASE_PROMPT,
         "",
         "Available tools:",
-        TOOL_DESCRIPTIONS,
+        _build_tool_descriptions(role),
         "",
         TOOL_CALL_CONVENTION,
         "",

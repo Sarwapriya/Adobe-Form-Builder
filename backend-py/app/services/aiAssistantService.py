@@ -245,6 +245,18 @@ def _load_history(db: Session, conversation_id: str) -> list[AIConversationMessa
     return rows
 
 
+# MCP-SQL tools that return real row data (arbitrary or semi-arbitrary query
+# results) rather than just schema/structure metadata. There's no reliable
+# way to constrain arbitrary LLM-generated SQL text to one subsidiary after
+# the fact (no real SQL parser here, and a slightly different query shape —
+# or a prompt-injection attempt — would bypass a naive string check), so
+# these stay admin-only. The remaining tools (list_connections,
+# get_database_schema, find_related_tables, get_query_execution_plan,
+# refresh_schema_cache) only ever reveal table/column structure, never row
+# data, so they're safe to open to every authenticated user.
+_MCP_DATA_TOOLS = {"execute_sql_query", "execute_parameterized_query", "get_table_sample"}
+
+
 async def _build_mcp_tools_section(role: str) -> Optional[str]:
     """Describes the MCP-SQL server's live tool set to the LLM, so it can
     issue a generic `MCP_TOOL` call naming one of them — see the module
@@ -253,40 +265,50 @@ async def _build_mcp_tools_section(role: str) -> Optional[str]:
     None (section omitted entirely) when MCP-SQL isn't configured/reachable,
     rather than describing a capability that doesn't actually work.
 
-    Admin/superadmin only: unlike the fixed FormIQ tools above (which filter
-    by the caller's subsidiaryId via _list_caller_forms/get_caller_form_detail),
-    MCP's tools are raw schema/SQL access with no concept of the caller at
-    all — exposing them to a subsidiary-scoped standard user would let them
-    read data outside their own subsidiary. Mirrors this app's existing
-    "admins see everything, standard users are subsidiary-scoped" model
-    (dashboards, Question Master) rather than inventing a new tier of trust.
-    Enforced again in _execute_readonly_tool's MCP_TOOL branch as a
-    defense-in-depth backstop."""
-    if not is_admin_role(role):
-        return None
+    Admins get the full tool set (including the raw-data tools in
+    _MCP_DATA_TOOLS) and use it as their primary lookup mechanism, replacing
+    the fixed FormIQ tools (aiSystemPrompt.py's ADMIN_LOOKUP_REPLACEMENT_NOTE
+    branch). Standard (subsidiary-scoped) users only see the schema-only
+    subset — see _MCP_DATA_TOOLS's comment for why the raw-data tools can't
+    be safely scoped to one subsidiary — and keep using the fixed
+    SEARCH_CAMPAIGNS/GET_CAMPAIGN/etc. tools for actual data lookups instead.
+    Enforced again in _execute_mcp_tool as a defense-in-depth backstop."""
     if not mcp_sql_client.is_enabled():
         return None
     listed = await mcp_sql_client.list_tools()
     if not listed["ok"] or not listed["tools"]:
         return None
 
+    is_admin = is_admin_role(role)
+    tools = listed["tools"] if is_admin else [t for t in listed["tools"] if t["name"] not in _MCP_DATA_TOOLS]
+    if not tools:
+        return None
+
+    if is_admin:
+        intro = (
+            "The following tools are available via a connected database-query service (MCP) — this is "
+            "your primary way to look up campaign/question data (there is no separate fixed "
+            "SEARCH_CAMPAIGNS-style tool for you). Call get_database_schema first if you don't already "
+            "know the relevant table/column names, then use execute_sql_query/execute_parameterized_query "
+            "(SELECT only — this assistant is read-only) to fetch what you need. Call one with:"
+        )
+    else:
+        intro = (
+            "The following schema/structure tools are available via a connected database-query service "
+            "(MCP) — they describe table/column structure only, not row data. Use them ALONGSIDE "
+            "SEARCH_CAMPAIGNS/GET_CAMPAIGN/SEARCH_QUESTIONS/FIND_SIMILAR_CAMPAIGNS/FIND_SIMILAR_QUESTIONS, "
+            "not instead of them, when understanding the data model helps you use those tools better. "
+            "Call one with:"
+        )
+
     lines = [
-        "The following tools are available via a connected database-query service (MCP), giving you "
-        "broader, more flexible access to the live database than the fixed FormIQ tools above. Use "
-        "these ALONGSIDE SEARCH_CAMPAIGNS/GET_CAMPAIGN/SEARCH_QUESTIONS/FIND_SIMILAR_CAMPAIGNS/"
-        "FIND_SIMILAR_QUESTIONS, not instead of them — they're especially useful when: the FormIQ "
-        "tools return no match or too few results, the user asks a question spanning many campaigns at "
-        "once (e.g. \"what questions have we used for NPS campaigns across all subsidiaries\"), or "
-        "answering well requires combining/filtering data in a way those fixed tools don't support. "
-        "When a user is creating a new campaign, checking these tools too — not just the FormIQ ones — "
-        "gives you a fuller picture of relevant prior campaigns and their exact questions to reuse or "
-        "adapt, which is the whole point of consulting history before proposing something new. Call one with:",
+        intro,
         '```json',
         '{"tool": "MCP_TOOL", "args": {"name": "<tool name below>", "arguments": { ... per that tool\'s input schema ... }}}',
         '```',
         "",
     ]
-    for t in listed["tools"]:
+    for t in tools:
         lines.append(f"- {t['name']}: {t['description']}")
         lines.append(f"  input schema: {json.dumps(t['inputSchema'])}")
     return "\n".join(lines)
@@ -300,7 +322,7 @@ def _build_base_turns(
 ) -> list[dict[str, str]]:
     user_ctx = _build_user_context(auth)
     system_content = (
-        build_system_prompt()
+        build_system_prompt(auth["role"])
         + f"\n\nThe currently logged-in user context: {user_ctx}. "
         + "When the user asks you to create a campaign and no subsidiary is mentioned, "
         + "use their own subsidiaryId from the context above."
@@ -417,16 +439,17 @@ _MUTATING_SQL_KEYWORDS = re.compile(
 
 
 async def _execute_mcp_tool(ctx: AiToolCallerContext, args: dict[str, Any]) -> Any:
-    """Admin-only (see _build_mcp_tools_section's doc comment for why) —
-    re-checked here as a defense-in-depth backstop in case a non-admin
-    conversation somehow contains a fenced MCP_TOOL call (stale history,
-    prompt injection), since this function is the one place every such call
-    actually reaches the network."""
-    if not is_admin_role(ctx["role"]):
-        return {"error": "MCP-SQL tools are only available to admin accounts"}
-
+    """Re-checks the tiered access _build_mcp_tools_section's prompt already
+    encodes, as a defense-in-depth backstop in case a conversation somehow
+    contains a fenced MCP_TOOL call naming a raw-data tool the caller
+    shouldn't have (stale history, prompt injection) — this function is the
+    one place every such call actually reaches the network."""
     name = args.get("name", "")
     arguments = args.get("arguments") or {}
+
+    if name in _MCP_DATA_TOOLS and not is_admin_role(ctx["role"]):
+        return {"error": "This tool is only available to admin accounts."}
+
     if name in _MCP_SQL_EXECUTION_TOOLS:
         query_text = arguments.get("query") or arguments.get("query_template") or ""
         if _MUTATING_SQL_KEYWORDS.search(query_text):
