@@ -4,9 +4,11 @@ Pure function: `FormDefinition` + `BuilderConfig` in, generated files out. No
 filesystem/download side effects live here — this is what a live preview and
 the "Generate Form" action both call, so they can never drift.
 
-Output mirrors the reference's file count (no invented extras): one HTML
-file and one behavior JS file per requested variant, one shared `data.js`,
-one `style.css` — for *every* locale the form has, not just the default one.
+Output, for a form with L languages and V requested variants (see
+file_names.py for the exact naming): one HTML file and one behavior JS file per
+language per variant (`<Sub>-<lang>_<projectCode>_<FF|OC>.html`/`.js`), one main
+data file shared by every language (`<Sub>_<projectCode>.js`), and one
+stylesheet per language (`<lang>-<projectCode>.css`) — `2·L·V + L + 1` files.
 """
 
 from __future__ import annotations
@@ -37,12 +39,15 @@ def generate_solution(form: FormDefinition, config: BuilderConfig) -> list[Gener
 
     files: list[GeneratedFile] = []
     if "ff" in config.variants:
-        files.append(build_ff_html(effective_form, config, file_names))
-        files.append(build_ff_js(file_names))
+        for language in file_names.languages:
+            files.append(build_ff_html(effective_form, config, file_names, language.locale))
+            files.append(build_ff_js(file_names, language.locale))
     if "oc" in config.variants:
-        files.append(build_oc_html(effective_form, config, file_names))
-        files.append(build_oc_js(file_names))
+        for language in file_names.languages:
+            files.append(build_oc_html(effective_form, config, file_names, language.locale))
+            files.append(build_oc_js(file_names, language.locale))
     files.append(build_data_js(effective_form, config, file_names))
-    files.append(build_style_css(file_names))
+    for language in file_names.languages:
+        files.append(build_style_css(file_names, language.locale))
 
     return files

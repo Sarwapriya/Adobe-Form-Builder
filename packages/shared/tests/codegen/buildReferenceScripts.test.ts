@@ -115,6 +115,42 @@ describe("generated bundle (ff.html + data file + FF js) wired together", () => 
     }
   });
 
+  it("a language's own page + behavior JS render that language by default, with no ?lang= in the URL", async () => {
+    const form = sampleFormDefinition();
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+    const html = buildFfHtml(form, config, fileNames, "ar_AE");
+    const dataJs = buildDataJs(form, config, fileNames);
+    const ffJs = buildFfJs(fileNames, "ar_AE");
+
+    await runGeneratedBundle(html.contents, dataJs.contents, ffJs.contents);
+
+    expect(document.documentElement.getAttribute("lang")).toBe("ar");
+    expect(document.documentElement.getAttribute("dir")).toBe("rtl");
+    expect(document.querySelector("#Q1 .form_check_title h3")?.textContent).toContain("أنا أستخدم حاليًا");
+    expect(document.querySelector("#btnSubmit")?.textContent).toBe("إرسال");
+  });
+
+  it("the default language's page still lets ?lang= switch it to another of the form's languages", async () => {
+    const originalLocation = window.location.href;
+    window.history.pushState({}, "", "/ff.html?lang=ar_AE");
+    try {
+      const form = sampleFormDefinition();
+      const config = defaultBuilderConfig();
+      const fileNames = resolveFileNames(form, config);
+      const html = buildFfHtml(form, config, fileNames, "en_GB");
+      const dataJs = buildDataJs(form, config, fileNames);
+      const ffJs = buildFfJs(fileNames, "en_GB");
+
+      await runGeneratedBundle(html.contents, dataJs.contents, ffJs.contents);
+
+      expect(document.documentElement.getAttribute("lang")).toBe("ar");
+      expect(document.querySelector("#Q1 .form_check_title h3")?.textContent).toContain("أنا أستخدم حاليًا");
+    } finally {
+      window.history.pushState({}, "", originalLocation);
+    }
+  });
+
   it("leaves the submit button disabled until privacyPolicy + every required question (Q1 AND Q2 — see fixtures.ts) has an answer", async () => {
     const form = sampleFormDefinition();
     form.fields.privacyPolicy = { textByLocale: { en_GB: "I agree" }, linkUrlByLocale: { en_GB: "https://x" } };

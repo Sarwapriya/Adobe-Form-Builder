@@ -14,7 +14,7 @@ function buildFile() {
 describe("buildStyleCss", () => {
   it("produces a stylesheet with the reference's core class names intact", () => {
     const file = buildFile();
-    expect(file.path).toBe("TEST-EN.css");
+    expect(file.path).toBe("EN.css");
     for (const cls of [
       ".form_top_group",
       ".form_text_bx",

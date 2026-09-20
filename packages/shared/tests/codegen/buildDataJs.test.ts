@@ -24,7 +24,7 @@ function evalData(contents: string) {
 describe("buildDataJs", () => {
   it("produces a data file whose body is valid, safely-embeddable JS declaring the reference's bare const names", () => {
     const file = buildFile();
-    expect(file.path).toBe("TEST-EN.js");
+    expect(file.path).toBe("TEST.js");
     expect(file.contents).toContain("const page_error = ");
     expect(file.contents).toContain("const fields = ");
     expect(file.contents).toContain("const questions = ");

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from app.form_pipeline.codegen.file_names import resolve_file_names
+from app.form_pipeline.codegen.file_names import language_file_names, resolve_file_names
 from app.form_pipeline.codegen.generate import generate_solution
 from app.form_pipeline.codegen.types import default_builder_config
 
@@ -72,44 +72,85 @@ def test_style_css_head_and_tail_match_snapshot_byte_for_byte(generated_files, f
     assert actual_css[-600:] == expected_tail
 
 
-def test_ff_only_config_produces_exactly_four_files(file_names, generated_files):
-    assert sorted(generated_files.keys()) == sorted([file_names.css, file_names.dataJs, file_names.ffJs, file_names.ffHtml])
+# The sample form has two languages (English default + Arabic), so every count below
+# is `2·languages·variants + languages + 1` (one HTML + one behavior JS per language
+# per variant, one stylesheet per language, one shared data file).
 
 
-def test_both_variants_config_produces_exactly_six_files_no_per_locale_extras():
+def test_ff_only_config_produces_per_language_ff_files_plus_one_data_file(file_names, generated_files):
+    assert len(generated_files) == 7
+    assert sorted(generated_files.keys()) == sorted(
+        [file_names.dataJs] + [n for l in file_names.languages for n in (l.css, l.ffJs, l.ffHtml)]
+    )
+
+
+def test_both_variants_config_produces_exactly_eleven_files():
     form = sample_form_definition()
     config = default_builder_config()
     config = config.model_copy(update={"variants": ["ff", "oc"]})
     file_names = resolve_file_names(form, config)
     files = generate_solution(form, config)
     paths = sorted(f.path for f in files)
-    expected = sorted([file_names.css, file_names.dataJs, file_names.ffJs, file_names.ocJs, file_names.ffHtml, file_names.ocHtml])
+    expected = sorted(
+        [file_names.dataJs] + [n for l in file_names.languages for n in (l.css, l.ffJs, l.ocJs, l.ffHtml, l.ocHtml)]
+    )
+    assert len(paths) == 11
+    assert len(set(paths)) == 11
     assert paths == expected
 
 
-def test_oc_only_config_produces_exactly_four_files():
+def test_oc_only_config_produces_per_language_oc_files_plus_one_data_file():
     form = sample_form_definition()
     config = default_builder_config().model_copy(update={"variants": ["oc"]})
     file_names = resolve_file_names(form, config)
     files = generate_solution(form, config)
     paths = sorted(f.path for f in files)
-    expected = sorted([file_names.css, file_names.dataJs, file_names.ocJs, file_names.ocHtml])
+    expected = sorted([file_names.dataJs] + [n for l in file_names.languages for n in (l.css, l.ocJs, l.ocHtml)])
+    assert len(paths) == 7
     assert paths == expected
+
+
+def test_single_language_form_produces_four_files():
+    form = sample_form_definition()
+    form.locales = [l for l in form.locales if l.code == "en_GB"]
+    files = generate_solution(form, default_builder_config())
+    assert sorted(f.path for f in files) == sorted(["EN.css", "TEST-EN_FF.html", "TEST-EN_FF.js", "TEST.js"])
 
 
 def test_data_js_keys_every_locale(generated_files, file_names):
     data_js = generated_files[file_names.dataJs]
     assert '"en_GB"' in data_js
     assert '"ar_AE"' in data_js
+    # ...and every language's HTML links that same shared data file.
+    for language in file_names.languages:
+        assert f'<script src="{file_names.dataJs}"></script>' in generated_files[language.ffHtml]
 
 
-def test_shared_html_seeds_lang_and_dir_from_default_locale(generated_files, file_names):
-    ff_html = generated_files[file_names.ffHtml]
-    assert '<html lang="en" dir="ltr">' in ff_html
-    assert f'<link rel="stylesheet" href="{file_names.css}">' in ff_html
-    assert f'<script src="{file_names.dataJs}"></script>' in ff_html
-    assert f'<script src="{file_names.ffJs}"></script>' in ff_html
+def test_each_language_html_seeds_its_own_lang_dir_and_links_its_own_css_and_js(generated_files, file_names):
+    en = language_file_names(file_names, "en_GB")
+    en_html = generated_files[en.ffHtml]
+    assert '<html lang="en" dir="ltr">' in en_html
+    assert f'<link rel="stylesheet" href="{en.css}">' in en_html
+    assert f'<script src="{en.ffJs}"></script>' in en_html
 
-    ff_js = generated_files[file_names.ffJs]
-    assert 'frameUrlParam.get("lang")' in ff_js
-    assert "fields[language]" in ff_js
+    ar = language_file_names(file_names, "ar_AE")
+    ar_html = generated_files[ar.ffHtml]
+    assert '<html lang="ar" dir="rtl">' in ar_html
+    assert f'<link rel="stylesheet" href="{ar.css}">' in ar_html
+    assert f'<script src="{ar.ffJs}"></script>' in ar_html
+    assert en.css not in ar_html
+    assert en.ffJs not in ar_html
+
+
+def test_each_language_behavior_js_pins_that_language_and_still_reads_lang_param(generated_files, file_names):
+    for language in file_names.languages:
+        ff_js = generated_files[language.ffJs]
+        assert f'param["fallbackLanguage"] = "{language.locale}";' in ff_js
+        assert 'frameUrlParam.get("lang")' in ff_js
+        assert "fields[language]" in ff_js
+
+
+def test_every_language_stylesheet_carries_the_same_full_stylesheet(generated_files, file_names):
+    first, second = (generated_files[l.css] for l in file_names.languages)
+    assert first == second
+    assert '[dir="rtl"]' in first

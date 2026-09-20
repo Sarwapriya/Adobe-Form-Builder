@@ -1,5 +1,5 @@
-import type { FormDefinition } from "../../form/formDefinition";
-import type { FileNames } from "../fileNames";
+import type { FormDefinition, LocaleCode } from "../../form/formDefinition";
+import { languageFileNames, type FileNames } from "../fileNames";
 import type { BuilderConfig, FormVariant } from "../types";
 import { escapeHtml } from "../js/escaping";
 import { renderProfileFields } from "./fragments/renderProfileField";
@@ -49,20 +49,27 @@ const termsLink = (form: FormDefinition, extraClass: string) =>
  * heading is present, and the submit-button container (inline `.form_bottom_group` vs.
  * OC's floating `.form_bottom_bar`).
  *
- * The page's `<html lang>`/`dir` are seeded from the form's own default locale, but
- * that's only a static starting point: the generated behavior JS resolves `var language
- * = frameUrlParam.get("lang") || param["fallbackLanguage"]` at runtime and re-sets
- * `dir` itself from whichever locale that resolves to (see the reference script's own
- * "HTML Direction (RTL/LTR)" block) — so this same one page correctly renders every
- * locale the form has, switched via a `?lang=<localeCode>` URL param, not a separate
- * HTML file per locale (see generate.ts's own doc comment for why there's no longer
- * one). Every piece of visible text is likewise an empty node filled at runtime from
- * the shared data.js/behavior JS, so the markup itself never varies by locale at all.
+ * There is one page per language (`locale`, defaulting to the form's default locale):
+ * its `<html lang>`/`dir` are seeded from that language, and it links that language's
+ * own CSS and behavior JS plus the form's one shared data file. Every piece of visible
+ * text is an empty node filled at runtime from the data file, so apart from those
+ * attributes/links the markup doesn't vary by language. The behavior JS still re-resolves
+ * `var language = frameUrlParam.get("lang") || param["fallbackLanguage"]` at runtime (each
+ * language's JS pins its own language as that fallback — see buildFfJs.ts), so a
+ * `?lang=<localeCode>` URL param can still switch any page to another of the form's
+ * languages.
  */
-export function renderPage(form: FormDefinition, config: BuilderConfig, variant: FormVariant, fileNames: FileNames): string {
+export function renderPage(
+  form: FormDefinition,
+  config: BuilderConfig,
+  variant: FormVariant,
+  fileNames: FileNames,
+  locale?: LocaleCode,
+): string {
   const isOc = variant === "oc";
+  const files = languageFileNames(fileNames, locale);
   const analyticsScript = config.analytics?.enabled ? ADOBE_LAUNCH_SCRIPT : "";
-  const localeInfo = form.locales.find((l) => l.code === form.meta.defaultLocale);
+  const localeInfo = form.locales.find((l) => l.code === files.locale);
   const langSubtag = localeInfo?.langSubtag ?? "en";
   const dir = localeInfo?.isRtl ? "rtl" : "ltr";
 
@@ -169,7 +176,7 @@ export function renderPage(form: FormDefinition, config: BuilderConfig, variant:
 <title>Samsung</title>
 ${FAVICON_TAG}
 ${FONTS_TAG}
-<link rel="stylesheet" href="${fileNames.css}">
+<link rel="stylesheet" href="${files.css}">
 ${CDN_SCRIPTS}
 ${analyticsScript}
 </head>
@@ -199,7 +206,7 @@ ${analyticsScript}
 </div></div>
 </section>
 <script src="${fileNames.dataJs}"></script>
-<script src="${isOc ? fileNames.ocJs : fileNames.ffJs}"></script>
+<script src="${isOc ? files.ocJs : files.ffJs}"></script>
 </body>
 </html>
 `;

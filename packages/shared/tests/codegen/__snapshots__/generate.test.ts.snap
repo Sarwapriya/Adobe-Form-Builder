@@ -1020,7 +1020,7 @@ exports[`generateSolution > matches the reference fixture snapshot (ff.html) 1`]
 <title>Samsung</title>
 <link rel="shortcut icon" href="https://res6.mena2p.crm.samsung.com/res/tracking/Favicon.png">
 <link rel="stylesheet" href="samsungSS_fonts_2026.css">
-<link rel="stylesheet" href="TEST-EN.css">
+<link rel="stylesheet" href="EN.css">
 <script type="text/javascript" src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/parsleyjs@2/dist/parsley.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/libphonenumber-js/1.11.4/libphonenumber-js.min.js"></script>
@@ -1051,7 +1051,7 @@ exports[`generateSolution > matches the reference fixture snapshot (ff.html) 1`]
 </div>
 </div></div>
 </section>
-<script src="TEST-EN.js"></script>
+<script src="TEST.js"></script>
 <script src="TEST-EN_FF.js"></script>
 </body>
 </html>

@@ -106,4 +106,4 @@ export {
   type FormVariant,
   type GeneratedFile,
 } from "./codegen/types";
-export { resolveFileNames, type FileNames } from "./codegen/fileNames";
+export { resolveFileNames, languageFileNames, type FileNames, type LanguageFileNames } from "./codegen/fileNames";

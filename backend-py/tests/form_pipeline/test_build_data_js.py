@@ -27,7 +27,7 @@ def _build_file(config=None):
 
 def test_produces_a_data_file_declaring_the_reference_bare_const_names():
     file = _build_file()
-    assert file.path == "TEST-EN.js"
+    assert file.path == "TEST.js"
     for name in (
         "page_error",
         "fields",

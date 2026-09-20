@@ -19,7 +19,7 @@ def _build_file():
 
 def test_produces_a_stylesheet_with_the_references_core_class_names_intact():
     file = _build_file()
-    assert file.path == "TEST-EN.css"
+    assert file.path == "EN.css"
     for cls in [
         ".form_top_group",
         ".form_text_bx",

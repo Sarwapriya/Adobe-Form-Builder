@@ -353,7 +353,14 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
 
     definition = FormDefinition.model_validate_json(draft_version.definition)
     config = _enforce_variants_for_origin(form.origin, BuilderConfig.model_validate_json(draft_version.config))
-    generation = _generate_from_form_definition(definition, config)
+    # The form's project code goes into every generated file name (see
+    # file_names.py). It's read from the Form row *now* — never from the stored
+    # draft config — since it can be assigned after the draft exists (e.g. on
+    # ad-hoc approval). The published version below records the config it was
+    # actually generated with (code included) so its preview can recompute the
+    # exact names; the fresh draft further down keeps the code-free `config`.
+    generation_config = config.model_copy(update={"projectCode": form.projectCode})
+    generation = _generate_from_form_definition(definition, generation_config)
     validation: ValidationResult = generation["validation"]
     if len(validation.errors) > 0:
         return {"outcome": "invalid", "validation": validation}
@@ -387,7 +394,7 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     draft_version.publishedAt = published_at
     # Persist the enforced config (not the raw draft's), so a legacy ad-hoc
     # row's published record matches what was actually generated.
-    draft_version.config = config.model_dump_json()
+    draft_version.config = generation_config.model_dump_json()
 
     form.status = "published"
     form.publishedVersionId = draft_version.id

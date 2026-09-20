@@ -10,9 +10,11 @@ submit-button container.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from ...form.definition import FormDefinition, FormVariant
 from ..escaping import escape_html
-from ..file_names import FileNames
+from ..file_names import FileNames, language_file_names
 from ..types import BuilderConfig
 from .fragments.render_profile_field import render_profile_fields
 from .fragments.render_question_module import render_question_module
@@ -41,10 +43,21 @@ def _terms_link(form: FormDefinition, extra_class: str) -> str:
     )
 
 
-def render_page(form: FormDefinition, config: BuilderConfig, variant: FormVariant, file_names: FileNames) -> str:
+def render_page(
+    form: FormDefinition,
+    config: BuilderConfig,
+    variant: FormVariant,
+    file_names: FileNames,
+    locale: Optional[str] = None,
+) -> str:
+    """There is one page per language (`locale`, defaulting to the form's default
+    locale): its `<html lang>`/`dir` are seeded from that language, and it links
+    that language's own CSS and behavior JS plus the form's one shared data
+    file. See the TS source's own doc comment for the full rationale."""
     is_oc = variant == "oc"
+    files = language_file_names(file_names, locale)
     analytics_script = _ADOBE_LAUNCH_SCRIPT if (config.analytics and config.analytics.enabled) else ""
-    locale_info = next((l for l in form.locales if l.code == form.meta.defaultLocale), None)
+    locale_info = next((l for l in form.locales if l.code == files.locale), None)
     lang_subtag = locale_info.langSubtag if locale_info else "en"
     dir_attr = "rtl" if (locale_info and locale_info.isRtl) else "ltr"
 
@@ -127,7 +140,7 @@ def render_page(form: FormDefinition, config: BuilderConfig, variant: FormVarian
     top_subheading = '<p class="top_subheading"></p>'
 
     container_class = "container_oc" if is_oc else "container"
-    script_js = file_names.ocJs if is_oc else file_names.ffJs
+    script_js = files.ocJs if is_oc else files.ffJs
 
     return f"""<!doctype html>
 <html lang="{lang_subtag}" dir="{dir_attr}">
@@ -137,7 +150,7 @@ def render_page(form: FormDefinition, config: BuilderConfig, variant: FormVarian
 <title>Samsung</title>
 {_FAVICON_TAG}
 {_FONTS_TAG}
-<link rel="stylesheet" href="{file_names.css}">
+<link rel="stylesheet" href="{files.css}">
 {_CDN_SCRIPTS}
 {analytics_script}
 </head>

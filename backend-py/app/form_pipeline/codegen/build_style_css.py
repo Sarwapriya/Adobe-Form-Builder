@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from .file_names import FileNames
+from typing import Optional
+
+from .file_names import FileNames, language_file_names
 from .reference_css import REFERENCE_CSS as _REFERENCE_CSS
 from .types import GeneratedFile
 
@@ -154,6 +156,11 @@ _SUBHEADING_OVERRIDES = """
 """
 
 
-def build_style_css(file_names: FileNames) -> GeneratedFile:
+def build_style_css(file_names: FileNames, locale: Optional[str] = None) -> GeneratedFile:
+    """One stylesheet per language (`<lang>-<projectCode>.css`; the form's default
+    language when `locale` is omitted). Every language's file currently carries
+    the same full stylesheet — the `[dir="rtl"]`/`[lang="he"]` rules already
+    scope themselves to the page's own attributes, so an English page simply
+    never matches them."""
     contents = f"{_REFERENCE_CSS}\n{_COLOR_SCHEME_OVERRIDE}\n{_FONT_OVERRIDES}\n{_RTL_OVERRIDES}\n{_SUBHEADING_OVERRIDES}"
-    return GeneratedFile(path=file_names.css, contents=contents)
+    return GeneratedFile(path=language_file_names(file_names, locale).css, contents=contents)

@@ -1,4 +1,4 @@
-import type { FileNames, FormVariant, GeneratedFile } from "@formbuilder/shared";
+import { languageFileNames, type FileNames, type FormVariant, type GeneratedFile } from "@formbuilder/shared";
 
 export type PreviewColorScheme = "light" | "dark";
 
@@ -59,10 +59,13 @@ export function buildPreviewDocument(
   fileNames: FileNames,
   colorScheme: PreviewColorScheme = "light",
 ): string {
-  const htmlPath = variant === "ff" ? fileNames.ffHtml : fileNames.ocHtml;
-  const jsPath = variant === "ff" ? fileNames.ffJs : fileNames.ocJs;
+  // One page (plus its own stylesheet + behavior JS) exists per language; preview the one for
+  // `previewLocale`. Every language shares the one data file.
+  const language = languageFileNames(fileNames, previewLocale);
+  const htmlPath = variant === "ff" ? language.ffHtml : language.ocHtml;
+  const jsPath = variant === "ff" ? language.ffJs : language.ocJs;
   const html = files.find((f) => f.path === htmlPath)?.contents;
-  const css = files.find((f) => f.path === fileNames.css)?.contents ?? "";
+  const css = files.find((f) => f.path === language.css)?.contents ?? "";
   const dataJs = files.find((f) => f.path === fileNames.dataJs)?.contents ?? "";
   const behaviorJs = files.find((f) => f.path === jsPath)?.contents ?? "";
   if (!html) throw new Error(`No generated ${htmlPath} file to preview.`);
@@ -80,7 +83,7 @@ export function buildPreviewDocument(
     `window.URLSearchParams.prototype=O.prototype})();</script>\n`;
 
   const withInlinedAssets = html
-    .replace(`<link rel="stylesheet" href="${fileNames.css}">`, `<style>${css}</style>`)
+    .replace(`<link rel="stylesheet" href="${language.css}">`, `<style>${css}</style>`)
     .replace(`<script src="${fileNames.dataJs}"></script>`, `<script>${dataJs}</script>`)
     .replace(`<script src="${jsPath}"></script>`, `${paramOverride}<script>${behaviorJs}</script>`);
 

@@ -22,8 +22,13 @@ export interface BuilderConfig {
   variants: FormVariant[];
   apiEndpoint?: string;
   analytics?: AnalyticsConfig;
-  /** Overrides the derived `{subsidiary}-{LANG}` output file name prefix (see fileNames.ts). */
+  /** Overrides the `<Sub>` (subsidiary) part of every output file name (see fileNames.ts). */
   fileNamePrefix?: string;
+  /** The form's project code, used in output file names (`SESAR-EN_F2H26_FF.html`). Supplied
+   * at generation time from the form's own record (`Form.projectCode`) rather than kept in
+   * the stored draft config — a project code can be assigned after the draft exists (e.g. on
+   * ad-hoc approval), so a stored copy would go stale. Omitted from names when blank. */
+  projectCode?: string;
   /** URL/path for a `<link rel="shortcut icon">` tag; omitted from <head> when blank. */
   faviconUrl?: string;
   /** URL/path for an additional `<link rel="stylesheet">` (e.g. a custom font sheet); omitted when blank. */

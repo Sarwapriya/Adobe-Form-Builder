@@ -44,8 +44,14 @@ class BuilderConfig(BaseModel):
     variants: list[FormVariant] = Field(default_factory=lambda: ["ff"])
     apiEndpoint: Optional[str] = None
     analytics: Optional[AnalyticsConfig] = None
-    # Overrides the derived `{subsidiary}-{LANG}` output file name prefix.
+    # Overrides the `<Sub>` (subsidiary) part of every output file name.
     fileNamePrefix: Optional[str] = None
+    # The form's project code, used in output file names
+    # (`SESAR-EN_F2H26_FF.html`). Supplied at generation time from the form's own
+    # record (`Form.projectCode`) rather than kept in the stored draft config — a
+    # project code can be assigned after the draft exists (e.g. on ad-hoc
+    # approval), so a stored copy would go stale. Omitted from names when blank.
+    projectCode: Optional[str] = None
     faviconUrl: Optional[str] = None
     customFontsHref: Optional[str] = None
     project: Optional[str] = None

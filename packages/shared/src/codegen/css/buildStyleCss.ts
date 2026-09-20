@@ -1,4 +1,5 @@
-import type { FileNames } from "../fileNames";
+import type { LocaleCode } from "../../form/formDefinition";
+import { languageFileNames, type FileNames } from "../fileNames";
 import type { GeneratedFile } from "../types";
 // The reference CSS, copied near-verbatim (same class names, layout, and responsive
 // breakpoints) with its dangling asset references already patched to inline data-URI
@@ -173,9 +174,16 @@ const SUBHEADING_OVERRIDES = `
 }
 `;
 
-export function buildStyleCss(fileNames: FileNames): GeneratedFile {
+/**
+ * One stylesheet per language (`<lang>-<projectCode>.css`; the form's default language when
+ * `locale` is omitted). Every language's file currently carries the same full stylesheet —
+ * the `[dir="rtl"]`/`[lang="he"]` rules above already scope themselves to the page's own
+ * attributes, so an English page simply never matches them — which keeps each language's
+ * rendering exactly what it was when there was a single shared file.
+ */
+export function buildStyleCss(fileNames: FileNames, locale?: LocaleCode): GeneratedFile {
   return {
-    path: fileNames.css,
+    path: languageFileNames(fileNames, locale).css,
     contents: `${referenceCss}\n${COLOR_SCHEME_OVERRIDE}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}\n${SUBHEADING_OVERRIDES}`,
   };
 }

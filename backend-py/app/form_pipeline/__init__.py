@@ -28,7 +28,7 @@ from .ai.types import (
     is_mutating_ai_tool,
     is_server_executed_ai_tool,
 )
-from .codegen.file_names import FileNames, resolve_file_names
+from .codegen.file_names import FileNames, LanguageFileNames, language_file_names, resolve_file_names
 from .codegen.generate import generate_solution
 from .codegen.types import AnalyticsConfig, BuilderConfig, FormVariant, GeneratedFile, default_builder_config
 from .excel.question_master_rows import QuestionMasterRow, build_question_master_rows
@@ -146,5 +146,7 @@ __all__ = [
     "FormVariant",
     "GeneratedFile",
     "resolve_file_names",
+    "language_file_names",
     "FileNames",
+    "LanguageFileNames",
 ]
