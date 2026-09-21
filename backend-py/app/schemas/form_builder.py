@@ -13,7 +13,7 @@ same role the Node source's Zod schemas play.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -41,6 +41,10 @@ class CreateFormBody(BaseModel):
     subsidiaryId: str = Field(min_length=1)
     projectCode: Optional[str] = None
     copyFromFormId: Optional[str] = None
+    # "adhoc" lets an admin start a new ad-hoc campaign directly (Full Form only,
+    # listed under Ad-hoc Forms); the default keeps every existing caller creating
+    # an ordinary admin/HR form exactly as before.
+    origin: Literal["admin", "adhoc"] = "admin"
 
     _v_name = field_validator("name")(classmethod(lambda cls, v: _trim_required(v)))
     _v_subsidiary = field_validator("subsidiaryId")(classmethod(lambda cls, v: _trim_required(v)))

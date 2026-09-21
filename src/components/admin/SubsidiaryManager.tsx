@@ -16,6 +16,7 @@ import {
   type Subsidiary,
 } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { LoadingState } from "../common/LoadingState";
 import { NotificationEmailFields } from "../common/NotificationEmailFields";
 import { showToast } from "../../store/toastStore";
@@ -23,7 +24,8 @@ import { showToast } from "../../store/toastStore";
 /**
  * Inline admin panel for managing subsidiaries: create new ones, disable one
  * (blocks every project code for it in one step — reversible, click to
- * re-enable), delete one outright (permanent — the chip's own "x"), or set up
+ * re-enable), delete one (the chip's own "x", behind a confirmation — a soft
+ * delete on the backend: hidden and disabled, never erased), or set up
  * to two extra notification recipient addresses per subsidiary. Lives on
  * ConfigurationPage; per-project restrictions that don't need the whole
  * subsidiary blocked are SubsidiaryProjectBlockManager below.
@@ -35,6 +37,7 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Subsidiary | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
@@ -85,10 +88,13 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
     }
   }
 
-  async function handleDelete(subsidiary: Subsidiary) {
+  async function handleConfirmDelete() {
+    if (!confirmDelete) return;
+    const subsidiary = confirmDelete;
     setDeletingId(subsidiary.id);
     try {
       await deleteSubsidiary(subsidiary.id);
+      setConfirmDelete(null);
       await refresh();
       onChange?.();
     } catch (err) {
@@ -206,7 +212,7 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
             {selectMode
               ? "Click chips to select them, then disable or enable them all at once above."
-              : "Click a chip to enable/disable it (blocks every project for that subsidiary); click its \"x\" to delete it permanently. Use \"Select multiple\" to disable several at once."}
+              : "Click a chip to enable/disable it (blocks every project for that subsidiary); click its \"x\" to delete it (you'll be asked to confirm). Use \"Select multiple\" to disable several at once."}
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {subsidiaries.map((s) =>
@@ -236,7 +242,7 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
                   color={s.isActive ? "success" : "default"}
                   icon={s.isActive ? <LockOpenIcon /> : <LockIcon />}
                   onClick={() => handleToggle(s)}
-                  onDelete={() => handleDelete(s)}
+                  onDelete={() => setConfirmDelete(s)}
                   disabled={togglingId === s.id || deletingId === s.id}
                   title={s.isActive ? "Active — click to disable" : "Disabled — click to enable"}
                 />
@@ -268,6 +274,21 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Delete subsidiary"
+        message={
+          <>
+            Delete <strong>{confirmDelete?.name}</strong>? It will be removed from the list and every user of this
+            subsidiary will be disabled. Nothing is erased from the database, and adding the same name again restores it.
+          </>
+        }
+        confirmLabel="Delete"
+        loading={!!confirmDelete && deletingId === confirmDelete.id}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </Paper>
   );
 }

@@ -44,6 +44,35 @@ class TestSubsidiaryLocaleCrud:
         removed_again = client.delete(f"/api/v1/admin/subsidiary-locales/{created.json()['id']}", headers=admin_headers)
         assert removed_again.status_code == 404
 
+        relisted = client.get("/api/v1/admin/subsidiary-locales", headers=admin_headers).json()
+        assert not any(loc["id"] == created.json()["id"] for loc in relisted)
+
+    def test_removal_is_soft_and_re_adding_the_code_restores_the_same_row(
+        self, client: TestClient, admin_headers: dict, db_session
+    ):
+        from app.models.subsidiary_locale import SubsidiaryLocale
+
+        subsidiary_name = _unique_subsidiary()
+        created = client.post(
+            "/api/v1/admin/subsidiary-locales", json=_locale_body(subsidiary_name, "fr_FR", False), headers=admin_headers
+        ).json()
+        assert client.delete(f"/api/v1/admin/subsidiary-locales/{created['id']}", headers=admin_headers).status_code == 204
+
+        row = db_session.get(SubsidiaryLocale, created["id"])
+        db_session.refresh(row)
+        assert row is not None and row.isDeleted is True and row.deletedAt is not None
+
+        public = client.get("/api/v1/subsidiary-locales/", params={"subsidiary": subsidiary_name}, headers=admin_headers).json()
+        assert public == []
+
+        restored = client.post(
+            "/api/v1/admin/subsidiary-locales", json=_locale_body(subsidiary_name, "fr_FR", False), headers=admin_headers
+        )
+        assert restored.status_code == 201, restored.text
+        assert restored.json()["id"] == created["id"]
+        db_session.refresh(row)
+        assert row.isDeleted is False and row.deletedAt is None
+
     def test_duplicate_code_for_same_subsidiary_conflicts(self, client: TestClient, admin_headers: dict):
         subsidiary_name = _unique_subsidiary()
         body = _locale_body(subsidiary_name, "ar_AE", False)

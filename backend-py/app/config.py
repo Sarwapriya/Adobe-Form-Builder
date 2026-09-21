@@ -53,9 +53,10 @@ class Settings(BaseSettings):
     FABRIX_OPENAPI_TOKEN: Optional[str] = None
     FABRIX_USER_EMAIL: Optional[str] = None
 
-    # --- Groq (OpenAI-compatible chat completions API; fallback tier in the
-    # AI assistant chain, tried whenever FabriX is disabled or unreachable —
-    # see aiProviderService.py) ---
+    # --- Groq env fallback. Other AI providers are now managed in the admin UI
+    # (Configuration > AI Assistant > Other AI Providers, table fq.AiProviders);
+    # these variables are only used to build a Groq provider while that table has
+    # no rows at all — see ai_providers_service.list_enabled_provider_configs. ---
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL: str = "openai/gpt-oss-120b"
     GROQ_ENABLED: bool = True

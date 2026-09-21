@@ -38,7 +38,7 @@ from app.services.aiSystemPrompt import build_system_prompt
 
 HISTORY_LIMIT = 20
 
-# Shown to the customer whenever every AI provider tier (FabriX, Groq)
+# Shown to the customer whenever every AI provider tier (FabriX, then each other provider)
 # failed, or an unexpected exception was raised — never the raw
 # provider/exception text (e.g. "FabriXAI request timed out after 5s"),
 # which would leak internal infrastructure detail into the chat transcript.

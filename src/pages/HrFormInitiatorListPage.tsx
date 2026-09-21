@@ -26,6 +26,7 @@ import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
+import { ProjectCodeFormGroups } from "../components/formBuilder/ProjectCodeFormGroups";
 import { showToast } from "../store/toastStore";
 import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
@@ -210,10 +211,11 @@ export function HrFormInitiatorListPage() {
           </Typography>
         </Paper>
       ) : (
-        <Stack spacing={1}>
-          {forms.map((form) => (
+        <ProjectCodeFormGroups
+          forms={forms}
+          renderForm={(form) => (
             <Paper
-              key={form.id}
+              variant="outlined"
               sx={{ p: 2, display: "flex", alignItems: "center", gap: 2, cursor: "pointer" }}
               onClick={() => navigate(`/admin/form-builder/${form.id}`)}
             >
@@ -222,8 +224,7 @@ export function HrFormInitiatorListPage() {
                   {form.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {form.subsidiaryId}
-                  {form.projectCode ? ` · ${form.projectCode}` : ""} · Updated {new Date(form.updatedAt).toLocaleString()}
+                  Updated {new Date(form.updatedAt).toLocaleString()}
                 </Typography>
               </Box>
               {form.publishedVersionNumber != null && (
@@ -236,14 +237,14 @@ export function HrFormInitiatorListPage() {
                 deleteDisabled={deletingId === form.id}
               />
             </Paper>
-          ))}
-        </Stack>
+          )}
+        />
       )}
 
       <ConfirmDialog
         open={!!confirmDeleteForm}
         title="Delete form"
-        message={`Delete "${confirmDeleteForm?.name}"?${confirmDeleteForm && confirmDeleteForm.status !== "draft" ? " Its published output will also be hidden." : ""}`}
+        message={`Delete "${confirmDeleteForm?.name}"?${confirmDeleteForm && confirmDeleteForm.status !== "draft" ? " Its published output will also be hidden." : ""} It's removed from every list — nothing is erased from the database.`}
         confirmLabel="Delete"
         loading={deletingId === confirmDeleteForm?.id}
         onConfirm={handleConfirmDelete}

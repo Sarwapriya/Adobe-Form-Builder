@@ -22,7 +22,7 @@ from sqlalchemy import Boolean
 from sqlalchemy.dialects import mssql
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, datetimeoffset_now, nvarchar, uuid_pk
+from app.models.base import Base, datetimeoffset_nullable, datetimeoffset_now, nvarchar, uuid_pk
 
 UserRole = Literal["admin", "standard", "superadmin"]
 
@@ -64,4 +64,10 @@ class User(Base):
     isActive: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     notificationEmail: Mapped[Optional[str]] = nvarchar(255, nullable=True)
     notificationEmail2: Mapped[Optional[str]] = nvarchar(255, nullable=True)
+    # Soft delete: the "Delete" action never removes the row (its history —
+    # forms created, contributions reviewed, ... — stays attached to it), it
+    # just flags it. A deleted account is also `isActive = False`, so it can't
+    # sign in, and is hidden from every list. See auth_service.delete_user.
+    isDeleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    deletedAt: Mapped[Optional[object]] = datetimeoffset_nullable()
     createdAt = datetimeoffset_now()

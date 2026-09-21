@@ -3,15 +3,17 @@
 `adminRouter.use(requireAdmin)`.
 
 Route groups ported: project codes, subsidiaries, subsidiary-project blocks,
-subsidiary locales, users, SMTP/FabriX/Groq settings, SFTP deployment
-settings, QA runs, dashboard-summary, and Question Master.
+subsidiary locales, users, SMTP/FabriX settings, "other" AI providers, SFTP
+deployment settings, QA runs, dashboard-summary, and Question Master.
 
-FabriX and Groq are the two AI-assistant provider tiers, each independently
-enable/disable-toggleable (see `fabrix_settings_service.py`/
-`groq_settings_service.py`) — FabriX always gets first priority when both are
-enabled (see `aiProviderService.py`). There is no third "Claude/Anthropic"
-tier — an earlier version of this port had one, but it was never actually
-configured with real Anthropic credentials in practice and has been removed.
+FabriX plus any number of admin-added "other" AI providers (any OpenAI-compatible
+endpoint — see `ai_providers_service.py`) are the AI-assistant tiers, each
+independently enable/disable-toggleable — FabriX always gets first priority,
+then the other providers in their listed order (see `aiProviderService.py`).
+LLM models and providers are never deleted, only disabled.
+
+Every "Delete" here (user, subsidiary, subsidiary locale) is a soft delete: the
+row is flagged `isDeleted`, never removed from the database.
 
 Mounted at `/api/v1/admin` (see `app/main.py`).
 """
@@ -31,13 +33,13 @@ from app.models.qa_run import QaRunVariant
 from app.security import dkms_client
 from app.security.deps import require_admin
 from app.services import (
+    ai_providers_service,
     auth_service,
     dashboard_service,
     dkms_settings_service,
     email_service,
     fabrix_models_service,
     fabrix_settings_service,
-    groq_settings_service,
     project_code_service,
     qa_run_service,
     question_master_service,
@@ -51,8 +53,7 @@ from app.services.dkms_settings_service import DkmsSettingsInput
 from app.services.fabrix_models_service import CreateFabrixModelInput
 from app.services.fabrix_settings_service import FabrixSettingsInput
 from app.services.fabrixAIService import send_message as send_fabrix_message
-from app.services.groq_settings_service import GroqSettingsInput
-from app.services.groqAIService import send_message as send_groq_message
+from app.services.openaiCompatAIService import send_message as send_provider_message
 from app.services.sftp_settings_service import SftpTargetConfig
 from app.services.smtp_settings_service import SmtpSettingsInput
 from app.services.subsidiary_locale_service import CreateSubsidiaryLocaleInput
@@ -425,7 +426,7 @@ class CreateUserBody(BaseModel):
     @model_validator(mode="after")
     def _standard_requires_subsidiary(self) -> "CreateUserBody":
         if self.role == "standard" and not self.subsidiaryId:
-            raise ValueError("Subsidiary is required for a standard user")
+            raise ValueError("Subsidiary is required for a Subsidiary user")
         return self
 
 
@@ -475,12 +476,10 @@ def update_user_active(
     }
 
 
-# Hard delete — only possible when the account has no dependent records
-# anywhere in the app's history (created forms, contributions, QA runs,
-# Question Master exports, AI assistant activity, ...). A user who's ever
-# done any of that can only be deactivated (PATCH .../users/:id above),
-# never deleted — see auth_service.delete_user. Same self-account and
-# role-based restrictions as update_user_active.
+# Soft delete — the account is flagged deleted, made inactive and hidden, but the
+# row (and every form/contribution/etc. attached to it) is kept — see
+# auth_service.delete_user. Same self-account and role-based restrictions as
+# update_user_active.
 @router.delete("/users/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(id: str, db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> None:
     if id == auth.get("sub"):
@@ -495,14 +494,6 @@ def delete_user(id: str, db: Session = Depends(get_db), auth: dict = Depends(req
     outcome = auth_service.delete_user(db, id)
     if outcome == "not_found":
         raise HTTPException(status_code=404, detail="user not found")
-    if outcome == "has_records":
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "This user cannot be deleted because they already have records in the system "
-                "(created forms, contributions, or other activity). Deactivate the account instead."
-            ),
-        )
 
 
 class UpdateUserProfileBody(BaseModel):
@@ -771,46 +762,72 @@ def move_fabrix_model(id: str, body: MoveFabrixModelBody, db: Session = Depends(
     return _serialize_fabrix_model(moved)
 
 
-@router.delete("/fabrix-models/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_fabrix_model(id: str, db: Session = Depends(get_db)) -> None:
-    deleted = fabrix_models_service.delete_fabrix_model(db, id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="fabrix model not found")
+# FabriX models are deliberately not deletable — `isEnabled` (the switch on the
+# Models list) is how one is turned off, so its row is always kept.
 
 
-# --- Groq settings -----------------------------------------------------------
-# The fallback AI-assistant provider tier, used automatically whenever
-# FabriX is disabled or unreachable (see aiProviderService.py). Enabling/
-# disabling either tier is exactly what decides "which API should use" —
-# there's no separate priority setting, since FabriX is always tried first
-# when both are enabled.
+# --- Other AI providers ------------------------------------------------------
+# The fallback AI-assistant tier, tried in listed order whenever FabriX is
+# disabled or unreachable (see aiProviderService.py). Any number can be added —
+# each is any OpenAI-compatible chat-completions endpoint, identified by the
+# name the admin gives it. Providers are never deleted, only enabled/disabled.
 
 
-class GroqSettingsBody(BaseModel):
-    model: str = Field(min_length=1)
+class CreateAiProviderBody(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    baseUrl: str = Field(min_length=1, max_length=500)
+    model: str = Field(min_length=1, max_length=200)
+    apiKey: str = Field(min_length=1)
+    isEnabled: bool = True
+
+    @field_validator("name", "baseUrl", "model", "apiKey")
+    @classmethod
+    def _trim(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must not be empty")
+        return v
+
+
+class UpdateAiProviderBody(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    baseUrl: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    model: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    # Blank/absent keeps the stored key.
     apiKey: Optional[str] = None
-    enabled: Optional[bool] = None
+    isEnabled: Optional[bool] = None
 
 
-@router.get("/groq-settings")
-def get_groq_settings(db: Session = Depends(get_db)) -> dict:
-    return groq_settings_service.get_groq_settings_for_display(db)
+@router.get("/ai-providers")
+def list_ai_providers(db: Session = Depends(get_db)) -> list[dict]:
+    return [ai_providers_service.serialize_ai_provider(p) for p in ai_providers_service.list_ai_providers(db)]
 
 
-@router.patch("/groq-settings")
-def patch_groq_settings(body: GroqSettingsBody, db: Session = Depends(get_db)) -> dict:
-    groq_settings_service.save_groq_settings(
-        db, GroqSettingsInput(model=body.model, apiKey=body.apiKey, enabled=body.enabled)
+@router.post("/ai-providers", status_code=status.HTTP_201_CREATED)
+def create_ai_provider(body: CreateAiProviderBody, db: Session = Depends(get_db)) -> dict:
+    created = ai_providers_service.create_ai_provider(
+        db, body.name, body.baseUrl, body.model, body.apiKey, is_enabled=body.isEnabled
     )
-    return groq_settings_service.get_groq_settings_for_display(db)
+    return ai_providers_service.serialize_ai_provider(created)
 
 
-@router.post("/groq-settings/test")
-async def test_groq_settings(db: Session = Depends(get_db)) -> dict:
-    settings = groq_settings_service.get_groq_settings_for_display(db)
-    if not settings["hasApiKey"]:
-        raise HTTPException(status_code=400, detail={"ok": False, "error": "A Groq API key must be configured first"})
-    result = await send_groq_message({"messages": [{"role": "user", "content": "Reply with a short greeting."}]}, db)
+@router.patch("/ai-providers/{id}")
+def update_ai_provider(id: str, body: UpdateAiProviderBody, db: Session = Depends(get_db)) -> dict:
+    updated = ai_providers_service.update_ai_provider(db, id, body.model_dump(exclude_unset=True))
+    if updated is None:
+        raise HTTPException(status_code=404, detail="AI provider not found")
+    return ai_providers_service.serialize_ai_provider(updated)
+
+
+@router.post("/ai-providers/{id}/test")
+async def test_ai_provider(id: str, db: Session = Depends(get_db)) -> dict:
+    provider = ai_providers_service.get_ai_provider(db, id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="AI provider not found")
+    config = ai_providers_service.config_for_provider(provider)
+    if config is None:
+        raise HTTPException(status_code=400, detail={"ok": False, "error": "An API key must be configured first"})
+    result = await send_provider_message({"messages": [{"role": "user", "content": "Reply with a short greeting."}]}, config)
     return {"ok": result["ok"], "error": None if result["ok"] else result["error"]}
 
 
@@ -1054,3 +1071,15 @@ def download_question_master_version(id: str, db: Session = Depends(get_db)) -> 
 @router.get("/dashboard-summary")
 def get_dashboard_summary(db: Session = Depends(get_db)) -> dict:
     return dashboard_service.get_admin_dashboard_summary(db)
+
+
+# Full lists behind the dashboard's "Action Required" / "Recent Activity" cards,
+# which only show the latest few and link here via "Show more".
+@router.get("/dashboard-summary/pending-approvals")
+def list_dashboard_pending_approvals(db: Session = Depends(get_db)) -> list[dict]:
+    return dashboard_service.get_pending_approvals(db)
+
+
+@router.get("/dashboard-summary/recent-activity")
+def list_dashboard_recent_activity(db: Session = Depends(get_db)) -> list[dict]:
+    return dashboard_service.get_recent_activity(db, limit=dashboard_service.FULL_LIST_LIMIT)

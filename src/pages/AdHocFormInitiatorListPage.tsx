@@ -19,6 +19,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { ApiError } from "../api/apiClient";
 import { createForm, deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
@@ -27,6 +28,7 @@ import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
+import { ProjectCodeFormGroups } from "../components/formBuilder/ProjectCodeFormGroups";
 import { showToast } from "../store/toastStore";
 import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
@@ -47,14 +49,19 @@ const STATUS_OPTIONS: Array<{ value: FormStatus | ""; label: string }> = [
  * "Ad-hoc Forms" — the Form Initiator submenu page for subsidiary-initiated
  * submissions (origin: "adhoc", see MyAdHocFormEditorPage on the subsidiary
  * side), fully separate from the sibling "HR Form Initiator" submenu page
- * (HrFormInitiatorListPage), which only ever covers admin-authored forms. No
- * generic "New Form" button here — an admin never creates an ad-hoc-origin
- * form directly, only reviews (AdHocReviewPanel, on the shared
- * FormBuilderEditorPage) what a subsidiary user has already submitted. Each
- * row's Copy action is the one exception: it lets admin reuse a good ad-hoc
- * submission's questions/fields/consents as the starting point for a brand
- * new admin-origin (HR) form — same createForm({ copyFromFormId }) plumbing
- * HrFormInitiatorListPage's own Copy action uses.
+ * (HrFormInitiatorListPage), which only ever covers admin-authored forms.
+ *
+ * Two ways to create from here, both through the same New Form dialog:
+ * - the header "New Form" button starts a brand-new *ad-hoc* campaign
+ *   (origin: "adhoc", Full Form only), which then lists here like any other
+ *   ad-hoc form. Like every ad-hoc form it is also visible to that
+ *   subsidiary's own users under My Forms > Ad-hoc Forms.
+ * - each row's Copy action reuses a good ad-hoc submission's
+ *   questions/fields/consents as the starting point for a brand new
+ *   admin-origin (HR) form — same createForm({ copyFromFormId }) plumbing
+ *   HrFormInitiatorListPage's own Copy action uses.
+ * Reviewing what a subsidiary user submitted (AdHocReviewPanel, on the shared
+ * FormBuilderEditorPage) is unchanged.
  */
 export function AdHocFormInitiatorListPage() {
   const navigate = useNavigate();
@@ -140,7 +147,7 @@ export function AdHocFormInitiatorListPage() {
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
-    if (!newName.trim() || !newSubsidiaryId || !copySourceForm) return;
+    if (!newName.trim() || !newSubsidiaryId) return;
 
     setCreating(true);
     try {
@@ -148,7 +155,9 @@ export function AdHocFormInitiatorListPage() {
         name: newName.trim(),
         subsidiaryId: newSubsidiaryId,
         projectCode: newProjectCode || undefined,
-        copyFromFormId: copySourceForm.id,
+        // Copying an ad-hoc submission makes an HR (admin-origin) form, as before;
+        // a plain New Form is a brand-new ad-hoc campaign.
+        ...(copySourceForm ? { copyFromFormId: copySourceForm.id } : { origin: "adhoc" as const }),
       });
       closeCreateDialog();
       navigate(`/admin/form-builder/${form.id}`);
@@ -178,7 +187,12 @@ export function AdHocFormInitiatorListPage() {
       <PageHeader
         icon={<DesignServicesIcon />}
         title="Ad-hoc Forms"
-        subtitle="Forms subsidiary users built themselves via My Forms — review, pick a Project Code, and approve or reject."
+        subtitle="Forms subsidiary users built themselves via My Forms — review, pick a Project Code, and approve or reject. You can also build a new ad-hoc campaign yourself."
+        action={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            New Form
+          </Button>
+        }
       />
 
       <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
@@ -208,14 +222,15 @@ export function AdHocFormInitiatorListPage() {
       ) : forms.length === 0 ? (
         <Paper sx={{ p: 3 }}>
           <Typography variant="body2" color="text.secondary">
-            No ad-hoc forms yet.
+            No ad-hoc forms yet — click "New Form" to create one.
           </Typography>
         </Paper>
       ) : (
-        <Stack spacing={1}>
-          {forms.map((form) => (
+        <ProjectCodeFormGroups
+          forms={forms}
+          renderForm={(form) => (
             <Paper
-              key={form.id}
+              variant="outlined"
               sx={{ p: 2, display: "flex", alignItems: "center", gap: 2, cursor: "pointer" }}
               onClick={() => navigate(`/admin/form-builder/${form.id}`)}
             >
@@ -224,8 +239,7 @@ export function AdHocFormInitiatorListPage() {
                   {form.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {form.subsidiaryId}
-                  {form.projectCode ? ` · ${form.projectCode}` : ""} · Updated {new Date(form.updatedAt).toLocaleString()}
+                  Updated {new Date(form.updatedAt).toLocaleString()}
                 </Typography>
               </Box>
               {form.publishedVersionNumber != null && (
@@ -240,14 +254,14 @@ export function AdHocFormInitiatorListPage() {
                 deleteDisabled={deletingId === form.id}
               />
             </Paper>
-          ))}
-        </Stack>
+          )}
+        />
       )}
 
       <ConfirmDialog
         open={!!confirmDeleteForm}
         title="Delete form"
-        message={`Delete "${confirmDeleteForm?.name}"?${confirmDeleteForm && confirmDeleteForm.status !== "draft" ? " Its published output will also be hidden." : ""}`}
+        message={`Delete "${confirmDeleteForm?.name}"?${confirmDeleteForm && confirmDeleteForm.status !== "draft" ? " Its published output will also be hidden." : ""} It's removed from every list — nothing is erased from the database.`}
         confirmLabel="Delete"
         loading={deletingId === confirmDeleteForm?.id}
         onConfirm={handleConfirmDelete}
@@ -256,13 +270,17 @@ export function AdHocFormInitiatorListPage() {
 
       <Dialog {...responsiveDialogProps} open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
         <Box component="form" onSubmit={handleCreate}>
-          <DialogTitle>New Form (copy)</DialogTitle>
+          <DialogTitle>{copySourceForm ? "New Form (copy)" : "New Ad-hoc Form"}</DialogTitle>
           <DialogContent>
             <Stack spacing={2} sx={{ pt: 1 }}>
-              {copySourceForm && (
+              {copySourceForm ? (
                 <Alert severity="info" sx={{ borderRadius: 2 }}>
                   Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
                   everything afterward. This creates a new HR form, separate from the ad-hoc submission.
+                </Alert>
+              ) : (
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                  Creates a new ad-hoc campaign (Full Form only) that opens straight in the editor.
                 </Alert>
               )}
               <TextField

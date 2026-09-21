@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.fabrix_model import FabrixModel
@@ -92,9 +92,3 @@ def move_fabrix_model(db: Session, id: str, direction: str) -> Optional[FabrixMo
     db.commit()
     db.refresh(a)
     return a
-
-
-def delete_fabrix_model(db: Session, id: str) -> bool:
-    result = db.execute(delete(FabrixModel).where(FabrixModel.id == id))
-    db.commit()
-    return (result.rowcount or 0) > 0

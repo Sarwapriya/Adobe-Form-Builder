@@ -25,6 +25,7 @@ import { PageHeader } from "../components/common/PageHeader";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
 import { ContributionStatusBar } from "../components/formContribution/ContributionStatusBar";
 import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
+import { useConfirm } from "../hooks/useConfirm";
 
 type AdHocStatusLabel = "Draft" | "Pending review" | "Rejected" | "Published";
 
@@ -89,6 +90,7 @@ export function MyAdHocFormsListPage() {
   const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   function refresh() {
     setLoading(true);
@@ -132,7 +134,16 @@ export function MyAdHocFormsListPage() {
   }
 
   async function handleDelete(form: FormListItem) {
-    if (!window.confirm(`Delete "${form.name}"? This can't be undone.`)) return;
+    const confirmed = await confirm({
+      title: "Delete form",
+      message: (
+        <>
+          Delete <strong>{form.name}</strong>? It's removed from your list — nothing is erased from the database.
+        </>
+      ),
+      confirmLabel: "Delete",
+    });
+    if (!confirmed) return;
     setDeletingId(form.id);
     try {
       await deleteAdHocForm(form.id);
@@ -214,6 +225,8 @@ export function MyAdHocFormsListPage() {
           </Stack>
         )}
       </Paper>
+
+      {confirmDialog}
 
       <Dialog {...responsiveDialogProps} open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
         <DialogTitle>{copySourceForm ? "New Ad-hoc Form (copy)" : "New Ad-hoc Form"}</DialogTitle>

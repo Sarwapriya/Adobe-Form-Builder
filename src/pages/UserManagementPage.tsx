@@ -40,6 +40,7 @@ import {
 } from "../api/adminApi";
 import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { useAuthStore } from "../auth/authStore";
+import { roleLabel } from "../auth/roleLabel";
 import { PageHeader } from "../components/common/PageHeader";
 import { NotificationEmailFields } from "../components/common/NotificationEmailFields";
 import { showToast } from "../store/toastStore";
@@ -122,7 +123,7 @@ export function UserManagementPage() {
         role,
         subsidiaryId: subsidiaryId.trim() || undefined,
       });
-      showToast(`Created ${created.role} account "${created.username}".`, "success");
+      showToast(`Created ${roleLabel(created.role).toLowerCase()} account "${created.username}".`, "success");
       setUsername("");
       setEmail("");
       setPassword("");
@@ -178,10 +179,8 @@ export function UserManagementPage() {
 
   // Same permission shape as canToggle (nobody may act on their own account;
   // a plain admin only on standard accounts, a superadmin on anyone) — the
-  // backend applies the identical check either way, so the *button* is
-  // always offered; whether the delete actually succeeds is a separate
-  // question answered by the confirm dialog (a user with existing records
-  // gets rejected with a 409 there, not hidden here).
+  // backend applies the identical check either way. The button opens a confirm
+  // dialog; the delete itself is a soft delete (see DeleteUserDialog).
   function canDelete(target: AdminUserListItem): boolean {
     if (target.id === currentUser?.id) return false;
     return isSuperAdmin || target.role === "standard";
@@ -192,7 +191,7 @@ export function UserManagementPage() {
       <PageHeader
         icon={<PeopleIcon />}
         title="User Management"
-        subtitle="Provision new accounts and optionally scope a standard user to one subsidiary."
+        subtitle="Provision new accounts. A Subsidiary user is scoped to one subsidiary."
       />
 
       <Paper sx={{ p: 3, mb: 4 }}>
@@ -235,7 +234,7 @@ export function UserManagementPage() {
           >
             {assignableRoles.map((r) => (
               <MenuItem key={r} value={r}>
-                {r}
+                {roleLabel(r)}
               </MenuItem>
             ))}
           </TextField>
@@ -250,7 +249,7 @@ export function UserManagementPage() {
             error={subsidiaryRequired && !subsidiaryId}
             helperText={
               subsidiaryRequired && !subsidiaryId
-                ? "Required for a standard user"
+                ? "Required for a Subsidiary user"
                 : "Locks this user's uploads to one subsidiary"
             }
             InputLabelProps={{ shrink: true }}
@@ -275,7 +274,7 @@ export function UserManagementPage() {
 
         {!isSuperAdmin && (
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>
-            Only a superadmin can provision admin or superadmin accounts — you can create standard users only.
+            Only a superadmin can provision admin or superadmin accounts — you can create Subsidiary users only.
           </Typography>
         )}
 
@@ -315,7 +314,7 @@ export function UserManagementPage() {
                     <TableCell sx={{ fontWeight: 600 }}>{u.username}</TableCell>
                     <TableCell>{u.email}</TableCell>
                     <TableCell>
-                      <Chip label={u.role} color={ROLE_COLOR[u.role]} size="small" />
+                      <Chip label={roleLabel(u.role)} color={ROLE_COLOR[u.role]} size="small" />
                     </TableCell>
                     <TableCell>{u.subsidiaryId ?? "—"}</TableCell>
                     <TableCell>
@@ -392,14 +391,10 @@ export function UserManagementPage() {
 }
 
 /**
- * Confirms a permanent delete, then surfaces the backend's rejection
- * front-and-center when the account can't be deleted — a user who's ever
- * created a form, submitted a contribution, run a QA check, etc. always
- * gets rejected with a 409 (see admin.router.py's `delete_user` /
- * auth_service.py's `_user_has_dependent_records`), and this dialog is
- * where that "cannot delete, deactivate instead" message actually reaches
- * the admin — it's not something the row-level Delete button tries to
- * predict ahead of time.
+ * Confirms deleting an account. The delete is a soft delete on the backend
+ * (see admin.py's `delete_user` / auth_service.py's `delete_user`): the account
+ * is disabled and hidden but its row — and every form or record attached to
+ * it — is kept, so this works for any user, however much history they have.
  */
 function DeleteUserDialog({
   user,
@@ -430,7 +425,8 @@ function DeleteUserDialog({
       <DialogTitle>Delete user</DialogTitle>
       <DialogContent>
         <Typography>
-          Permanently delete <strong>{user.username}</strong> ({user.email})? This cannot be undone.
+          Delete <strong>{user.username}</strong> ({user.email})? They will be signed out, unable to log in, and removed
+          from this list. Their forms and history are kept — nothing is erased from the database.
         </Typography>
       </DialogContent>
       <DialogActions>
@@ -557,7 +553,7 @@ function EditUserDialog({
           >
             {assignableRoles.map((r) => (
               <MenuItem key={r} value={r}>
-                {r}
+                {roleLabel(r)}
               </MenuItem>
             ))}
           </TextField>
@@ -569,7 +565,7 @@ function EditUserDialog({
             onChange={(e) => setSubsidiaryId(e.target.value)}
             required={subsidiaryRequired}
             error={subsidiaryRequired && !subsidiaryId}
-            helperText={subsidiaryRequired && !subsidiaryId ? "Required for a standard user" : undefined}
+            helperText={subsidiaryRequired && !subsidiaryId ? "Required for a Subsidiary user" : undefined}
             InputLabelProps={{ shrink: true }}
           >
             <MenuItem value="" disabled={subsidiaryRequired}>

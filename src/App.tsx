@@ -9,6 +9,8 @@ import { AdminRoute } from "./auth/AdminRoute.tsx";
 import { ProtectedRoute } from "./auth/ProtectedRoute.tsx";
 import { isAdminRole, useAuthStore } from "./auth/authStore.ts";
 import { AdminOverviewDashboardPage } from "./pages/AdminOverviewDashboardPage.tsx";
+import { AdminActionRequiredPage } from "./pages/AdminActionRequiredPage.tsx";
+import { AdminRecentActivityPage } from "./pages/AdminRecentActivityPage.tsx";
 import { SubsidiaryDashboardPage } from "./pages/SubsidiaryDashboardPage.tsx";
 import { ConfigurationPage } from "./pages/ConfigurationPage.tsx";
 import { UserManagementPage } from "./pages/UserManagementPage.tsx";
@@ -82,6 +84,8 @@ export default function App() {
                 <Route path="my-subsidiary" element={<MySubsidiaryPage />} />
                 <Route element={<AdminRoute />}>
                   <Route path="admin/dashboard" element={<AdminOverviewDashboardPage />} />
+                  <Route path="admin/dashboard/action-required" element={<AdminActionRequiredPage />} />
+                  <Route path="admin/dashboard/recent-activity" element={<AdminRecentActivityPage />} />
                   <Route path="admin/configuration" element={<ConfigurationPage />} />
                   <Route path="admin/users" element={<UserManagementPage />} />
                   <Route path="admin/form-builder" element={<Navigate to="/admin/form-builder/hr" replace />} />

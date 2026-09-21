@@ -3,7 +3,7 @@
 A full FastAPI/SQLAlchemy port of this project's backend — auth, admin
 configuration, the form builder (Form Initiator campaigns, ad-hoc forms,
 subsidiary contributions), Playwright-driven QA runs, Question Master
-export, the AI assistant (FabriX + Groq), DKMS-based PII encryption, and
+export, the AI assistant (FabriX + any number of OpenAI-compatible fallback providers), DKMS-based PII encryption, and
 outbound email/SFTP deployment. This is the only backend in the repo; an
 earlier Node/Express/TypeORM backend was ported here feature-for-feature and
 then removed once parity was verified.
@@ -61,7 +61,7 @@ DKMS (`DKMS_BASE_URL`/`DKMS_TASK_ID`) and skip cleanly otherwise.
 - `app/main.py` — FastAPI app, middleware, router mounting.
 - `app/models/` — every SQLAlchemy model (mirrors the SQL Server schema).
 - `app/routers/` — one file per resource (`admin.py`, `auth.py`, `ai.py`, `form_builder.py`, `subsidiary_forms.py`, `project_codes.py`, `subsidiaries.py`, `subsidiary_locales.py`), each ported from the equivalent Node Express router.
-- `app/services/` — business logic, one file per Node service it was ported from (`auth_service.py`, `form_builder_service.py`, `email_service.py`, `sftp_service.py`, `qa_run_service.py`, `qa/` (Playwright QA-check implementation), `cutoff_reminder_service.py`, `aiProviderService.py`/`fabrixAIService.py`/`groqAIService.py`, ...).
+- `app/services/` — business logic, one file per Node service it was ported from (`auth_service.py`, `form_builder_service.py`, `email_service.py`, `sftp_service.py`, `qa_run_service.py`, `qa/` (Playwright QA-check implementation), `cutoff_reminder_service.py`, `aiProviderService.py`/`fabrixAIService.py`/`openaiCompatAIService.py`/`ai_providers_service.py`, ...).
 - `app/form_pipeline/` — a hand-ported Python re-implementation of `packages/shared/src/` (the `FormDefinition` model, validation, contribution-merging, codegen) — **not** a binding onto the TypeScript package (Python can't import it); keep both in sync by hand when either changes.
 - `app/security/` — JWT, passwords, CSRF, AES-256-GCM secret encryption, the DKMS PII-encryption client.
 - `app/middleware/` — security headers, rate limiting.

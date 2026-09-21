@@ -199,3 +199,35 @@ def test_oc_html_omits_name_email_and_privacy_uses_floating_submit_bar():
     assert idx.by_id.get("formBottomBar") is not None
     assert idx.class_count.get("form_bottom_group", 0) == 0
     assert idx.class_count.get("container_oc", 0) == 1
+
+
+def _with_privacy(required=None, variants=None):
+    from app.form_pipeline.form.definition import PrivacyPolicyMeta
+
+    form = sample_form_definition()
+    form.fields.privacyPolicy = PrivacyPolicyMeta(
+        textByLocale={"en_GB": "I agree"},
+        linkUrlByLocale={"en_GB": "https://x.test/privacy"},
+        required=required,
+        visibleInVariants=variants,
+    )
+    return form
+
+
+def test_privacy_policy_label_matches_the_reference_shape_star_then_break_then_link_ending_in_an_arrow_img():
+    html = _build_ff(_with_privacy()).contents
+    assert (
+        '<label for="privacyPolicy"><span></span><span class="star">*</span><br>'
+        '<a href="#" target="_blank" id="privacyPolicyLink"><span></span><img src="" alt=""></a></label>'
+    ) in html
+
+
+def test_privacy_policy_link_gets_the_arrow_img_in_one_click_too_and_no_star_when_not_required():
+    form = _with_privacy(required=False, variants=["ff", "oc"])
+    config = default_builder_config().model_copy(update={"variants": ["ff", "oc"]})
+    for build in (build_ff_html, build_oc_html):
+        html = build(form, config, resolve_file_names(form, config)).contents
+        assert (
+            '<label for="privacyPolicy"><span></span><br>'
+            '<a href="#" target="_blank" id="privacyPolicyLink"><span></span><img src="" alt=""></a></label>'
+        ) in html

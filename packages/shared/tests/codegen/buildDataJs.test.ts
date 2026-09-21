@@ -101,6 +101,23 @@ describe("buildDataJs", () => {
     expect(data.fields.ar_AE.termsAndConditions).toBe("* Terms and conditions apply.");
   });
 
+  it("gives the privacy-policy link the reference's arrow image (as an inline SVG, since blue_arr.png isn't a generated file), and no image when there is no privacy policy", () => {
+    const noPolicy = evalData(buildFile().contents);
+    expect(noPolicy.fields.en_GB.privacyPolicyLink.image).toBe("");
+    expect(noPolicy.fields.en_GB.privacyPolicyLink.imageAlt).toBe("");
+
+    const form = sampleFormDefinition();
+    form.fields.privacyPolicy = { textByLocale: { en_GB: "I agree" }, linkUrlByLocale: { en_GB: "https://x/privacy" } };
+    const config = defaultBuilderConfig();
+    const data = evalData(buildDataJs(form, config, resolveFileNames(form, config)).contents);
+    for (const locale of ["en_GB", "ar_AE"]) {
+      const link = data.fields[locale].privacyPolicyLink;
+      expect(link.image).toMatch(/^data:image\/svg\+xml,%3Csvg/);
+      expect(link.image).toContain("%23006BEA");
+      expect(link.imageAlt).toBe("arrow");
+    }
+  });
+
   it("projects the same campaign heading/subheading to both variants when no Full Form override is set", () => {
     const form = sampleFormDefinition();
     form.fields.headingBeforeBreakByLocale = { en_GB: "Register now" };

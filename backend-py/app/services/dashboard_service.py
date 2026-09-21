@@ -130,9 +130,19 @@ def _compute_subsidiary_breakdown(
     return sorted(by_subsidiary.values(), key=lambda r: r["total"], reverse=True)
 
 
-def _get_pending_approvals(db: Session, limit: int = 8) -> list[dict[str, Any]]:
+DASHBOARD_PREVIEW_LIMIT = 5
+"""How many "Action Required" / "Recent Activity" rows the dashboard card
+itself shows; the rest are behind its "Show more" link."""
+
+FULL_LIST_LIMIT = 100
+"""Cap on the dedicated full-list pages' recent-activity feed (that feed is
+synthesized from several tables, so it needs a bound, unlike pending
+approvals, which are by nature a short queue)."""
+
+
+def get_pending_approvals(db: Session, limit: int | None = None) -> list[dict[str, Any]]:
     """Merges ad-hoc forms awaiting a whole-form review with individual
-    pending contributions, sorted oldest-first (most overdue on top)."""
+    pending contributions, newest submission first."""
     pending_adhoc_forms = db.execute(
         select(Form).where(Form.origin == "adhoc", Form.pendingReview == True, Form.isDeleted == False)  # noqa: E712
     ).scalars().all()
@@ -142,7 +152,7 @@ def _get_pending_approvals(db: Session, limit: int = 8) -> list[dict[str, Any]]:
 
     contribution_form_ids = list({c.formId for c in pending_contributions})
     contribution_forms = (
-        db.execute(select(Form).where(Form.id.in_(contribution_form_ids))).scalars().all()
+        db.execute(select(Form).where(Form.id.in_(contribution_form_ids), Form.isDeleted == False)).scalars().all()  # noqa: E712
         if contribution_form_ids
         else []
     )
@@ -161,36 +171,49 @@ def _get_pending_approvals(db: Session, limit: int = 8) -> list[dict[str, Any]]:
         )
     for c in pending_contributions:
         f = form_by_id.get(c.formId)
+        if f is None:
+            # The form was deleted — nothing left to review.
+            continue
         items.append(
             {
                 "formId": c.formId,
-                "formName": f.name if f is not None else "(deleted form)",
-                "subsidiaryId": f.subsidiaryId if f is not None else "",
+                "formName": f.name,
+                "subsidiaryId": f.subsidiaryId,
                 "type": "contribution",
                 "submittedAt": c.submittedAt,
             }
         )
-    items.sort(key=lambda i: i["submittedAt"])
-    return items[:limit]
+    items.sort(key=lambda i: i["submittedAt"], reverse=True)
+    return items if limit is None else items[:limit]
 
 
-def _get_recent_activity(db: Session, limit: int = 8) -> list[dict[str, Any]]:
+def get_recent_activity(db: Session, limit: int = DASHBOARD_PREVIEW_LIMIT) -> list[dict[str, Any]]:
     """A best-effort, synthesized activity feed — this codebase has no
     general audit-log table, so this merges a handful of already-timestamped
     columns across a few tables rather than adding one."""
+    # Events on a deleted form are left out of the feed.
+    live_form_ids = select(Form.id).where(Form.isDeleted == False)  # noqa: E712
     submitted_forms = db.execute(
-        select(Form).where(Form.submittedForReviewAt.is_not(None)).order_by(Form.submittedForReviewAt.desc()).limit(limit)
+        select(Form)
+        .where(Form.submittedForReviewAt.is_not(None), Form.isDeleted == False)  # noqa: E712
+        .order_by(Form.submittedForReviewAt.desc())
+        .limit(limit)
     ).scalars().all()
     published_versions = db.execute(
-        select(FormVersion).where(FormVersion.publishedAt.is_not(None)).order_by(FormVersion.publishedAt.desc()).limit(limit)
+        select(FormVersion)
+        .where(FormVersion.publishedAt.is_not(None), FormVersion.formId.in_(live_form_ids))
+        .order_by(FormVersion.publishedAt.desc())
+        .limit(limit)
     ).scalars().all()
     reviewed_contributions = db.execute(
         select(FormContribution)
-        .where(FormContribution.reviewedAt.is_not(None))
+        .where(FormContribution.reviewedAt.is_not(None), FormContribution.formId.in_(live_form_ids))
         .order_by(FormContribution.reviewedAt.desc())
         .limit(limit)
     ).scalars().all()
-    new_users = db.execute(select(User).order_by(User.createdAt.desc()).limit(limit)).scalars().all()
+    new_users = db.execute(
+        select(User).where(User.isDeleted == False).order_by(User.createdAt.desc()).limit(limit)  # noqa: E712
+    ).scalars().all()
 
     related_form_ids = list({v.formId for v in published_versions} | {c.formId for c in reviewed_contributions})
     related_forms = (
@@ -242,20 +265,29 @@ def get_admin_dashboard_summary(db: Session) -> dict[str, Any]:
     forms = db.execute(select(Form).where(Form.isDeleted == False)).scalars().all()  # noqa: E712
     pending, approved = _load_pending_and_approved_contribution_form_ids(db)
     activity_by_month = _get_activity_by_month(db)
-    pending_approvals = _get_pending_approvals(db)
-    recent_activity = _get_recent_activity(db)
+    pending_approvals = get_pending_approvals(db)
+    # One row past the preview so we know whether there is anything behind "Show more".
+    recent_activity = get_recent_activity(db, limit=DASHBOARD_PREVIEW_LIMIT + 1)
 
     counts = {"total": len(forms), "draft": 0, "pendingReview": 0, "approved": 0, "published": 0}
     for f in forms:
         counts[bucket_form(f, pending, approved)] += 1
-    subsidiary_breakdown = _compute_subsidiary_breakdown(forms, pending, approved)
+
+    # "Full Form" = every admin-authored (HR) campaign; "adhoc" = subsidiary-initiated ones.
+    ad_hoc_forms = [f for f in forms if f.origin == "adhoc"]
+    full_form_forms = [f for f in forms if f.origin != "adhoc"]
 
     return {
         "counts": counts,
         "activityByMonth": activity_by_month,
-        "subsidiaryBreakdown": subsidiary_breakdown,
-        "pendingApprovals": pending_approvals,
-        "recentActivity": recent_activity,
+        "subsidiaryBreakdownByOrigin": {
+            "fullForm": _compute_subsidiary_breakdown(full_form_forms, pending, approved),
+            "adhoc": _compute_subsidiary_breakdown(ad_hoc_forms, pending, approved),
+        },
+        "pendingApprovals": pending_approvals[:DASHBOARD_PREVIEW_LIMIT],
+        "pendingApprovalsHasMore": len(pending_approvals) > DASHBOARD_PREVIEW_LIMIT,
+        "recentActivity": recent_activity[:DASHBOARD_PREVIEW_LIMIT],
+        "recentActivityHasMore": len(recent_activity) > DASHBOARD_PREVIEW_LIMIT,
     }
 
 

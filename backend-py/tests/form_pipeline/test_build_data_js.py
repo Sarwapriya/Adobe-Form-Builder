@@ -181,3 +181,23 @@ def test_excludes_text_type_question_even_if_both_flags_set():
     file = build_data_js(form, config, resolve_file_names(form, config))
     data = eval_data(file.contents)
     assert data["auto_populate_params"] == {}
+
+
+def test_privacy_policy_link_gets_the_arrow_image_only_when_a_privacy_policy_is_configured():
+    from app.form_pipeline.form.definition import PrivacyPolicyMeta
+
+    no_policy = eval_data(_build_file().contents)
+    assert no_policy["fields"]["en_GB"]["privacyPolicyLink"]["image"] == ""
+    assert no_policy["fields"]["en_GB"]["privacyPolicyLink"]["imageAlt"] == ""
+
+    form = sample_form_definition()
+    form.fields.privacyPolicy = PrivacyPolicyMeta(
+        textByLocale={"en_GB": "I agree"}, linkUrlByLocale={"en_GB": "https://x.test/privacy"}
+    )
+    config = default_builder_config()
+    data = eval_data(build_data_js(form, config, resolve_file_names(form, config)).contents)
+    for locale in ("en_GB", "ar_AE"):
+        link = data["fields"][locale]["privacyPolicyLink"]
+        assert link["image"].startswith("data:image/svg+xml,%3Csvg")
+        assert "%23006BEA" in link["image"]
+        assert link["imageAlt"] == "arrow"

@@ -91,11 +91,16 @@ def render_page(
     pp = form.fields.privacyPolicy
     if pp and variant in (pp.visibleInVariants if pp.visibleInVariants is not None else ["ff"]):
         star = '<span class="star">*</span>' if pp.required is not False else ""
+        # Same shape as the reference forms (Final_forms_format/*_FF.html): the required
+        # `*` ends the consent sentence, the link sits on its own line, and the link
+        # carries an empty <img> — the reference script fills its src/alt from
+        # `privacyPolicyLink.image` / `.imageAlt` (see build_data_js.py), which is the
+        # arrow shown at the link's end.
         consent_checks.append(
             '<div class="form_bottom_check">'
             '<input id="privacyPolicy" name="privacyPolicy" type="checkbox" data-pt-api="y">'
-            '<label for="privacyPolicy"><span></span><br>'
-            f'<a href="#" target="_blank" id="privacyPolicyLink"><span></span></a>{star}</label>'
+            f'<label for="privacyPolicy"><span></span>{star}<br>'
+            '<a href="#" target="_blank" id="privacyPolicyLink"><span></span><img src="" alt=""></a></label>'
             "</div>"
         )
     mo = form.fields.marketingOptin

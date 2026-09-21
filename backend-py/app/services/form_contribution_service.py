@@ -214,7 +214,7 @@ def list_own_contributions_all_forms(db: Session, user_id: str) -> list[dict[str
         return []
 
     form_ids = list({r.formId for r in rows})
-    forms = list(db.execute(select(Form).where(Form.id.in_(form_ids))).scalars())
+    forms = list(db.execute(select(Form).where(Form.id.in_(form_ids), Form.isDeleted == False)).scalars())  # noqa: E712
     name_by_id = {f.id: f.name for f in forms}
 
     return [{**_to_summary(r), "formName": name_by_id.get(r.formId, "(deleted form)")} for r in rows]

@@ -13,6 +13,7 @@ import { ApiError } from "../../api/apiClient";
 import { deleteAdHocForm } from "../../api/subsidiaryFormsApi";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
 import { showToast } from "../../store/toastStore";
+import { useConfirm } from "../../hooks/useConfirm";
 
 /** Ad-hoc builder counterpart to BuilderActionBar.tsx — Preview / Save Draft /
  * Submit for Review / Delete, no Publish/Unpublish (a subsidiary user never
@@ -39,6 +40,7 @@ export function AdHocActionBar() {
   const saveDraft = useFormBuilderStore((s) => s.saveDraft);
   const submitForReview = useFormBuilderStore((s) => s.submitForReview);
 
+  const { confirm, confirmDialog } = useConfirm();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -57,14 +59,25 @@ export function AdHocActionBar() {
   useSaveShortcut(() => void handleSave(), dirty && !saving && !pendingReview);
 
   async function handleSubmit() {
-    if (!window.confirm("Submit this form for admin review? You won't be able to edit it again until it's reviewed.")) return;
+    const confirmed = await confirm({
+      title: "Submit for review",
+      message: "Submit this form for admin review? You won't be able to edit it again until it's reviewed.",
+      confirmLabel: "Submit",
+      confirmColor: "primary",
+    });
+    if (!confirmed) return;
     const ok = await submitForReview();
     if (ok) showToast("Submitted for review.", "success");
   }
 
   async function handleDelete() {
     if (!formId) return;
-    if (!window.confirm("Delete this form? This can't be undone.")) return;
+    const confirmed = await confirm({
+      title: "Delete form",
+      message: "Delete this form? It's removed from your list — nothing is erased from the database.",
+      confirmLabel: "Delete",
+    });
+    if (!confirmed) return;
     setDeleting(true);
     try {
       await deleteAdHocForm(formId);
@@ -136,6 +149,7 @@ export function AdHocActionBar() {
         </Alert>
       )}
       <FormBuilderPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      {confirmDialog}
     </Paper>
   );
 }

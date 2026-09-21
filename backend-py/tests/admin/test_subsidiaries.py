@@ -77,11 +77,42 @@ class TestSubsidiaryCrud:
         db_session.refresh(scoped_user)
         assert scoped_user.isActive is False
 
+        # Soft delete: hidden from the list, but the row is still there.
+        from app.models.subsidiary import Subsidiary
+
+        assert created["id"] not in {s["id"] for s in client.get("/api/v1/admin/subsidiaries", headers=admin_headers).json()}
+        row = db_session.get(Subsidiary, created["id"])
+        db_session.refresh(row)
+        assert row is not None and row.isDeleted is True and row.isActive is False and row.deletedAt is not None
+
+        # Re-adding the name restores that same row (its name is unique) and re-enables its users.
         recreated = client.post("/api/v1/admin/subsidiaries", json={"name": name}, headers=admin_headers)
         assert recreated.status_code == 201
+        assert recreated.json()["id"] == created["id"]
+        assert recreated.json()["isActive"] is True
 
         db_session.refresh(scoped_user)
         assert scoped_user.isActive is True
+        assert created["id"] in {s["id"] for s in client.get("/api/v1/admin/subsidiaries", headers=admin_headers).json()}
+
+    def test_deleted_subsidiary_cannot_be_edited_and_delete_is_not_repeatable(self, client: TestClient, admin_headers: dict):
+        created = client.post("/api/v1/admin/subsidiaries", json={"name": _unique_name()}, headers=admin_headers).json()
+        assert client.delete(f"/api/v1/admin/subsidiaries/{created['id']}", headers=admin_headers).status_code == 204
+        assert client.delete(f"/api/v1/admin/subsidiaries/{created['id']}", headers=admin_headers).status_code == 404
+        assert client.patch(f"/api/v1/admin/subsidiaries/{created['id']}", json={"isActive": True}, headers=admin_headers).status_code == 404
+
+    def test_deleting_keeps_the_subsidiarys_project_blocks(self, client: TestClient, admin_headers: dict, db_session: Session):
+        from app.models.subsidiary_project_block import SubsidiaryProjectBlock
+
+        name = _unique_name()
+        created = client.post("/api/v1/admin/subsidiaries", json={"name": name}, headers=admin_headers).json()
+        block = client.post(
+            "/api/v1/admin/subsidiary-project-blocks", json={"subsidiaryName": name, "projectCode": "PC-KEEP"}, headers=admin_headers
+        )
+        assert block.status_code == 201, block.text
+
+        assert client.delete(f"/api/v1/admin/subsidiaries/{created['id']}", headers=admin_headers).status_code == 204
+        assert db_session.get(SubsidiaryProjectBlock, block.json()["id"]) is not None
 
     def test_delete_unknown_returns_404(self, client: TestClient, admin_headers: dict):
         resp = client.delete("/api/v1/admin/subsidiaries/00000000-0000-0000-0000-000000000000", headers=admin_headers)

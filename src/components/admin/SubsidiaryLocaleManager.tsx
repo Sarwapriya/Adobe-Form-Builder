@@ -9,6 +9,7 @@ import { addSubsidiaryLocale, deleteSubsidiaryLocale, listAllSubsidiaryLocales }
 import type { SubsidiaryLocale } from "../../api/subsidiaryLocalesApi";
 import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { SectionHeader } from "../common/SectionHeader";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { LoadingState } from "../common/LoadingState";
 import { showToast } from "../../store/toastStore";
 
@@ -33,6 +34,7 @@ export function SubsidiaryLocaleManager() {
   const [isFallback, setIsFallback] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<SubsidiaryLocale | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -77,10 +79,13 @@ export function SubsidiaryLocaleManager() {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleConfirmDelete() {
+    if (!confirmDelete) return;
+    const id = confirmDelete.id;
     setDeletingId(id);
     try {
       await deleteSubsidiaryLocale(id);
+      setConfirmDelete(null);
       await refresh();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Failed to remove locale", "error");
@@ -159,7 +164,7 @@ export function SubsidiaryLocaleManager() {
                     key={l.id}
                     label={l.isFallback ? `${l.code} (fallback)` : l.code}
                     color={l.isFallback ? "primary" : "default"}
-                    onDelete={deletingId === l.id ? undefined : () => handleDelete(l.id)}
+                    onDelete={deletingId === l.id ? undefined : () => setConfirmDelete(l)}
                     deleteIcon={
                       <Tooltip title="Remove">
                         <DeleteIcon fontSize="small" />
@@ -172,6 +177,21 @@ export function SubsidiaryLocaleManager() {
           ))}
         </Stack>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Remove locale"
+        message={
+          <>
+            Remove <strong>{confirmDelete?.code}</strong> from {confirmDelete?.subsidiaryName}'s locale list? Its users
+            will no longer be able to pick it. Nothing is erased — adding the same code again restores it.
+          </>
+        }
+        confirmLabel="Remove"
+        loading={!!confirmDelete && deletingId === confirmDelete.id}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </Paper>
   );
 }

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy import Boolean, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, datetimeoffset_now, nvarchar, uuid_pk
+from app.models.base import Base, datetimeoffset_nullable, datetimeoffset_now, nvarchar, uuid_pk
 
 
 class SubsidiaryLocale(Base):
@@ -22,4 +24,9 @@ class SubsidiaryLocale(Base):
     label: Mapped[str] = nvarchar(100)
     isFallback: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     sortOrder: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Soft delete — removing a locale from a subsidiary's list flags the row
+    # instead of deleting it; adding the same code again restores it. See
+    # subsidiary_locale_service.
+    isDeleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    deletedAt: Mapped[Optional[object]] = datetimeoffset_nullable()
     createdAt = datetimeoffset_now()

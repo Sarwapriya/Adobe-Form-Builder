@@ -47,6 +47,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { alpha } from "@mui/material/styles";
 import type { ReactNode } from "react";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
+import { roleLabel } from "../auth/roleLabel";
 import { useAiChatStore } from "../store/aiChatStore";
 import { useThemeModeStore } from "../store/themeModeStore";
 import { useFormBuilderStore } from "../store/formBuilderStore";
@@ -262,7 +263,9 @@ export function AppLayout() {
   // standard user with no subsidiary, same gating the sections below already
   // use, since the subsidiary dashboard has nothing meaningful to show them.
   const dashboardNavItem: NavItem | null = isAdmin
-    ? { to: "/admin/dashboard", label: "Dashboard", icon: <DashboardIcon />, exact: true }
+    ? // Prefix match so the dashboard's full-list pages (/admin/dashboard/action-required,
+      // /admin/dashboard/recent-activity — reached via "Show more", not in the menu) keep it highlighted.
+      { to: "/admin/dashboard", label: "Dashboard", icon: <DashboardIcon />, exact: false }
     : user?.subsidiaryId
       ? { to: "/dashboard", label: "Dashboard", icon: <DashboardIcon />, exact: true }
       : null;
@@ -599,7 +602,7 @@ export function AppLayout() {
 
         <Box sx={{ p: 1.25 }}>
           {collapsed ? (
-            <Tooltip title={`${displayName} · ${user?.role}`} placement="right">
+            <Tooltip title={`${displayName} · ${roleLabel(user?.role)}`} placement="right">
               <Avatar sx={{ bgcolor: sidebarTokens.avatarBg, color: sidebarTokens.contrastText, mx: "auto", mb: 1 }}>
                 {displayName?.[0]?.toUpperCase() ?? "?"}
               </Avatar>
@@ -611,7 +614,7 @@ export function AppLayout() {
                   {displayName?.[0]?.toUpperCase() ?? "?"}
                 </Avatar>
               }
-              label={`${displayName} · ${user?.role}`}
+              label={`${displayName} · ${roleLabel(user?.role)}`}
               sx={{
                 width: "100%",
                 justifyContent: "flex-start",

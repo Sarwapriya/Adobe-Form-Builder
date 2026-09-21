@@ -1,10 +1,16 @@
-"""Port of `backend/src/services/subsidiaryLocaleService.ts`."""
+"""Port of `backend/src/services/subsidiaryLocaleService.ts`.
+
+Removing a locale is a soft delete (`SubsidiaryLocale.isDeleted`): the row is
+kept and hidden, and adding the same code to the same subsidiary again restores
+it (the `(subsidiaryName, code)` pair is unique in the DB).
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.errors import ConflictError
@@ -16,9 +22,9 @@ def list_all_subsidiary_locales(db: Session) -> list[SubsidiaryLocale]:
     view."""
     return list(
         db.execute(
-            select(SubsidiaryLocale).order_by(
-                SubsidiaryLocale.subsidiaryName.asc(), SubsidiaryLocale.sortOrder.asc()
-            )
+            select(SubsidiaryLocale)
+            .where(SubsidiaryLocale.isDeleted == False)  # noqa: E712
+            .order_by(SubsidiaryLocale.subsidiaryName.asc(), SubsidiaryLocale.sortOrder.asc())
         ).scalars().all()
     )
 
@@ -28,7 +34,7 @@ def list_subsidiary_locales(db: Session, subsidiary_name: str) -> list[Subsidiar
     return list(
         db.execute(
             select(SubsidiaryLocale)
-            .where(SubsidiaryLocale.subsidiaryName == subsidiary_name)
+            .where(SubsidiaryLocale.subsidiaryName == subsidiary_name, SubsidiaryLocale.isDeleted == False)  # noqa: E712
             .order_by(SubsidiaryLocale.isFallback.desc(), SubsidiaryLocale.sortOrder.asc())
         ).scalars().all()
     )
@@ -49,13 +55,14 @@ def add_subsidiary_locale(db: Session, input: CreateSubsidiaryLocaleInput) -> Su
     exact-duplicate code for that subsidiary with a `ConflictError`. When
     `isFallback` is true, first clears any other fallback for this
     subsidiary — exactly one row per subsidiary is the designated
-    fallback (enforced here, not the DB)."""
+    fallback (enforced here, not the DB). A code that was previously removed
+    (soft-deleted) is restored with the new details instead of inserted again."""
     existing = db.execute(
         select(SubsidiaryLocale).where(
             SubsidiaryLocale.subsidiaryName == input.subsidiaryName, SubsidiaryLocale.code == input.code
         )
     ).scalar_one_or_none()
-    if existing is not None:
+    if existing is not None and not existing.isDeleted:
         raise ConflictError(f'"{input.code}" is already on {input.subsidiaryName}\'s locale list')
 
     if input.isFallback:
@@ -67,19 +74,29 @@ def add_subsidiary_locale(db: Session, input: CreateSubsidiaryLocaleInput) -> Su
 
     count = db.execute(
         select(func.count()).select_from(SubsidiaryLocale).where(
-            SubsidiaryLocale.subsidiaryName == input.subsidiaryName
+            SubsidiaryLocale.subsidiaryName == input.subsidiaryName, SubsidiaryLocale.isDeleted == False  # noqa: E712
         )
     ).scalar_one()
 
-    created = SubsidiaryLocale(
-        subsidiaryName=input.subsidiaryName,
-        code=input.code,
-        langSubtag=input.langSubtag,
-        isRtl=input.isRtl,
-        label=input.label,
-        isFallback=input.isFallback,
-        sortOrder=count,
-    )
+    if existing is not None:
+        existing.langSubtag = input.langSubtag
+        existing.isRtl = input.isRtl
+        existing.label = input.label
+        existing.isFallback = input.isFallback
+        existing.sortOrder = count
+        existing.isDeleted = False
+        existing.deletedAt = None
+        created = existing
+    else:
+        created = SubsidiaryLocale(
+            subsidiaryName=input.subsidiaryName,
+            code=input.code,
+            langSubtag=input.langSubtag,
+            isRtl=input.isRtl,
+            label=input.label,
+            isFallback=input.isFallback,
+            sortOrder=count,
+        )
     db.add(created)
     db.commit()
     db.refresh(created)
@@ -87,8 +104,14 @@ def add_subsidiary_locale(db: Session, input: CreateSubsidiaryLocaleInput) -> Su
 
 
 def remove_subsidiary_locale(db: Session, id: str) -> bool:
-    """Removes one locale from a subsidiary's master list. Returns `False`
-    if it didn't exist — callers map that to a 404."""
-    result = db.execute(delete(SubsidiaryLocale).where(SubsidiaryLocale.id == id))
+    """Soft-removes one locale from a subsidiary's master list. Returns `False`
+    if it didn't exist (or was already removed) — callers map that to a 404."""
+    existing = db.get(SubsidiaryLocale, id)
+    if existing is None or existing.isDeleted:
+        return False
+    existing.isDeleted = True
+    existing.deletedAt = datetime.now(timezone.utc)
+    existing.isFallback = False
+    db.add(existing)
     db.commit()
-    return (result.rowcount or 0) > 0
+    return True

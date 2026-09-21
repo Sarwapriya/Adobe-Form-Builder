@@ -14,6 +14,19 @@ import type { FileNames } from "../fileNames";
 import type { BuilderConfig, GeneratedFile } from "../types";
 import { safeJsonForScript } from "./escaping";
 
+/**
+ * The small blue "↗" arrow the reference forms show at the end of the privacy-policy link
+ * (their data file sends `image: "blue_arr.png"`). That PNG isn't one of the generated
+ * files, so it would 404 in a preview/QA run or anywhere it isn't deployed alongside — an
+ * inline SVG of the same arrow renders everywhere (the stylesheet already inlines its
+ * other icons the same way). The link colour matches the stylesheet's `#006BEA`.
+ */
+const CONSENT_LINK_ARROW_IMAGE =
+  "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23006BEA'" +
+  "%20stroke-width='2.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M7%2017L17%207'/%3E" +
+  "%3Cpath%20d='M8%207h9v9'/%3E%3C/svg%3E";
+const CONSENT_LINK_ARROW_ALT = "arrow";
+
 /** Reserved subsidiary key for a builder-authored `fields.mobileNumber` field — never
  * a real Samsung subsidiary code (those are short org codes like "SGE"/"SEIL"). Lets
  * the existing, unmodified reference-JS dropdown/validation population functions
@@ -189,8 +202,8 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
       privacyPolicy: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.textByLocale, locale, defaultLocale) : "",
       privacyPolicyLink: {
         label: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkTextByLocale, locale, defaultLocale) : "",
-        image: "",
-        imageAlt: "",
+        image: f.privacyPolicy ? CONSENT_LINK_ARROW_IMAGE : "",
+        imageAlt: f.privacyPolicy ? CONSENT_LINK_ARROW_ALT : "",
         url: f.privacyPolicy ? resolveLocalizedText(f.privacyPolicy.linkUrlByLocale, locale, defaultLocale) : "",
       },
       termsAndConditions: f.termsAndConditions ? resolveLocalizedText(f.termsAndConditions.textByLocale, locale, defaultLocale) : "",

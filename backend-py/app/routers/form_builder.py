@@ -72,6 +72,7 @@ def create_form(body: CreateFormBody, db: Session = Depends(get_db), auth: dict 
         subsidiary_id=body.subsidiaryId,
         project_code=body.projectCode,
         user_id=auth["sub"],
+        origin=body.origin,
         copy_from_form_id=body.copyFromFormId,
     )
 

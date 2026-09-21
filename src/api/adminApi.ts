@@ -373,38 +373,55 @@ export function moveFabrixModel(id: string, direction: "up" | "down"): Promise<F
   return apiClient.post<FabrixModel>(`/api/v1/admin/fabrix-models/${id}/move`, { direction });
 }
 
-export function deleteFabrixModel(id: string): Promise<void> {
-  return apiClient.delete(`/api/v1/admin/fabrix-models/${id}`);
-}
-
-/** DB-stored connection settings for Groq's OpenAI-compatible chat
- * completions API (see backend's groq_settings_service.py) — used
- * automatically as a fallback whenever FabriX is disabled or unreachable
- * (see backend's aiProviderService.py). Much simpler surface than FabriX:
- * one API key, one model string, no separate headers. */
-export interface GroqSettings {
+/** One admin-added "other" AI provider — any OpenAI-compatible chat
+ * completions endpoint (see backend's ai_providers_service.py), tried in
+ * `sortOrder` after FabriX whenever FabriX is disabled or unreachable (see
+ * backend's aiProviderService.py). The API key is write-only: the browser only
+ * ever learns whether one is set. Providers are never deleted, only disabled. */
+export interface AiProvider {
+  id: string;
+  /** The admin's own label, e.g. "Groq" or "OpenAI - team key". */
+  name: string;
+  /** Up to (not including) `/chat/completions`, e.g. https://api.groq.com/openai/v1 */
+  baseUrl: string;
   model: string;
-  enabled: boolean;
+  isEnabled: boolean;
   hasApiKey: boolean;
+  sortOrder: number;
+  createdAt: string;
 }
 
-export interface SaveGroqSettingsInput {
+export interface CreateAiProviderInput {
+  name: string;
+  baseUrl: string;
   model: string;
-  enabled: boolean;
+  apiKey: string;
+  isEnabled?: boolean;
+}
+
+export interface UpdateAiProviderInput {
+  name?: string;
+  baseUrl?: string;
+  model?: string;
+  isEnabled?: boolean;
   /** Omit or leave blank to keep whatever key is already saved. */
   apiKey?: string;
 }
 
-export function getGroqSettings(): Promise<GroqSettings> {
-  return apiClient.get<GroqSettings>("/api/v1/admin/groq-settings");
+export function listAiProviders(): Promise<AiProvider[]> {
+  return apiClient.get<AiProvider[]>("/api/v1/admin/ai-providers");
 }
 
-export function saveGroqSettings(input: SaveGroqSettingsInput): Promise<GroqSettings> {
-  return apiClient.patch<GroqSettings>("/api/v1/admin/groq-settings", input);
+export function createAiProvider(input: CreateAiProviderInput): Promise<AiProvider> {
+  return apiClient.post<AiProvider>("/api/v1/admin/ai-providers", input);
 }
 
-export function sendGroqTestMessage(): Promise<{ ok: boolean; error?: string }> {
-  return apiClient.post<{ ok: boolean; error?: string }>("/api/v1/admin/groq-settings/test");
+export function updateAiProvider(id: string, input: UpdateAiProviderInput): Promise<AiProvider> {
+  return apiClient.patch<AiProvider>(`/api/v1/admin/ai-providers/${id}`, input);
+}
+
+export function sendAiProviderTestMessage(id: string): Promise<{ ok: boolean; error?: string }> {
+  return apiClient.post<{ ok: boolean; error?: string }>(`/api/v1/admin/ai-providers/${id}/test`);
 }
 
 /** DB-stored SFTP deployment config (Configuration > Deployment) — see

@@ -7,27 +7,33 @@ that subsidiary's `User` rows. The cascade to `User.isActive` only happens on
 previously-deleted subsidiary being re-added) and `delete_subsidiary`
 (disables users scoped to the now-gone name). This module mirrors that
 exactly — verified against the real source, not assumed.
+
+Deleting is a soft delete (`Subsidiary.isDeleted`): the row is kept, hidden from
+every list and treated as inactive, and adding the same name again restores it.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.errors import ConflictError, NotFoundError, SubsidiaryInactiveError
 from app.models.subsidiary import Subsidiary
-from app.models.subsidiary_project_block import SubsidiaryProjectBlock
 from app.models.user import User
 
 
 def list_subsidiaries(db: Session) -> list[Subsidiary]:
-    """Every subsidiary, active and inactive alike, name ascending — the
-    admin management view (needs to see disabled ones too, to re-enable
-    them)."""
-    return list(db.execute(select(Subsidiary).order_by(Subsidiary.name.asc())).scalars().all())
+    """Every subsidiary that hasn't been deleted, active and inactive alike,
+    name ascending — the admin management view (needs to see disabled ones
+    too, to re-enable them)."""
+    return list(
+        db.execute(
+            select(Subsidiary).where(Subsidiary.isDeleted == False).order_by(Subsidiary.name.asc())  # noqa: E712
+        ).scalars().all()
+    )
 
 
 def find_subsidiary_by_name(db: Session, name: str) -> Optional[Subsidiary]:
@@ -41,7 +47,9 @@ def list_active_subsidiaries(db: Session) -> list[Subsidiary]:
     "Subsidiary" dropdowns offer to any authenticated user."""
     return list(
         db.execute(
-            select(Subsidiary).where(Subsidiary.isActive == True).order_by(Subsidiary.name.asc())  # noqa: E712
+            select(Subsidiary)
+            .where(Subsidiary.isActive == True, Subsidiary.isDeleted == False)  # noqa: E712
+            .order_by(Subsidiary.name.asc())
         ).scalars().all()
     )
 
@@ -50,21 +58,36 @@ def create_subsidiary(db: Session, name: str) -> Subsidiary:
     """Creates a new subsidiary, active by default. Rejects an
     exact-duplicate name (case-insensitive) with a `ConflictError`.
 
+    Adding the name of a previously *deleted* subsidiary restores that row
+    (active again) rather than creating a second one — its name is unique in
+    the DB, and everything keyed on that name (project-code blocks, locales,
+    forms) is still attached to it.
+
     Also re-enables every User scoped to this subsidiary name — the mirror
     image of `delete_subsidiary`'s own cascade: re-adding a subsidiary that
     was previously deleted (and so had auto-disabled its users) brings those
-    accounts back automatically. A no-op update if no such users exist."""
+    accounts back automatically. A no-op update if no such users exist. Users
+    who were themselves deleted stay deleted."""
     trimmed = name.strip()
 
     existing = db.execute(
         select(Subsidiary).where(func.lower(Subsidiary.name) == trimmed.lower())
     ).scalar_one_or_none()
-    if existing is not None:
+    if existing is not None and not existing.isDeleted:
         raise ConflictError(f'Subsidiary "{trimmed}" already exists')
 
-    created = Subsidiary(name=trimmed, isActive=True)
+    if existing is not None:
+        existing.name = trimmed
+        existing.isDeleted = False
+        existing.deletedAt = None
+        existing.isActive = True
+        created = existing
+    else:
+        created = Subsidiary(name=trimmed, isActive=True)
     db.add(created)
-    db.execute(update(User).where(User.subsidiaryId == trimmed).values(isActive=True))
+    db.execute(
+        update(User).where(User.subsidiaryId == trimmed, User.isDeleted == False).values(isActive=True)  # noqa: E712
+    )
     db.commit()
     db.refresh(created)
     return created
@@ -76,7 +99,7 @@ def set_subsidiary_active(db: Session, id: str, is_active: bool) -> Optional[Sub
     exist. Does NOT cascade to `User.isActive` — see this module's own doc
     comment above."""
     existing = db.get(Subsidiary, id)
-    if existing is None:
+    if existing is None or existing.isDeleted:
         return None
     existing.isActive = is_active
     db.add(existing)
@@ -90,7 +113,7 @@ def set_subsidiary_notification_emails(db: Session, id: str, emails: dict[str, A
     addresses. Each explicit `None`/key-present clears/sets that slot; an
     omitted key leaves it as-is. Returns `None` if the id doesn't exist."""
     existing = db.get(Subsidiary, id)
-    if existing is None:
+    if existing is None or existing.isDeleted:
         return None
 
     if "notificationEmail1" in emails:
@@ -106,18 +129,22 @@ def set_subsidiary_notification_emails(db: Session, id: str, emails: dict[str, A
 
 
 def delete_subsidiary(db: Session, id: str) -> bool:
-    """Permanently removes a subsidiary — the irreversible alternative to
-    disabling it. Also removes any `SubsidiaryProjectBlock` rows naming it,
-    and disables every `User` currently scoped to this subsidiary (with the
-    subsidiary gone from the picklist there's no valid value left for their
-    account to upload under). Returns `False` if the id didn't exist."""
+    """Soft-deletes a subsidiary: flags it `isDeleted` and inactive (so it
+    drops out of every list and every "is this subsidiary active" check), and
+    disables every `User` currently scoped to it (with the subsidiary gone from
+    the picklist there's no valid value left for their account to work
+    under). Nothing is removed — its project-code blocks, locales and forms
+    stay, and re-adding the same name restores it. Returns `False` if the id
+    didn't exist (or was already deleted)."""
     existing = db.get(Subsidiary, id)
-    if existing is None:
+    if existing is None or existing.isDeleted:
         return False
 
-    db.execute(sa_delete(SubsidiaryProjectBlock).where(SubsidiaryProjectBlock.subsidiaryName == existing.name))
+    existing.isDeleted = True
+    existing.deletedAt = datetime.now(timezone.utc)
+    existing.isActive = False
+    db.add(existing)
     db.execute(update(User).where(User.subsidiaryId == existing.name).values(isActive=False))
-    db.delete(existing)
     db.commit()
     return True
 

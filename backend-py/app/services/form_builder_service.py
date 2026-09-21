@@ -576,28 +576,18 @@ DeleteFormOutcome = Literal["ok", "not_found"]
 
 
 def delete_form(db: Session, form_id: str) -> DeleteFormOutcome:
-    """Hard-deletes a form that's never been published; soft-deletes
-    (Form.isDeleted) one that has, mirroring Upload.isDeleted's own
-    audit-trail convention."""
+    """Soft-deletes a form (`Form.isDeleted`), whether or not it was ever
+    published — nothing is removed from the database. Its versions, generated
+    files and contributions stay attached; every listing, dashboard count and
+    review queue ignores a deleted form. Any contribution still awaiting review
+    is left as-is (it's simply no longer reachable, since the form isn't)."""
     form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
     if form is None:
         return "not_found"
 
-    if form.publishedVersionId is None:
-        db.execute(text("DELETE FROM fq.FormContributions WHERE formId = :formId"), {"formId": form_id})
-        form.currentDraftVersionId = None
-        form.publishedVersionId = None
-        db.flush()
-        db.execute(
-            text("DELETE FROM fq.GeneratedFiles WHERE formVersionId IN (SELECT id FROM fq.FormVersions WHERE formId = :formId)"),
-            {"formId": form_id},
-        )
-        db.execute(text("DELETE FROM fq.FormVersions WHERE formId = :formId"), {"formId": form_id})
-        db.execute(text("DELETE FROM fq.Forms WHERE id = :formId"), {"formId": form_id})
-        db.commit()
-        return "ok"
-
     form.isDeleted = True
+    form.pendingReview = False
+    form.updatedAt = _now()
     db.commit()
     return "ok"
 

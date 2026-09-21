@@ -120,16 +120,33 @@ class TestDeleteUser:
         resp = client.delete(f"/api/v1/admin/users/{admin_user.id}", headers=admin_headers)
         assert resp.status_code == 403
 
-    def test_admin_can_delete_standard_with_no_records(
-        self, client: TestClient, admin_headers: dict, db_session: Session
-    ):
+    def test_delete_is_a_soft_delete(self, client: TestClient, admin_headers: dict, db_session: Session):
+        from app.models.user import User
+
         target = make_user(db_session, role="standard", subsidiary_id="Sub")
+        original_username = target.username
         resp = client.delete(f"/api/v1/admin/users/{target.id}", headers=admin_headers)
         assert resp.status_code == 204
 
-        # actually gone, not just deactivated
-        follow_up = client.patch(f"/api/v1/admin/users/{target.id}", json={"isActive": False}, headers=admin_headers)
+        # gone as far as the API is concerned...
+        follow_up = client.patch(f"/api/v1/admin/users/{target.id}", json={"isActive": True}, headers=admin_headers)
         assert follow_up.status_code == 404
+        assert target.id not in {u["id"] for u in client.get("/api/v1/admin/users", headers=admin_headers).json()}
+
+        # ...but the row is still in the database, flagged, disabled, and its login freed for reuse
+        db_session.expire_all()
+        row = db_session.get(User, target.id)
+        assert row is not None
+        assert row.isDeleted is True and row.isActive is False and row.deletedAt is not None
+        assert row.username != original_username and row.username.startswith(original_username)
+
+    def test_a_deleted_user_can_no_longer_sign_in(self, client: TestClient, admin_headers: dict, db_session: Session):
+        target = make_user(db_session, role="standard", subsidiary_id="Sub")
+        login_body = {"username": target.username, "password": "correct horse battery staple"}
+        assert client.post("/api/v1/auth/login", json=login_body).status_code == 200
+
+        assert client.delete(f"/api/v1/admin/users/{target.id}", headers=admin_headers).status_code == 204
+        assert client.post("/api/v1/auth/login", json=login_body).status_code == 401
 
     def test_admin_cannot_delete_another_admin(self, client: TestClient, admin_headers: dict, db_session: Session):
         target = make_user(db_session, role="admin")
@@ -145,23 +162,22 @@ class TestDeleteUser:
         resp = client.delete("/api/v1/admin/users/00000000-0000-0000-0000-000000000000", headers=admin_headers)
         assert resp.status_code == 404
 
-    def test_user_with_a_created_form_cannot_be_deleted(
+    def test_a_user_with_a_created_form_can_be_deleted_and_the_form_keeps_its_owner(
         self, client: TestClient, admin_headers: dict, db_session: Session
     ):
         from app.models.form import Form
 
         target = make_user(db_session, role="standard", subsidiary_id="Sub")
-        db_session.add(Form(name="Some Campaign", subsidiaryId="Sub", createdByUserId=target.id))
+        form = Form(name="Some Campaign", subsidiaryId="Sub", createdByUserId=target.id)
+        db_session.add(form)
         db_session.commit()
 
         resp = client.delete(f"/api/v1/admin/users/{target.id}", headers=admin_headers)
-        assert resp.status_code == 409
-        assert "deactivate" in resp.json()["error"].lower()
+        assert resp.status_code == 204
 
-        # still there, and can still be deactivated instead
-        follow_up = client.patch(f"/api/v1/admin/users/{target.id}", json={"isActive": False}, headers=admin_headers)
-        assert follow_up.status_code == 200
-        assert follow_up.json()["isActive"] is False
+        # Previously refused with a 409 ("deactivate instead") — a soft delete has no such limit.
+        db_session.expire_all()
+        assert db_session.get(Form, form.id).createdByUserId == target.id
 
 
 class TestUpdateUserProfile:

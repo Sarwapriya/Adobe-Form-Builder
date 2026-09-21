@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Alert, Box, Button, IconButton, Paper, Stack, Switch, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, IconButton, Paper, Stack, Switch, TextField, Tooltip, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import ModelTrainingIcon from "@mui/icons-material/ModelTraining";
-import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import { ApiError } from "../../api/apiClient";
 import {
   createFabrixModel,
-  deleteFabrixModel,
   listFabrixModels,
   moveFabrixModel,
   updateFabrixModel,
@@ -27,6 +25,9 @@ import { showToast } from "../../store/toastStore";
  * is what lets FabriX itself route around/swap past one that's unavailable
  * or token/rate-limited — this app doesn't implement its own retry-with-
  * different-model logic, it just hands FabriX the full priority list.
+ *
+ * Models are never deleted — each one's Enabled switch is how it's turned off
+ * (and back on), so an entry can always be re-enabled later.
  */
 export function FabrixModelManager() {
   const [models, setModels] = useState<FabrixModel[]>([]);
@@ -92,18 +93,6 @@ export function FabrixModelManager() {
     }
   }
 
-  async function handleDelete(model: FabrixModel) {
-    setBusyId(model.id);
-    try {
-      await deleteFabrixModel(model.id);
-      await refresh();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to delete model", "error");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   const enabledCount = models.filter((m) => m.isEnabled).length;
 
   return (
@@ -111,7 +100,8 @@ export function FabrixModelManager() {
       <SectionHeader icon={<ModelTrainingIcon fontSize="small" color="primary" />} title="AI Assistant Models" />
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
         Every enabled model below is sent together on each request, in this order — FabriX uses that list to route
-        around or fall back past one that's unavailable or hitting a token/rate limit.
+        around or fall back past one that's unavailable or hitting a token/rate limit. Use the switch to enable or
+        disable a model; models are never deleted.
       </Typography>
 
       {!loading && models.length > 0 && enabledCount === 0 && (
@@ -186,13 +176,12 @@ export function FabrixModelManager() {
                 {model.modelId}
               </Typography>
 
-              <Tooltip title="Delete">
-                <span>
-                  <IconButton size="small" disabled={busyId === model.id} onClick={() => handleDelete(model)}>
-                    <DeleteIcon fontSize="inherit" />
-                  </IconButton>
-                </span>
-              </Tooltip>
+              <Chip
+                label={model.isEnabled ? "Enabled" : "Disabled"}
+                size="small"
+                color={model.isEnabled ? "success" : "default"}
+                variant="outlined"
+              />
             </Stack>
           ))}
         </Stack>

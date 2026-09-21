@@ -39,6 +39,16 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /install /usr/local
+
+# QA runs (app/services/qa) drive a real headless Chromium through Playwright.
+# The pip package ships no browser, so download it — plus the OS libraries it
+# links against — at build time, into a fixed path that doesn't depend on which
+# user/HOME the container runs as. Without this every QA run errors with
+# "BrowserType.launch: Executable doesn't exist".
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN python -m playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend-py/app ./app
 
 ENV UPLOAD_DIR=/app/uploads

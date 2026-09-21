@@ -183,6 +183,61 @@ describe("generated bundle (ff.html + data file + FF js) wired together", () => 
     expect(btn.disabled).toBe(false);
   });
 
+  it("ends the privacy-policy link with the arrow image, with the required * closing the consent sentence above it (matching the reference forms)", async () => {
+    const form = sampleFormDefinition();
+    form.fields.privacyPolicy = {
+      textByLocale: { en_GB: "I have read and agree to the following." },
+      linkTextByLocale: { en_GB: "Samsung privacy policy" },
+      linkUrlByLocale: { en_GB: "https://x.test/privacy" },
+    };
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(form, config);
+    await runGeneratedBundle(
+      buildFfHtml(form, config, fileNames).contents,
+      buildDataJs(form, config, fileNames).contents,
+      buildFfJs(fileNames).contents,
+    );
+
+    const label = document.querySelector("label[for='privacyPolicy']")!;
+    const link = label.querySelector("a#privacyPolicyLink")!;
+    const img = link.querySelector("img")!;
+
+    // The link text, then the arrow as the link's last child (i.e. at the end of the line).
+    expect(link.getAttribute("href")).toBe("https://x.test/privacy");
+    expect(link.textContent).toContain("Samsung privacy policy");
+    expect(link.lastElementChild).toBe(img);
+    expect(img.getAttribute("src")).toMatch(/^data:image\/svg\+xml,/);
+    expect(img.getAttribute("alt")).toBe("arrow");
+
+    // The consent sentence, then the required *, then the line break, then the link.
+    const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const star = label.querySelector(".star")!;
+    const br = label.querySelector("br")!;
+    expect(label.textContent).toContain("I have read and agree to the following.");
+    expect(follows(star, br)).toBe(true);
+    expect(follows(br, link)).toBe(true);
+    expect(label.firstElementChild!.nextElementSibling).toBe(star);
+  });
+
+  it("puts the same arrow on the privacy link in the One-Click page, and omits the * when the consent isn't required", () => {
+    const form = sampleFormDefinition();
+    form.fields.privacyPolicy = {
+      textByLocale: { en_GB: "I agree" },
+      linkUrlByLocale: { en_GB: "https://x.test/privacy" },
+      visibleInVariants: ["ff", "oc"],
+      required: false,
+    };
+    const config = { ...defaultBuilderConfig(), variants: ["ff", "oc"] as ("ff" | "oc")[] };
+    const fileNames = resolveFileNames(form, config);
+
+    for (const build of [buildFfHtml, buildOcHtml]) {
+      const doc = new DOMParser().parseFromString(build(form, config, fileNames).contents, "text/html");
+      const label = doc.querySelector("label[for='privacyPolicy']")!;
+      expect(label.querySelector("a#privacyPolicyLink > img")).not.toBeNull();
+      expect(label.querySelector(".star")).toBeNull();
+    }
+  });
+
   it("populates the Terms and Conditions link's href/text at runtime when configured", async () => {
     const form = sampleFormDefinition();
     form.fields.termsAndConditions = {

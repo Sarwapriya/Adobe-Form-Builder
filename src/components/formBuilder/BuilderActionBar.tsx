@@ -16,6 +16,7 @@ import { useSaveShortcut } from "../../hooks/useSaveShortcut";
 import { unsavedChangesBlinkSx } from "./unsavedChangesBlinkSx";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
 import { showToast } from "../../store/toastStore";
+import { useConfirm } from "../../hooks/useConfirm";
 
 const STATUS_COLOR = { draft: "default", published: "success", unpublished: "warning" } as const;
 
@@ -27,10 +28,10 @@ const STATUS_COLOR = { draft: "default", published: "success", unpublished: "war
  * directly from here, mirroring what HrFormInitiatorListPage/
  * AdHocFormInitiatorListPage already offer from their own list rows, but
  * previously missing from inside the editor itself (the store's own
- * `deleteForm` action existed but nothing called it). Backend's deleteForm
- * (formBuilderService.ts) already handles both outcomes generically: hard-deletes
- * a never-published form, otherwise soft-deletes (hides) it — no origin or
- * status check blocks either case.
+ * `deleteForm` action existed but nothing called it). Backend's delete_form
+ * (form_builder_service.py) is always a soft delete (flags the form deleted and
+ * hides it, never removes rows) — no origin or status check blocks it, and this
+ * bar asks for confirmation first.
  *
  * Download only ever appears once `status === "published"` — same condition
  * gating Unpublish — because that's exactly when the backend has a published
@@ -74,6 +75,7 @@ export function BuilderActionBar() {
   const unpublish = useFormBuilderStore((s) => s.unpublish);
   const deleteForm = useFormBuilderStore((s) => s.deleteForm);
 
+  const { confirm, confirmDialog } = useConfirm();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -109,13 +111,30 @@ export function BuilderActionBar() {
   }
 
   async function handleUnpublish() {
-    if (!window.confirm("Unpublish this form? Its preview/download links will stop working until it's published again.")) return;
+    const confirmed = await confirm({
+      title: "Unpublish form",
+      message: "Unpublish this form? Its preview/download links will stop working until it's published again.",
+      confirmLabel: "Unpublish",
+      confirmColor: "warning",
+    });
+    if (!confirmed) return;
     const ok = await unpublish();
     if (ok) showToast("Unpublished.", "success");
   }
 
   async function handleDelete() {
-    if (!window.confirm("Delete this form? This can't be undone.")) return;
+    const confirmed = await confirm({
+      title: "Delete form",
+      message: (
+        <>
+          Delete <strong>{name || "this form"}</strong>?
+          {status !== "draft" ? " Its published output will also be hidden." : ""} It's removed from every list — nothing
+          is erased from the database.
+        </>
+      ),
+      confirmLabel: "Delete",
+    });
+    if (!confirmed) return;
     setDeleting(true);
     const ok = await deleteForm();
     setDeleting(false);
@@ -192,6 +211,7 @@ export function BuilderActionBar() {
         </Button>
       </Stack>
       <FormBuilderPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      {confirmDialog}
     </Paper>
   );
 }

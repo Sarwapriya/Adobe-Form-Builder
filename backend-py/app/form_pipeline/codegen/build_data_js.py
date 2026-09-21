@@ -33,6 +33,19 @@ from .escaping import safe_json_for_script
 from .file_names import FileNames
 from .types import BuilderConfig, GeneratedFile
 
+# The small blue "↗" arrow the reference forms show at the end of the privacy-policy
+# link (their data file sends `image: "blue_arr.png"`). That PNG isn't one of the
+# generated files, so it would 404 in a preview/QA run or anywhere it isn't deployed
+# alongside — an inline SVG of the same arrow renders everywhere (the stylesheet
+# already inlines its other icons the same way). Must stay byte-identical to
+# buildDataJs.ts's CONSENT_LINK_ARROW_IMAGE.
+_CONSENT_LINK_ARROW_IMAGE = (
+    "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23006BEA'"
+    "%20stroke-width='2.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M7%2017L17%207'/%3E"
+    "%3Cpath%20d='M8%207h9v9'/%3E%3C/svg%3E"
+)
+_CONSENT_LINK_ARROW_ALT = "arrow"
+
 # Reserved subsidiary key for a builder-authored `fields.mobileNumber` field —
 # never a real Samsung subsidiary code (those are short org codes like
 # "SGE"/"SEIL").
@@ -189,8 +202,8 @@ def build_data_js(form: FormDefinition, config: BuilderConfig, file_names: FileN
             "privacyPolicy": resolve_localized_text(f.privacyPolicy.textByLocale, locale, default_locale) if f.privacyPolicy else "",
             "privacyPolicyLink": {
                 "label": resolve_localized_text(f.privacyPolicy.linkTextByLocale, locale, default_locale) if f.privacyPolicy else "",
-                "image": "",
-                "imageAlt": "",
+                "image": _CONSENT_LINK_ARROW_IMAGE if f.privacyPolicy else "",
+                "imageAlt": _CONSENT_LINK_ARROW_ALT if f.privacyPolicy else "",
                 "url": resolve_localized_text(f.privacyPolicy.linkUrlByLocale, locale, default_locale) if f.privacyPolicy else "",
             },
             "termsAndConditions": resolve_localized_text(f.termsAndConditions.textByLocale, locale, default_locale) if f.termsAndConditions else "",

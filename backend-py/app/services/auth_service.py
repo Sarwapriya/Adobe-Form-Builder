@@ -12,18 +12,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
-from sqlalchemy import delete, func, or_, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.errors import ConflictError, ValidationError
-from app.models.ai_action import AIAction
-from app.models.ai_conversation import AIConversation
-from app.models.form import Form
-from app.models.form_contribution import FormContribution
-from app.models.form_version import FormVersion
-from app.models.qa_run import QaRun
-from app.models.question_master_version import QuestionMasterVersion
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
 from app.security import dkms_client
@@ -208,21 +200,35 @@ def list_users(db: Session) -> list[User]:
     page's list — never includes `passwordHash` (callers of this function
     are responsible for excluding it when serializing, same as the TS
     side's `Omit<User, "passwordHash">` return type)."""
-    return list(db.execute(select(User).order_by(User.createdAt.desc())).scalars().all())
+    return list(
+        db.execute(
+            select(User).where(User.isDeleted == False).order_by(User.createdAt.desc())  # noqa: E712
+        ).scalars().all()
+    )
+
+
+def _get_live_user(db: Session, id: str) -> Optional[User]:
+    """The user with this id, or `None` if there is none *or it has been
+    soft-deleted* — a deleted account is gone as far as every caller is
+    concerned (it can't be edited, re-enabled, or looked up)."""
+    user = db.get(User, id)
+    if user is None or user.isDeleted:
+        return None
+    return user
 
 
 def find_user_by_id(db: Session, id: str) -> Optional[User]:
     """Looked up by `admin.router.ts`'s `PATCH /users/:id` before toggling
     `isActive`, to check the *target's* role against the caller's own
     permissions before `set_user_active` runs."""
-    return db.get(User, id)
+    return _get_live_user(db, id)
 
 
 def set_user_active(db: Session, id: str, is_active: bool) -> Optional[User]:
     """Enables or disables an account — `validate_credentials` only ever
     matches an active user, so disabling one immediately blocks new logins.
     Returns `None` if the id doesn't exist — callers map that to a 404."""
-    existing = db.get(User, id)
+    existing = _get_live_user(db, id)
     if existing is None:
         return None
     existing.isActive = is_active
@@ -232,75 +238,38 @@ def set_user_active(db: Session, id: str, is_active: bool) -> Optional[User]:
     return existing
 
 
-def _user_has_dependent_records(db: Session, id: str) -> bool:
-    """True if this user has ever created/submitted/reviewed/triggered/
-    generated anything the app still shows in its history. Real DB foreign
-    keys enforce this regardless (a hard DELETE would fail on one of them),
-    but checking first lets `delete_user` return a clean, specific outcome
-    instead of a raw SQL error bubbling up.
-
-    Covers every table with a live FK to `Users.id` *except* `RefreshTokens`
-    (a login session, not a business record — `delete_user` deletes those
-    itself rather than blocking on them) — `Forms`, `FormVersions`,
-    `FormContributions` (both `submittedByUserId` and `reviewedByUserId`),
-    `QuestionMasterVersions`, `QaRuns`, `AIConversations`, `AIActions`, and
-    `Uploads` (the removed Excel-upload feature's table — no ORM model left
-    in this port, but the table and its FK to Users still exist in the
-    shared DB, so it's checked via raw SQL)."""
-    if db.execute(select(Form.id).where(Form.createdByUserId == id).limit(1)).first():
-        return True
-    if db.execute(select(FormVersion.id).where(FormVersion.createdByUserId == id).limit(1)).first():
-        return True
-    if db.execute(
-        select(FormContribution.id)
-        .where(or_(FormContribution.submittedByUserId == id, FormContribution.reviewedByUserId == id))
-        .limit(1)
-    ).first():
-        return True
-    if db.execute(
-        select(QuestionMasterVersion.id).where(QuestionMasterVersion.generatedByUserId == id).limit(1)
-    ).first():
-        return True
-    if db.execute(select(QaRun.id).where(QaRun.triggeredByUserId == id).limit(1)).first():
-        return True
-    if db.execute(select(AIConversation.id).where(AIConversation.userId == id).limit(1)).first():
-        return True
-    if db.execute(select(AIAction.id).where(AIAction.userId == id).limit(1)).first():
-        return True
-    if db.execute(text("SELECT TOP 1 id FROM fq.Uploads WHERE userId = :id"), {"id": id}).first():
-        return True
-    return False
-
-
-DeleteUserOutcome = Literal["ok", "not_found", "has_records"]
+DeleteUserOutcome = Literal["ok", "not_found"]
 
 
 def delete_user(db: Session, id: str) -> DeleteUserOutcome:
-    """Hard-deletes a user account — only possible when they have no
-    dependent records anywhere in the app's history (see
-    `_user_has_dependent_records`); such a user can only be deactivated
-    (`set_user_active`, always available regardless of this), never deleted.
-    Deletes this user's refresh tokens first (a real FK too, but not itself
-    a "record" worth blocking on) so the delete doesn't fail on stale
-    sessions. The `IntegrityError` fallback is a last line of defense for a
-    race (a record created between the check above and this commit) or an
-    FK this function doesn't yet know about — translated to the same
-    `"has_records"` outcome rather than a raw DB error reaching the caller."""
-    existing = db.get(User, id)
+    """Soft-deletes a user account: the row stays (so every form, contribution,
+    QA run or AI conversation attached to it keeps its owner), it's flagged
+    `isDeleted`, made inactive so it can't sign in, and its sessions revoked.
+    It then disappears from `list_users` and every other user lookup.
+
+    The username and email hash are tombstoned (`<original>~deleted~<id8>`) so
+    they stop counting as taken — otherwise their DB unique constraints would
+    stop an admin ever re-creating an account with the same login or email —
+    while still recording what they were."""
+    existing = _get_live_user(db, id)
     if existing is None:
         return "not_found"
-    if _user_has_dependent_records(db, id):
-        return "has_records"
 
-    db.execute(delete(RefreshToken).where(RefreshToken.userId == id))
-    db.delete(existing)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        return "has_records"
+    tombstone = f"~deleted~{existing.id[:8]}"
+    existing.username = existing.username[: 100 - len(tombstone)] + tombstone
+    if existing.emailHash:
+        existing.emailHash = existing.emailHash[: 500 - len(tombstone)] + tombstone
+    existing.isActive = False
+    existing.isDeleted = True
+    existing.deletedAt = datetime.now(timezone.utc)
+    db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.userId == id, RefreshToken.revokedAt.is_(None))
+        .values(revokedAt=datetime.now(timezone.utc))
+    )
+    db.add(existing)
+    db.commit()
     return "ok"
-
 
 def update_user(db: Session, id: str, input: dict[str, Any]) -> Optional[User]:
     """Updates a user's own account fields (username/email/role/subsidiary)
@@ -325,11 +294,11 @@ def update_user(db: Session, id: str, input: dict[str, Any]) -> Optional[User]:
     hashing is skipped entirely when no new email is provided, both to avoid
     an unnecessary DKMS round trip and so a `DkmsUnavailableError` is only
     ever possible here when the caller actually asked to change the email."""
-    existing = db.get(User, id)
+    existing = _get_live_user(db, id)
     if existing is None:
         return None
 
-    next_username = (input.get("username") or "").strip() or existing.username
+    next_username =(input.get("username") or "").strip() or existing.username
     requested_email = (input.get("email") or "").strip()
     username_changed = next_username.lower() != existing.username.lower()
     email_changing = bool(requested_email)
@@ -356,7 +325,7 @@ def update_user(db: Session, id: str, input: dict[str, Any]) -> Optional[User]:
     else:
         next_subsidiary_id = existing.subsidiaryId
     if next_role == "standard" and not next_subsidiary_id:
-        raise ValidationError("Subsidiary is required for a standard user")
+        raise ValidationError("Subsidiary is required for a Subsidiary user")
 
     existing.username = next_username
     if email_changing:
@@ -380,7 +349,7 @@ def set_user_notification_emails(db: Session, id: str, emails: dict[str, Any]) -
     """Updates a user's own up-to-two separate notification-email
     addresses. Returns `None` if the id doesn't exist. Permission checking
     (self, or superadmin acting on someone else) happens in the route."""
-    existing = db.get(User, id)
+    existing = _get_live_user(db, id)
     if existing is None:
         return None
 

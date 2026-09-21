@@ -12,6 +12,8 @@ There is no runtime coupling beyond HTTP — the frontend calls the backend over
 
 Apply the canonical schema (init SQL / `Base.metadata.create_all` — see `backend-py/README.md`) to a SQL Server database. There is no migration framework wired up in `backend-py/` yet (`alembic` is a listed dependency, not yet configured) — any schema change beyond the baseline (e.g. the DKMS PII-encryption columns) is applied by hand-written, idempotent SQL, such as `backend-py/scripts/dkms_migration.sql`.
 
+`backend-py/scripts/soft_delete_and_ai_providers_migration.sql` is the latest of these — it adds the soft-delete columns (`isDeleted`/`deletedAt` on `fq.Users`, `fq.Subsidiaries`, `fq.SubsidiaryLocales`) and the `fq.AiProviders` table (copying any existing Groq setting into it). **Run it against each database before deploying a backend built from this version** — the new code selects those columns, so without it every user/subsidiary/locale query fails. It is idempotent and only adds; it never drops or rewrites data.
+
 ### Seed the first admin account (one-time, per environment)
 
 Run from any machine with the full Python toolchain and network access to the production database — a developer's machine, or a CI job — with `backend-py/.env` (or equivalent env vars) pointed at the **production** `SQL_CONNECTION_STRING`:
@@ -116,6 +118,10 @@ docker build -t formiq-frontend .
 docker run -d --name formiq --network formiq-net --restart unless-stopped \
   -p 8080:80 formiq-frontend
 ```
+
+The backend image bundles Playwright's Chromium (plus its OS libraries) for the
+QA-run feature, so its first build downloads a few hundred MB more than the
+rest of the image. Without it every QA run fails with "Executable doesn't exist".
 
 Only port `8080` needs to be open in your VM's firewall/NSG — the backend's
 `4001` never needs to be exposed to the internet at all, since nginx reaches

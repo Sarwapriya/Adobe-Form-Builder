@@ -110,6 +110,9 @@ export interface CreateFormInput {
    * (draft or published, whichever is more current) is cloned as this new
    * form's starting definition/config. Any existing form is a valid source. */
   copyFromFormId?: string;
+  /** "adhoc" starts a new ad-hoc campaign (Full Form only, listed under Ad-hoc
+   * Forms); omitted means an ordinary admin/HR form. */
+  origin?: FormOrigin;
 }
 
 export function createForm(input: CreateFormInput): Promise<FormListItem> {
@@ -204,7 +207,7 @@ export interface MonthlyActivity {
 }
 
 /** Per-subsidiary counts, split the same way the stat cards are — lets the
- * "Subsidiary Activity" chart re-scope to whichever stat card is currently
+ * "Subsidiary Activity" charts re-scope to whichever stat card is currently
  * selected (see AdminOverviewDashboardPage.tsx) while always summing back to
  * that card's own total. */
 export interface SubsidiaryBucketBreakdown {
@@ -237,13 +240,31 @@ export interface RecentActivityItem {
 export interface AdminDashboardSummary {
   counts: AdminDashboardCounts;
   activityByMonth: MonthlyActivity[];
-  subsidiaryBreakdown: SubsidiaryBucketBreakdown[];
+  /** Admin-authored (HR / "Full Form") campaigns and subsidiary-initiated
+   * ad-hoc campaigns are charted separately. */
+  subsidiaryBreakdownByOrigin: {
+    fullForm: SubsidiaryBucketBreakdown[];
+    adhoc: SubsidiaryBucketBreakdown[];
+  };
+  /** Only the latest few — the rest are behind `*HasMore` / the full-list pages. */
   pendingApprovals: PendingApprovalItem[];
+  pendingApprovalsHasMore: boolean;
   recentActivity: RecentActivityItem[];
+  recentActivityHasMore: boolean;
 }
 
 export function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
   return apiClient.get<AdminDashboardSummary>("/api/v1/admin/dashboard-summary");
+}
+
+/** Every pending approval, newest first — behind the dashboard's "Action Required" Show more. */
+export function listAllPendingApprovals(): Promise<PendingApprovalItem[]> {
+  return apiClient.get<PendingApprovalItem[]>("/api/v1/admin/dashboard-summary/pending-approvals");
+}
+
+/** The full recent-activity feed, newest first — behind the dashboard's "Recent Activity" Show more. */
+export function listAllRecentActivity(): Promise<RecentActivityItem[]> {
+  return apiClient.get<RecentActivityItem[]>("/api/v1/admin/dashboard-summary/recent-activity");
 }
 
 export function listFormVersions(formId: string): Promise<FormVersionSummary[]> {

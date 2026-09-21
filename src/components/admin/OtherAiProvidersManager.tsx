@@ -1,32 +1,85 @@
-import { Paper, Stack, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Button, Paper, Stack, Typography } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import { ApiError } from "../../api/apiClient";
+import { listAiProviders, type AiProvider } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
-import { AiProviderPanel } from "./OtherAiProviderPanel";
+import { LoadingState } from "../common/LoadingState";
+import { showToast } from "../../store/toastStore";
+import { AiProviderPanel, NewAiProviderForm } from "./OtherAiProviderPanel";
 
 /**
- * Fallback AI provider — used automatically whenever FabriX (the primary
- * provider, configured in the section above) is disabled or unreachable, per
- * backend aiProviderService.py's fixed priority-with-fallback dispatch: with
- * both enabled, FabriX is always tried first. Each provider's own "Enabled"
- * switch (this section's, and FabriX's above) is the entire "which API
- * should use" control — there's no separate priority setting to configure.
- *
- * Currently just one subsection (see AiProviderPanel). Its heading stays
- * generic ("Provider") rather than naming a vendor outright — pasting a key
- * is what identifies and labels it, so a future provider is just one more
- * panel added to the Stack below, not a new page or a routing decision.
+ * Fallback AI providers — used automatically, in the order listed, whenever
+ * FabriX (the primary provider, configured in the section above) is disabled or
+ * unreachable, per backend aiProviderService.py. Any number can be added: each
+ * is any OpenAI-compatible chat-completions service, identified by the name the
+ * admin gives it. Each provider's own "Enabled" switch (and FabriX's above) is
+ * the entire "which API should be used" control — there's no separate priority
+ * setting, and providers are never deleted, only switched off.
  */
 export function OtherAiProvidersManager() {
+  const [providers, setProviders] = useState<AiProvider[] | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  async function refresh() {
+    try {
+      setProviders(await listAiProviders());
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to load AI providers", "error");
+      setProviders((current) => current ?? []);
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
   return (
     <Paper sx={{ p: 2, mb: 2 }}>
-      <SectionHeader icon={<SwapHorizIcon fontSize="small" color="primary" />} title="Other AI Providers" />
+      <SectionHeader
+        icon={<SwapHorizIcon fontSize="small" color="primary" />}
+        title="Other AI Providers"
+        action={
+          <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => setAdding(true)} disabled={adding}>
+            Add provider
+          </Button>
+        }
+      />
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
-        Used automatically as a fallback whenever FabriX is disabled or unreachable. Add an API key below and it's
-        identified and labeled automatically; use its own "Enabled" switch to turn it off.
+        Used automatically, in the order listed, whenever FabriX is disabled or unreachable. Add as many providers as you
+        like — give each a name so it's easy to tell apart — and use its own switch to turn it off. Providers are never
+        deleted, only disabled.
       </Typography>
-      <Stack spacing={2}>
-        <AiProviderPanel />
-      </Stack>
+
+      {providers === null ? (
+        <LoadingState />
+      ) : (
+        <Stack spacing={2}>
+          {providers.length === 0 && !adding && (
+            <Typography variant="body2" color="text.secondary">
+              No other AI providers yet — click "Add provider".
+            </Typography>
+          )}
+          {providers.map((provider) => (
+            // Keyed on the saved values too, so a refresh after Save re-seeds the form fields.
+            <AiProviderPanel
+              key={`${provider.id}:${provider.name}:${provider.baseUrl}:${provider.model}`}
+              provider={provider}
+              onChanged={refresh}
+            />
+          ))}
+          {adding && (
+            <NewAiProviderForm
+              onCreated={async () => {
+                setAdding(false);
+                await refresh();
+              }}
+              onCancel={() => setAdding(false)}
+            />
+          )}
+        </Stack>
+      )}
     </Paper>
   );
 }
