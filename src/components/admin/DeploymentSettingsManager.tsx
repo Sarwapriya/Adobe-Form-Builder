@@ -110,11 +110,11 @@ function SftpTargetPanel({
             value={form.privateKeyPath}
             onChange={(e) => setForm((f) => ({ ...f, privateKeyPath: e.target.value }))}
             required
-            placeholder="/keys/adobe_sftp"
+            placeholder="/app/keys/adobe_sftp_key"
             error={Boolean(target.privateKeyPath) && !target.privateKeyFound}
             helperText={
               !target.privateKeyPath
-                ? "Path to the key file inside the backend container (e.g. /keys/adobe_sftp) — saved in the database; the key's contents are never stored"
+                ? "Path to the key file inside the backend container (e.g. /app/keys/adobe_sftp_key) — saved in the database; the key's contents are never stored"
                 : target.privateKeyFound
                   ? "Key file found on the backend — saved in the database; the key's contents are never stored"
                   : "Saved path, but no key file exists there on the backend. Mount the key into the container and save this path (see DEPLOYMENT.md)"
