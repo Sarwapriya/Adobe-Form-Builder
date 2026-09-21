@@ -134,7 +134,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
       const result = await apiPublishForm(formId);
       if (result.deployment && !result.deployment.ok) {
         showToast(
-          `Deployed. SFTP delivery to the campaign server failed (${result.deployment.error}) — this is expected off the office network; retry once connected.`,
+          `Deployed. SFTP delivery to the campaign server failed (${result.deployment.error}) — check Configuration > Deployment and that the server is reachable, then retry.`,
           "warning",
         );
       }

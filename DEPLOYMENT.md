@@ -70,7 +70,7 @@ See `backend-py/.env.example` for the full annotated list — summarized here:
 | `PORT` | HTTP port (defaults 4001) |
 | `ADMIN_USER` / `ADMIN_EMAIL` / `ADMIN_PASSWORD_HASH` | Only read by the one-time `scripts/seed_admin.py`, not at request time |
 
-SFTP deployment-target credentials (host/username/private-key-path/remote-path per environment) are entirely admin-configured via the Configuration page, not env vars.
+SFTP deployment-target credentials (host/username/private-key-path/remote-path per environment) are entirely admin-configured via the Configuration page, not env vars. The **private key path is resolved inside the backend container**, so the standard layout is one folder on the VM, `~/keys/` (holding e.g. `adobe_sftp`), mounted read-only at `/keys` (the `-v $HOME/keys:/keys:ro` line in the `docker run` below), and Configuration > Deployment > Private Key Path set to the in-container path, e.g. `/keys/adobe_sftp`. That path is stored in the database (`fq.AdminSettings`, `sftpStagingPrivateKeyPath` / `sftpProductionPrivateKeyPath`); the key file itself is never stored. The Deployment page shows whether a file was actually found at the saved path. Without the mount, publishing succeeds but SFTP delivery fails with "private key file not found". Keep the key readable by the container user (`chmod 644`) since the mount is read-only.
 
 ## 3. Frontend deployment
 
@@ -112,6 +112,7 @@ docker network create formiq-net
 docker build -f backend-py/Dockerfile -t formiq-backend .
 docker run -d --name formiq-backend --network formiq-net --restart unless-stopped \
   --env-file backend-py/.env -v $(pwd)/backend-py/uploads:/app/uploads \
+  -v $HOME/keys:/keys:ro \
   formiq-backend
 
 docker build -t formiq-frontend .

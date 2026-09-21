@@ -21,6 +21,7 @@ import {
   type SftpDeploymentSettings,
   type SftpEnvironment,
   type SftpTargetConfig,
+  type SftpTargetView,
 } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
@@ -37,7 +38,7 @@ function SftpTargetPanel({
   onSaved,
 }: {
   environment: SftpEnvironment;
-  target: SftpTargetConfig;
+  target: SftpTargetView;
   onSaved: (settings: SftpDeploymentSettings) => void;
 }) {
   const [form, setForm] = useState<SftpTargetConfig>(target);
@@ -51,7 +52,13 @@ function SftpTargetPanel({
     e.preventDefault();
     setSaving(true);
     try {
-      const settings = await saveDeploymentTarget(environment, form);
+      const settings = await saveDeploymentTarget(environment, {
+        host: form.host,
+        port: form.port,
+        username: form.username,
+        privateKeyPath: form.privateKeyPath,
+        remotePath: form.remotePath,
+      });
       onSaved(settings);
       showToast("Saved.", "success");
     } catch (err) {
@@ -103,7 +110,15 @@ function SftpTargetPanel({
             value={form.privateKeyPath}
             onChange={(e) => setForm((f) => ({ ...f, privateKeyPath: e.target.value }))}
             required
-            helperText="Local file path on the machine running the backend — never the key's contents"
+            placeholder="/keys/adobe_sftp"
+            error={Boolean(target.privateKeyPath) && !target.privateKeyFound}
+            helperText={
+              !target.privateKeyPath
+                ? "Path to the key file inside the backend container (e.g. /keys/adobe_sftp) — saved in the database; the key's contents are never stored"
+                : target.privateKeyFound
+                  ? "Key file found on the backend — saved in the database; the key's contents are never stored"
+                  : "Saved path, but no key file exists there on the backend. Mount the key into the container and save this path (see DEPLOYMENT.md)"
+            }
           />
           <TextField
             label="Remote Path"

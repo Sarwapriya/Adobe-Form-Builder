@@ -77,7 +77,7 @@ def deploy_generated_files(db: Session, files: list[SftpDeployFile]) -> SftpDepl
     if target is None:
         return SftpDeployResult(ok=False, error="SFTP deployment is not configured for the active environment (Configuration > Deployment)")
     if not os.path.isfile(target.privateKeyPath):
-        return SftpDeployResult(ok=False, error="SFTP private key file not found at the configured local path")
+        return SftpDeployResult(ok=False, error="SFTP private key file not found at the configured path (when the backend runs in Docker this is a path inside the container - mount the key file into it)")
     if not files:
         return SftpDeployResult(ok=True, filesDeployed=0)
 

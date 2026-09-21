@@ -101,7 +101,7 @@ export function BuilderActionBar() {
     if (result.ok) {
       if (result.deployment && !result.deployment.ok) {
         showToast(
-          `Published. SFTP delivery to the campaign server failed (${result.deployment.error}) — this is expected off the office network; retry once connected.`,
+          `Published. SFTP delivery to the campaign server failed (${result.deployment.error}) — check Configuration > Deployment and that the server is reachable, then retry.`,
           "warning",
         );
       } else {

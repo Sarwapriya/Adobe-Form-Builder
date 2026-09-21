@@ -427,8 +427,10 @@ export function sendAiProviderTestMessage(id: string): Promise<{ ok: boolean; er
 /** DB-stored SFTP deployment config (Configuration > Deployment) — see
  * backend's sftpSettingsService.ts. Staging and production are both always
  * present; `activeEnvironment` is whichever one Publish/Deploy actually
- * pushes generated files to. `privateKeyPath` is a local filesystem path on
- * whichever machine runs the backend, not the key's contents. */
+ * pushes generated files to. `privateKeyPath` is stored in the database and is
+ * a path as seen by the backend process (inside the container under Docker),
+ * not the key's contents; `privateKeyFound` is the backend's live check that a
+ * file really exists there. */
 export type SftpEnvironment = "staging" | "production";
 
 export interface SftpTargetConfig {
@@ -439,10 +441,14 @@ export interface SftpTargetConfig {
   remotePath: string;
 }
 
+export interface SftpTargetView extends SftpTargetConfig {
+  privateKeyFound: boolean;
+}
+
 export interface SftpDeploymentSettings {
   activeEnvironment: SftpEnvironment;
-  staging: SftpTargetConfig;
-  production: SftpTargetConfig;
+  staging: SftpTargetView;
+  production: SftpTargetView;
 }
 
 export function getDeploymentSettings(): Promise<SftpDeploymentSettings> {

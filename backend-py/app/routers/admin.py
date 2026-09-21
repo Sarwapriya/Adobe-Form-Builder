@@ -20,6 +20,7 @@ Mounted at `/api/v1/admin` (see `app/main.py`).
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Annotated, Any, Literal, Optional
 
@@ -167,6 +168,7 @@ def _serialize_sftp_settings(s: sftp_settings_service.SftpDeploymentSettings) ->
             "port": t.port,
             "username": t.username,
             "privateKeyPath": t.privateKeyPath,
+            "privateKeyFound": bool(t.privateKeyPath) and os.path.isfile(t.privateKeyPath),
             "remotePath": t.remotePath,
         }
 

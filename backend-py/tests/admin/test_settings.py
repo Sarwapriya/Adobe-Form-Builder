@@ -322,6 +322,26 @@ class TestSftpDeploymentSettings:
         row = db_session.execute(select(AdminSetting).where(AdminSetting.key == "sftpStagingHost")).scalar_one()
         assert row.value == "sftp.example.com"  # stored in plaintext, not encrypted
 
+    def test_reports_whether_the_key_file_exists(self, client: TestClient, admin_headers: dict, tmp_path):
+        key_file = tmp_path / "test_key"
+        key_file.write_text("not a real key")
+        payload = {"host": "sftp.example.com", "username": "deploy", "remotePath": "/incoming"}
+
+        found = client.patch(
+            "/api/v1/admin/deployment-settings/staging",
+            json={**payload, "privateKeyPath": str(key_file)},
+            headers=admin_headers,
+        ).json()
+        assert found["staging"]["privateKeyPath"] == str(key_file)
+        assert found["staging"]["privateKeyFound"] is True
+
+        missing = client.patch(
+            "/api/v1/admin/deployment-settings/staging",
+            json={**payload, "privateKeyPath": str(tmp_path / "nope")},
+            headers=admin_headers,
+        ).json()
+        assert missing["staging"]["privateKeyFound"] is False
+
     def test_set_active_environment(self, client: TestClient, admin_headers: dict):
         resp = client.post("/api/v1/admin/deployment-settings/active", json={"environment": "production"}, headers=admin_headers)
         assert resp.status_code == 200
