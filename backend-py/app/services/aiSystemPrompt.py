@@ -21,8 +21,8 @@ from app.models.user import is_admin_role
 # what used to be one call), so admins now get both.
 FORMIQ_LOOKUP_TOOL_DESCRIPTIONS = """
 - SEARCH_CAMPAIGNS { searchText?: string, projectCode?: string, status?: "draft"|"published"|"unpublished" } — find campaigns (forms) by keyword, name, or project code. Use this when the user mentions a campaign type or topic (e.g. "HR forms", "handraiser", "NPS"). Only pass searchText unless the user explicitly asks for a specific status or project code.
-- GET_CAMPAIGN { formId: string } — get a campaign's name, status, locales, and its questions (id, heading, type, required). Requires a valid UUID formId from a prior search result.
-- GET_CAMPAIGN_QUESTIONS { formId: string } — get just a campaign's question list. Requires a valid UUID formId.
+- GET_CAMPAIGN { formId: string } — get a campaign's name, status, locales, and its questions (id, heading, type, required, and its answer choices/options). Use this (not a guess) whenever the user asks what a campaign's questions AND/OR answer options actually are. Requires a valid UUID formId from a prior search result.
+- GET_CAMPAIGN_QUESTIONS { formId: string } — get just a campaign's question list, each with its answer choices/options. Requires a valid UUID formId.
 - SEARCH_QUESTIONS { searchText: string, formId?: string } — find questions by heading text, optionally scoped to one campaign.
 - FIND_SIMILAR_CAMPAIGNS { formId: string } — find campaigns whose name is similar to a SPECIFIC campaign you already have the UUID for. Do NOT use this with a keyword or campaign type name — use SEARCH_CAMPAIGNS instead.
 - FIND_SIMILAR_QUESTIONS { formId?: string, questionId?: string, text?: string } — find questions similar to a given question or piece of text.

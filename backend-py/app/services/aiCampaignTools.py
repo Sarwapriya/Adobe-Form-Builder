@@ -33,6 +33,7 @@ class CompactQuestion(TypedDict):
     heading: str
     controlType: str
     required: bool
+    answers: list[str]
 
 
 class CompactCampaign(TypedDict):
@@ -158,6 +159,14 @@ def _to_compact_campaign(
                 "heading": resolve_localized_text(q.headingByLocale, default_locale, default_locale),
                 "controlType": q.controlType,
                 "required": q.required,
+                # The answer choices themselves (e.g. for a radio/checkbox/dropdown
+                # question) — previously missing entirely, so the assistant had no
+                # way to answer "what are the answers/options for this question"
+                # even though it could already list the questions.
+                "answers": [
+                    resolve_localized_text(a.textByLocale, default_locale, default_locale)
+                    for a in sorted(q.answers, key=lambda a: a.order)
+                ],
             }
             for q in questions
         ],
