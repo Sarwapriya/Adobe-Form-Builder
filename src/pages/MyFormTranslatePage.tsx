@@ -27,6 +27,7 @@ import LockIcon from "@mui/icons-material/Lock";
 import { resolveLocalizedText } from "@formbuilder/shared";
 import { useFormContributionStore } from "../store/formContributionStore";
 import { FormStatusBar, type FormStatusTone } from "../components/common/FormStatusBar";
+import { PageBreadcrumbs } from "../components/common/PageBreadcrumbs";
 import { listMyContributions, CONTRIBUTION_STATUS_LABEL, type ContributionStatus } from "../api/subsidiaryFormsApi";
 import { TranslatableField } from "../components/formContribution/TranslatableField";
 import { AddQuestionDialog } from "../components/formContribution/AddQuestionDialog";
@@ -207,6 +208,7 @@ export function MyFormTranslatePage() {
 
   return (
     <Box>
+      <PageBreadcrumbs items={[{ label: "Flagship HR", to: "/my-forms/hr" }, { label: formName }]} />
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
         <IconButton onClick={() => navigate("/my-forms")} aria-label="Back to My Forms">
           <ArrowBackIcon />
