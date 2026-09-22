@@ -59,6 +59,16 @@ export function LocaleManagerPanel() {
         ...d.locales,
         { code: master.code, langSubtag: master.langSubtag, isRtl: master.isRtl, sourceColumn: "builder" as const, label: master.label },
       ],
+      // A newly-added locale otherwise starts with no Submit button text at all —
+      // default it to "Submit" so it isn't blank/missing-translation-flagged;
+      // still freely editable per-locale from "Predefined fields" > "Submit Button".
+      fields: {
+        ...d.fields,
+        submitButton: {
+          ...d.fields.submitButton,
+          labelByLocale: { ...d.fields.submitButton.labelByLocale, [master.code]: d.fields.submitButton.labelByLocale?.[master.code] ?? "Submit" },
+        },
+      },
     }));
   }
 

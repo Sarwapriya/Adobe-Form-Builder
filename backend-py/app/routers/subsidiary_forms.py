@@ -42,8 +42,10 @@ def list_my_contributions(db: Session = Depends(get_db), auth: dict = Depends(re
     return form_contribution_service.list_own_contributions_all_forms(db, auth["sub"])
 
 
+_EMPTY_BUCKET_COUNTS = {"total": 0, "drafts": 0, "pendingReview": 0, "changesRequested": 0, "published": 0}
 _EMPTY_DASHBOARD_SUMMARY = {
-    "counts": {"total": 0, "drafts": 0, "pendingReview": 0, "changesRequested": 0, "published": 0},
+    "counts": _EMPTY_BUCKET_COUNTS,
+    "campaignStatusByType": {"all": _EMPTY_BUCKET_COUNTS, "adhoc": _EMPTY_BUCKET_COUNTS, "hr": _EMPTY_BUCKET_COUNTS},
     "recentCampaigns": [],
     "continueWorking": [],
     "actionRequired": [],
@@ -70,7 +72,14 @@ def create_adhoc_form(body: CreateAdHocFormBody, db: Session = Depends(get_db), 
         if owned is None:
             raise HTTPException(status_code=404, detail="Form to copy not found")
     return form_builder_service.create_form(
-        db, name=body.name, subsidiary_id=subsidiary_id, user_id=auth["sub"], origin="adhoc", copy_from_form_id=body.copyFromFormId
+        db,
+        name=body.name,
+        subsidiary_id=subsidiary_id,
+        user_id=auth["sub"],
+        origin="adhoc",
+        project_code=body.projectCode,
+        copy_from_form_id=body.copyFromFormId,
+        exclude_locked_project_code=True,
     )
 
 
@@ -111,6 +120,8 @@ def update_adhoc_draft(id: str, body: DraftUpdateBody, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="form not found")
     if owned.pendingReview:
         raise HTTPException(status_code=409, detail="This form is awaiting admin review — it can't be edited until reviewed")
+    if owned.status == "published":
+        raise HTTPException(status_code=409, detail="This campaign has been approved and published — it can only be viewed")
     form_builder_service.update_draft(db, id, body.definition, body.config)
 
 
@@ -124,6 +135,8 @@ def submit_adhoc_for_review(id: str, db: Session = Depends(get_db), auth: dict =
         raise HTTPException(status_code=404, detail="form not found")
     if outcome == "already_pending":
         raise HTTPException(status_code=409, detail="This form is already awaiting review")
+    if outcome == "already_published":
+        raise HTTPException(status_code=409, detail="This campaign has already been approved and published")
 
 
 @router.delete("/adhoc/{id}", status_code=status.HTTP_204_NO_CONTENT)

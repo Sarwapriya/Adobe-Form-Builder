@@ -12,7 +12,9 @@ There is no runtime coupling beyond HTTP — the frontend calls the backend over
 
 Apply the canonical schema (init SQL / `Base.metadata.create_all` — see `backend-py/README.md`) to a SQL Server database. There is no migration framework wired up in `backend-py/` yet (`alembic` is a listed dependency, not yet configured) — any schema change beyond the baseline (e.g. the DKMS PII-encryption columns) is applied by hand-written, idempotent SQL, such as `backend-py/scripts/dkms_migration.sql`.
 
-`backend-py/scripts/soft_delete_and_ai_providers_migration.sql` is the latest of these — it adds the soft-delete columns (`isDeleted`/`deletedAt` on `fq.Users`, `fq.Subsidiaries`, `fq.SubsidiaryLocales`) and the `fq.AiProviders` table (copying any existing Groq setting into it). **Run it against each database before deploying a backend built from this version** — the new code selects those columns, so without it every user/subsidiary/locale query fails. It is idempotent and only adds; it never drops or rewrites data.
+`backend-py/scripts/soft_delete_and_ai_providers_migration.sql` adds the soft-delete columns (`isDeleted`/`deletedAt` on `fq.Users`, `fq.Subsidiaries`, `fq.SubsidiaryLocales`) and the `fq.AiProviders` table (copying any existing Groq setting into it). **Run it against each database before deploying a backend built from this version** — the new code selects those columns, so without it every user/subsidiary/locale query fails. It is idempotent and only adds; it never drops or rewrites data.
+
+`backend-py/scripts/subsidiary_privacy_links_migration.sql` is the latest of these — it creates `fq.SubsidiaryPrivacyLinks` (subsidiary+locale -> real Privacy Policy URL, seeded with the known Samsung regional URLs) that the form builder's Privacy Policy consent field reads to auto-fill its Link URL. Also idempotent/additive-only; run it before deploying a backend built from this version, same as the migration above.
 
 ### Seed the first admin account (one-time, per environment)
 

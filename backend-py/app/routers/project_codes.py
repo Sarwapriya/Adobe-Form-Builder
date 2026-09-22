@@ -34,10 +34,11 @@ def _serialize_project_code(pc) -> dict:
 
 
 # Every authenticated user (not just admins) needs this to populate the
-# upload form's "Project Code" dropdown. With ?subsidiary=NAME, also excludes
-# any code an admin has specifically blocked for that subsidiary. A locked
-# code is additionally excluded for non-admin callers (admins stay exempt
-# from the lock).
+# upload form's/ad-hoc-form-creation "Project Code" dropdown. With
+# ?subsidiary=NAME, also excludes any code an admin has specifically blocked
+# for that subsidiary. A locked code is additionally excluded for non-admin
+# callers (admins stay exempt from the lock); an expired code (past its own
+# endDate) is excluded for everyone — expiry isn't a lock an admin can bypass.
 @router.get("")
 def list_open_project_codes(
     subsidiary: Optional[str] = Query(default=None),
@@ -46,7 +47,7 @@ def list_open_project_codes(
 ) -> list[dict]:
     exclude_locked = not is_admin_role(auth.get("role", ""))
     if subsidiary:
-        codes = project_code_service.list_open_project_codes_for_subsidiary(db, subsidiary, exclude_locked)
+        codes = project_code_service.list_open_project_codes_for_subsidiary(db, subsidiary, exclude_locked, exclude_expired=True)
     else:
-        codes = project_code_service.list_open_project_codes(db, exclude_locked)
+        codes = project_code_service.list_open_project_codes(db, exclude_locked, exclude_expired=True)
     return [_serialize_project_code(c) for c in codes]

@@ -315,7 +315,7 @@ export function AppLayout() {
                 items: [
                   {
                     to: "/my-forms",
-                    label: "My Forms",
+                    label: "Forms",
                     icon: <TranslateIcon />,
                     exact: false,
                     children: [
@@ -331,12 +331,12 @@ export function AppLayout() {
                       },
                     ],
                   },
-                  { to: "/my-submissions", label: "My Submissions", icon: <HistoryIcon />, exact: true },
+                  { to: "/my-submissions", label: "Submissions", icon: <HistoryIcon />, exact: true },
                 ],
               },
               {
                 label: "Configuration",
-                items: [{ to: "/my-subsidiary", label: "My Subsidiary", icon: <DomainIcon />, exact: true }],
+                items: [{ to: "/my-subsidiary", label: "Subsidiary", icon: <DomainIcon />, exact: true }],
               },
             ]
           : []),

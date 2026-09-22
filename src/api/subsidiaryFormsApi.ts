@@ -24,12 +24,15 @@ export function getMyFormDetail(formId: string): Promise<FormDetail> {
  * *published* admin-authored form). The subsidiary is never sent in the request
  * body — the server always forces it to the caller's own account.
  */
-/** `copyFromFormId` clones one of this subsidiary's own previous ad-hoc
- * forms' current content as the starting point instead of a blank form —
- * ownership-checked server-side, so it can only ever be one of this same
- * subsidiary's own ad-hoc forms. */
-export function createAdHocForm(name: string, copyFromFormId?: string): Promise<FormListItem> {
-  return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name, copyFromFormId });
+/** `projectCode` must be one of the currently open (and, for a subsidiary
+ * user, unlocked/not-yet-expired) codes an admin has already created — see
+ * `listOpenProjectCodes` in projectCodesApi.ts, the same list the "New
+ * Ad-hoc Form" dialog's dropdown is built from. `copyFromFormId` clones one
+ * of this subsidiary's own previous ad-hoc forms' current content as the
+ * starting point instead of a blank form — ownership-checked server-side,
+ * so it can only ever be one of this same subsidiary's own ad-hoc forms. */
+export function createAdHocForm(name: string, projectCode: string, copyFromFormId?: string): Promise<FormListItem> {
+  return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name, projectCode, copyFromFormId });
 }
 
 export type { QuestionSeed } from "./formBuilderApi";
@@ -174,8 +177,18 @@ export interface ActionRequiredItem {
   reviewedAt: string | null;
 }
 
+/** "adhoc" = this subsidiary's own self-service campaigns (same as `counts`
+ * above); "hr" = admin-authored ("Flagship HR"/Full Form) campaigns assigned
+ * to this subsidiary; "all" = both combined. Powers the "Campaign Status"
+ * donut's type filter — every other section of this dashboard (the stat
+ * cards, Recent Campaigns, Continue Working, Action Required) stays scoped
+ * to `counts`/ad-hoc only, since those are things a subsidiary user actually
+ * authors/acts on themselves. */
+export type CampaignStatusType = "all" | "adhoc" | "hr";
+
 export interface SubsidiaryDashboardSummary {
   counts: SubsidiaryDashboardCounts;
+  campaignStatusByType: Record<CampaignStatusType, SubsidiaryDashboardCounts>;
   recentCampaigns: RecentCampaignItem[];
   continueWorking: ContinueWorkingItem[];
   actionRequired: ActionRequiredItem[];

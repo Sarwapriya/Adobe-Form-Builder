@@ -143,18 +143,22 @@ def create_form(
     origin: FormOrigin = "admin",
     copy_from_form_id: Optional[str] = None,
     questions: Optional[list[QuestionDefinition]] = None,
+    exclude_locked_project_code: bool = False,
 ) -> dict[str, Any]:
     """Creates a new builder form: a draft FormVersion (blank, or cloned from
     an existing form — see `copy_from_form_id`) plus the Form row pointing at
     it. No generation happens yet."""
     # Same governance gates as the (removed) Excel-upload path — see
-    # project_code_service.assert_project_code_open's own doc comment. An
-    # ad-hoc form has no project code yet at creation time (only chosen at
-    # admin approval — see approve_adhoc_form below), so only the
-    # subsidiary-active check applies here for that origin.
+    # project_code_service.assert_project_code_open's own doc comment. A
+    # subsidiary user now picks the project code up front for their own
+    # ad-hoc form too (validated the same way as any other project code
+    # attachment, including the lock — see exclude_locked_project_code, which
+    # the subsidiary router passes as True); an admin may still reassign it
+    # at approval time (approve_adhoc_form below) if needed, staying exempt
+    # from the lock as usual.
     subsidiary_service.assert_subsidiary_active(db, subsidiary_id)
     if project_code:
-        project_code_service.assert_project_code_open(db, project_code)
+        project_code_service.assert_project_code_open(db, project_code, exclude_locked=exclude_locked_project_code)
         subsidiary_project_block_service.assert_not_blocked(db, subsidiary_id, project_code)
 
     copy_source = get_form_detail(db, copy_from_form_id) if copy_from_form_id else None
@@ -473,7 +477,7 @@ def find_owned_adhoc_form(db: Session, form_id: str, subsidiary_id: str) -> Opti
     ).scalar_one_or_none()
 
 
-SubmitAdHocOutcome = Literal["ok", "not_found", "already_pending"]
+SubmitAdHocOutcome = Literal["ok", "not_found", "already_pending", "already_published"]
 
 
 def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) -> SubmitAdHocOutcome:
@@ -485,6 +489,8 @@ def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) 
         return "not_found"
     if form.pendingReview:
         return "already_pending"
+    if form.status == "published":
+        return "already_published"
 
     form.pendingReview = True
     form.submittedForReviewAt = _now()
@@ -497,15 +503,17 @@ def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) 
     return "ok"
 
 
-ApproveAdHocOutcome = Literal["ok", "not_found", "not_adhoc", "not_pending", "invalid"]
+ApproveAdHocOutcome = Literal["ok", "not_found", "not_adhoc", "not_pending", "invalid", "no_project_code"]
 
 
-def approve_adhoc_form(db: Session, form_id: str, project_code: str, user_id: str) -> dict[str, Any]:
-    """The admin review queue's "Approve" action — the one point a project
-    code gets attached to an adhoc form, then reuses `publish_form` as-is.
-    Applies the same governance gates as `create_form` against the *chosen*
-    project code (and the form's own subsidiary, defensively) before
-    attaching it."""
+def approve_adhoc_form(db: Session, form_id: str, project_code: Optional[str], user_id: str) -> dict[str, Any]:
+    """The admin review queue's "Approve" action, then reuses `publish_form`
+    as-is. The subsidiary user already picked a project code at creation
+    time (see `create_form`'s own doc comment) — `project_code` here lets an
+    admin override that choice, but is optional; omitted or blank reuses the
+    form's own existing value. Applies the same governance gates as
+    `create_form` against the *effective* project code (and the form's own
+    subsidiary, defensively) before attaching it."""
     form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
     if form is None:
         return {"outcome": "not_found"}
@@ -514,11 +522,15 @@ def approve_adhoc_form(db: Session, form_id: str, project_code: str, user_id: st
     if not form.pendingReview:
         return {"outcome": "not_pending"}
 
-    subsidiary_service.assert_subsidiary_active(db, form.subsidiaryId)
-    project_code_service.assert_project_code_open(db, project_code)
-    subsidiary_project_block_service.assert_not_blocked(db, form.subsidiaryId, project_code)
+    effective_project_code = (project_code or "").strip() or form.projectCode
+    if not effective_project_code:
+        return {"outcome": "no_project_code"}
 
-    form.projectCode = project_code
+    subsidiary_service.assert_subsidiary_active(db, form.subsidiaryId)
+    project_code_service.assert_project_code_open(db, effective_project_code)
+    subsidiary_project_block_service.assert_not_blocked(db, form.subsidiaryId, effective_project_code)
+
+    form.projectCode = effective_project_code
     form.pendingReview = False
     form.reviewNote = None
     form.reviewedAt = _now()

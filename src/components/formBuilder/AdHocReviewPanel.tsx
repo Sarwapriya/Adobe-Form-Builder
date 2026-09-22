@@ -36,6 +36,7 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
   const submittedForReviewAt = useFormBuilderStore((s) => s.submittedForReviewAt);
   const loadForm = useFormBuilderStore((s) => s.loadForm);
   const subsidiaryId = useFormBuilderStore((s) => s.subsidiaryId);
+  const existingProjectCode = useFormBuilderStore((s) => s.projectCode);
 
   const responsiveDialogProps = useResponsiveDialogProps();
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
@@ -57,7 +58,10 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
     listOpenProjectCodes(subsidiaryId)
       .then(setProjectCodes)
       .catch(() => setProjectCodes([]));
-  }, [approveOpen, subsidiaryId]);
+    // Pre-fill with whatever the subsidiary user already chose at creation —
+    // an admin can still change it here, but usually just confirms it.
+    setSelectedProjectCode(existingProjectCode ?? "");
+  }, [approveOpen, subsidiaryId, existingProjectCode]);
 
   async function handleApproveConfirm() {
     if (!selectedProjectCode) return;
@@ -97,9 +101,9 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: "block" }}>
         This form was created by a subsidiary user via My Forms
-        {submittedForReviewAt ? `, submitted ${new Date(submittedForReviewAt).toLocaleString()}` : ""}. Approving requires
-        picking a Project Code (never asked of the subsidiary user) and publishes the form immediately; rejecting sends it
-        back to them, editable again.
+        {submittedForReviewAt ? `, submitted ${new Date(submittedForReviewAt).toLocaleString()}` : ""}. Approving publishes
+        the form immediately under the project code they chose (shown below — you can still change it); rejecting sends
+        it back to them, editable again.
       </Typography>
 
       <Stack direction="row" spacing={1}>

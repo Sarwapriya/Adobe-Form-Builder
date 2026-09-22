@@ -47,6 +47,7 @@ from app.services import (
     sftp_settings_service,
     smtp_settings_service,
     subsidiary_locale_service,
+    subsidiary_privacy_link_service,
     subsidiary_project_block_service,
     subsidiary_service,
 )
@@ -198,6 +199,8 @@ class CreateProjectCodeBody(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("code must not be empty")
+        if not project_code_service.PROJECT_CODE_PATTERN.match(v):
+            raise ValueError('Project code can only contain letters, numbers, "-", "_", and "/" — no spaces or other punctuation')
         return v
 
 
@@ -227,6 +230,8 @@ class UpdateProjectCodeBody(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("code must not be empty")
+        if not project_code_service.PROJECT_CODE_PATTERN.match(v):
+            raise ValueError('Project code can only contain letters, numbers, "-", "_", and "/" — no spaces or other punctuation')
         return v
 
 
@@ -408,6 +413,62 @@ def remove_subsidiary_locale(id: str, db: Session = Depends(get_db)) -> None:
     deleted = subsidiary_locale_service.remove_subsidiary_locale(db, id)
     if not deleted:
         raise HTTPException(status_code=404, detail="locale not found")
+
+
+# --- Subsidiary privacy links ------------------------------------------------
+# Reference table of each subsidiary+locale's real Privacy Policy URL — see
+# models/subsidiary_privacy_link.py's own doc comment. Any authenticated user
+# reads it (subsidiary_privacy_links.py router); only an admin edits it.
+
+
+def _serialize_privacy_link(row) -> dict:
+    return {"id": row.id, "subsidiaryName": row.subsidiaryName, "localeCode": row.localeCode, "url": row.url, "createdAt": row.createdAt}
+
+
+@router.get("/subsidiary-privacy-links")
+def list_all_subsidiary_privacy_links(db: Session = Depends(get_db)) -> list[dict]:
+    return [_serialize_privacy_link(r) for r in subsidiary_privacy_link_service.list_privacy_links(db)]
+
+
+class UpsertSubsidiaryPrivacyLinkBody(BaseModel):
+    subsidiaryName: str = Field(min_length=1)
+    localeCode: str = Field(min_length=1)
+    url: str = Field(min_length=1, max_length=500)
+
+    @field_validator("subsidiaryName", "localeCode", "url")
+    @classmethod
+    def _trim(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must not be empty")
+        return v
+
+    @field_validator("localeCode")
+    @classmethod
+    def _validate_locale_code(cls, v: str) -> str:
+        if not LOCALE_CODE_RE.match(v):
+            raise ValueError('Use the format "<lang>_<COUNTRY>", e.g. "ar_AE"')
+        return v
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, v: str) -> str:
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("Must be an http(s) URL")
+        return v
+
+
+@router.post("/subsidiary-privacy-links", status_code=status.HTTP_201_CREATED)
+def upsert_subsidiary_privacy_link(body: UpsertSubsidiaryPrivacyLinkBody, db: Session = Depends(get_db)) -> dict:
+    row = subsidiary_privacy_link_service.upsert_privacy_link(db, body.subsidiaryName, body.localeCode, body.url)
+    return _serialize_privacy_link(row)
+
+
+@router.delete("/subsidiary-privacy-links/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_subsidiary_privacy_link(id: str, db: Session = Depends(get_db)) -> None:
+    deleted = subsidiary_privacy_link_service.delete_privacy_link(db, id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="privacy link not found")
 
 
 # --- Users ---------------------------------------------------------------------

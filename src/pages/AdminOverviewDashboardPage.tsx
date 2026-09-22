@@ -113,6 +113,7 @@ export function AdminOverviewDashboardPage() {
         <LoadingState />
       ) : (
         <>
+          <SectionHeader title="Overall Campaign report" subtitle="Totals across every campaign, all subsidiaries" icon={null} sx={{ mb: 1.5 }} />
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5, 1fr)" }, gap: 2, mb: 3 }}>
             <StatCard
               icon={<DescriptionIcon fontSize="small" />}

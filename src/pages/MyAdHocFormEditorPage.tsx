@@ -4,6 +4,7 @@ import { Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import { useFormBuilderStore } from "../store/formBuilderStore";
 import { PageHeader } from "../components/common/PageHeader";
+import { PageBreadcrumbs } from "../components/common/PageBreadcrumbs";
 import { FormStatusBar, type FormStatusTone } from "../components/common/FormStatusBar";
 import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
 import { SubsidiaryLocalePicker } from "../components/formBuilder/SubsidiaryLocalePicker";
@@ -91,12 +92,19 @@ export function MyAdHocFormEditorPage() {
   const statusLabel = pendingReview ? "Pending review" : status === "published" ? "Published" : reviewNote ? "Rejected — editing enabled" : "Draft";
   const statusDescription = pendingReview
     ? "An admin needs to review this before it can be published."
-    : reviewNote && !pendingReview && status !== "published"
-      ? reviewNote
-      : undefined;
+    : status === "published"
+      ? "This campaign has been approved and published — it can only be viewed."
+      : reviewNote && !pendingReview
+        ? reviewNote
+        : undefined;
+  // A published ad-hoc campaign is final — same locked-fields treatment as
+  // "awaiting review", just for the opposite reason (nothing left to review,
+  // rather than not yet reviewed). See AdHocActionBar's matching Save/Submit gate.
+  const readOnly = pendingReview || status === "published";
 
   return (
     <Box>
+      <PageBreadcrumbs items={[{ label: "Ad-hoc Forms", to: "/my-forms/adhoc" }, { label: name || "Edit Form" }]} />
       <PageHeader
         icon={<DesignServicesIcon />}
         title={name || "Edit Form"}
@@ -115,15 +123,19 @@ export function MyAdHocFormEditorPage() {
           <SubsidiaryLocalePicker subsidiaryName={subsidiaryId} />
           <LocaleEditingSwitcher />
           <CampaignHeaderPanel hideSubmitButtonLabel />
-          <PredefinedFieldToggles selectedField={selected} onSelectField={pendingReview ? () => {} : setSelected} />
+          <PredefinedFieldToggles selectedField={selected} onSelectField={readOnly ? () => {} : setSelected} />
           <BuilderCanvas
             selectedQuestionId={PROFILE_FIELD_KEYS.has(selected ?? "") || isConsentId(selected ?? "") ? null : selected}
-            onSelectQuestion={pendingReview ? () => {} : setSelected}
+            onSelectQuestion={readOnly ? () => {} : setSelected}
           />
         </Box>
 
         <Paper sx={{ p: 2, width: { xs: "100%", md: 280 }, flexShrink: 0, position: "sticky", top: 16 }}>
-          {pendingReview ? (
+          {status === "published" ? (
+            <Typography variant="body2" color="text.secondary">
+              This campaign has been approved and published — it can only be viewed.
+            </Typography>
+          ) : pendingReview ? (
             <Typography variant="body2" color="text.secondary">
               This form is awaiting admin review — editing is locked.
             </Typography>

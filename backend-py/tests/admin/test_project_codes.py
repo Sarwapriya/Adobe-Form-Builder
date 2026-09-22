@@ -98,6 +98,22 @@ class TestAdminProjectCodeCrud:
         assert resp.status_code == 200
         assert resp.json()["startDate"] is None
 
+    def test_create_rejects_spaces_and_other_punctuation(self, client: TestClient, admin_headers: dict):
+        for bad_code in ["has space", "bad!code", "bad.code", "bad@code"]:
+            resp = client.post("/api/v1/admin/project-codes", json={"code": bad_code}, headers=admin_headers)
+            assert resp.status_code == 400, f"{bad_code!r} should have been rejected, got {resp.status_code}"
+
+    def test_create_accepts_hyphen_underscore_and_slash(self, client: TestClient, admin_headers: dict):
+        code = f"F2H26-A_B/{uuid.uuid4().hex[:6]}"
+        resp = client.post("/api/v1/admin/project-codes", json={"code": code}, headers=admin_headers)
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["code"] == code
+
+    def test_rename_rejects_spaces_and_other_punctuation(self, client: TestClient, admin_headers: dict):
+        created = client.post("/api/v1/admin/project-codes", json={"code": _unique_code()}, headers=admin_headers).json()
+        resp = client.patch(f"/api/v1/admin/project-codes/{created['id']}", json={"code": "bad code"}, headers=admin_headers)
+        assert resp.status_code == 400
+
 
 class TestPublicProjectCodeListing:
     def test_open_codes_excludes_closed(self, client: TestClient, admin_headers: dict, standard_headers: dict):
@@ -129,3 +145,24 @@ class TestPublicProjectCodeListing:
     def test_requires_auth(self, client: TestClient):
         resp = client.get("/api/v1/project-codes/")
         assert resp.status_code == 401
+
+    def test_expired_code_excluded_for_everyone_including_admin(
+        self, client: TestClient, admin_headers: dict, standard_headers: dict
+    ):
+        code = _unique_code()
+        created = client.post(
+            "/api/v1/admin/project-codes", json={"code": code, "endDate": "2020-01-01"}, headers=admin_headers
+        ).json()
+        assert created["isOpen"] is True  # expiry isn't the same flag as isOpen
+
+        standard_resp = client.get("/api/v1/project-codes/", headers=standard_headers)
+        assert code not in {c["code"] for c in standard_resp.json()}
+
+        admin_resp = client.get("/api/v1/project-codes/", headers=admin_headers)
+        assert code not in {c["code"] for c in admin_resp.json()}
+
+    def test_not_yet_expired_code_still_listed(self, client: TestClient, admin_headers: dict, standard_headers: dict):
+        code = _unique_code()
+        client.post("/api/v1/admin/project-codes", json={"code": code, "endDate": "2099-01-01"}, headers=admin_headers)
+        resp = client.get("/api/v1/project-codes/", headers=standard_headers)
+        assert code in {c["code"] for c in resp.json()}

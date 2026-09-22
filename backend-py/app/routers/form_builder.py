@@ -177,6 +177,8 @@ def approve_adhoc(id: str, body: ApproveAdHocBody, db: Session = Depends(get_db)
         raise HTTPException(status_code=409, detail="This form was not created via My Forms")
     if result["outcome"] == "not_pending":
         raise HTTPException(status_code=409, detail="This form isn't currently awaiting review")
+    if result["outcome"] == "no_project_code":
+        raise HTTPException(status_code=400, detail="This form has no project code — choose one to approve it")
     if result["outcome"] == "invalid":
         validation: ValidationResult = result["validation"]
         raise HTTPException(status_code=422, detail={"error": "form is not valid", "validation": validation.model_dump()})

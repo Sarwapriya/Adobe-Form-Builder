@@ -27,6 +27,12 @@ function toDateInputValue(value: string | null): string {
   return value ? value.slice(0, 10) : "";
 }
 
+// No spaces, no punctuation beyond "-", "_", "/" — mirrors the backend's own
+// project_code_service.PROJECT_CODE_PATTERN so a bad code is rejected here
+// instead of round-tripping to the server first.
+const PROJECT_CODE_PATTERN = /^[A-Za-z0-9_/-]+$/;
+const PROJECT_CODE_HELPER_TEXT = 'Letters, numbers, "-", "_", and "/" only — no spaces or other punctuation';
+
 /**
  * Inline admin panel for managing project codes (campaigns): create new
  * ones, rename a code's own text value, toggle a code open/closed, toggle a
@@ -78,6 +84,10 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     if (!newCode.trim()) return;
+    if (!PROJECT_CODE_PATTERN.test(newCode.trim())) {
+      showToast(PROJECT_CODE_HELPER_TEXT, "error");
+      return;
+    }
 
     setCreating(true);
     try {
@@ -156,6 +166,9 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
           size="small"
           value={newCode}
           onChange={(e) => setNewCode(e.target.value)}
+          error={newCode.trim().length > 0 && !PROJECT_CODE_PATTERN.test(newCode.trim())}
+          helperText={PROJECT_CODE_HELPER_TEXT}
+          sx={{ minWidth: 260 }}
         />
         <TextField
           label="Start date"
@@ -257,6 +270,7 @@ function ProjectCodeRow({
     endDate !== toDateInputValue(code.endDate) ||
     cutoffDate !== toDateInputValue(code.cutoffDate);
   const isCodeDirty = codeValue.trim() !== code.code && codeValue.trim().length > 0;
+  const isCodeFormatValid = PROJECT_CODE_PATTERN.test(codeValue.trim());
 
   return (
     <Box sx={(t) => ({ px: 1.5, py: 1.25, borderRadius: 2, bgcolor: alpha(t.palette.text.primary, 0.03) })}>
@@ -266,9 +280,11 @@ function ProjectCodeRow({
           size="small"
           value={codeValue}
           onChange={(e) => setCodeValue(e.target.value)}
-          sx={{ minWidth: 160 }}
+          error={codeValue.trim().length > 0 && !isCodeFormatValid}
+          helperText={PROJECT_CODE_HELPER_TEXT}
+          sx={{ minWidth: 220 }}
         />
-        <Button size="small" variant="text" disabled={!isCodeDirty || renaming} onClick={() => onRename(codeValue.trim())}>
+        <Button size="small" variant="text" disabled={!isCodeDirty || !isCodeFormatValid || renaming} onClick={() => onRename(codeValue.trim())}>
           {renaming ? "Saving..." : "Save code"}
         </Button>
         <Chip

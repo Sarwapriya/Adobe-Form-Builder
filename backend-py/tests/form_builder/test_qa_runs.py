@@ -28,8 +28,10 @@ from fastapi.testclient import TestClient
 from tests.form_builder.conftest import create_and_publish_admin_form, sample_config_json, sample_definition_json, unique_name
 
 
-def _create_adhoc_pending_review(client: TestClient, standard_headers: dict, subsidiary_name: str, variants: list[str]) -> str:
-    create_resp = client.post("/api/v1/forms/adhoc", json={"name": unique_name("Adhoc")}, headers=standard_headers)
+def _create_adhoc_pending_review(client: TestClient, standard_headers: dict, subsidiary_name: str, variants: list[str], project_code: str) -> str:
+    create_resp = client.post(
+        "/api/v1/forms/adhoc", json={"name": unique_name("Adhoc"), "projectCode": project_code}, headers=standard_headers
+    )
     assert create_resp.status_code == 201, create_resp.text
     form_id = create_resp.json()["id"]
 
@@ -73,13 +75,19 @@ class TestCreateQaRun:
         resp = client.post("/api/v1/admin/qa-runs", json={"formId": "x", "variant": "ff"}, headers=standard_headers)
         assert resp.status_code == 403
 
-    def test_variant_with_no_generated_output_is_409(self, client: TestClient, admin_headers: dict, standard_headers: dict, subsidiary_row):
-        form_id = _create_adhoc_pending_review(client, standard_headers, subsidiary_row.name, variants=["ff"])
+    def test_variant_with_no_generated_output_is_409(
+        self, client: TestClient, admin_headers: dict, standard_headers: dict, subsidiary_row, project_code_row
+    ):
+        form_id = _create_adhoc_pending_review(client, standard_headers, subsidiary_row.name, variants=["ff"], project_code=project_code_row.code)
         resp = client.post("/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "oc"}, headers=admin_headers)
         assert resp.status_code == 409
 
-    def test_adhoc_review_qa_run_starts_pending(self, client: TestClient, admin_headers: dict, standard_headers: dict, subsidiary_row):
-        form_id = _create_adhoc_pending_review(client, standard_headers, subsidiary_row.name, variants=["ff", "oc"])
+    def test_adhoc_review_qa_run_starts_pending(
+        self, client: TestClient, admin_headers: dict, standard_headers: dict, subsidiary_row, project_code_row
+    ):
+        form_id = _create_adhoc_pending_review(
+            client, standard_headers, subsidiary_row.name, variants=["ff", "oc"], project_code=project_code_row.code
+        )
         resp = client.post("/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "ff"}, headers=admin_headers)
         assert resp.status_code == 201, resp.text
         body = resp.json()

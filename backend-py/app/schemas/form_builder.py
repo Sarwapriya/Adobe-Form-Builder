@@ -65,9 +65,11 @@ class CreateFormWithQuestionsBody(BaseModel):
 
 class CreateAdHocFormBody(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    projectCode: str = Field(min_length=1)
     copyFromFormId: Optional[str] = None
 
     _v_name = field_validator("name")(classmethod(lambda cls, v: _trim_required(v)))
+    _v_project_code = field_validator("projectCode")(classmethod(lambda cls, v: _trim_required(v)))
     _v_copy_from = field_validator("copyFromFormId")(classmethod(lambda cls, v: _trim_optional(v)))
 
 
@@ -97,9 +99,11 @@ class DraftUpdateBody(BaseModel):
 
 
 class ApproveAdHocBody(BaseModel):
-    projectCode: str = Field(min_length=1)
+    # Optional — the subsidiary user already chose a project code when they
+    # created the form; this only lets an admin override that choice.
+    projectCode: Optional[str] = None
 
-    _v_project_code = field_validator("projectCode")(classmethod(lambda cls, v: _trim_required(v)))
+    _v_project_code = field_validator("projectCode")(classmethod(lambda cls, v: _trim_optional(v)))
 
 
 class ReviewNoteBody(BaseModel):

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Box, Button, Paper, Stack, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Button, MenuItem, Paper, Stack, TextField, Typography, useTheme } from "@mui/material";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import AddIcon from "@mui/icons-material/Add";
 import { ApiError } from "../api/apiClient";
 import { useAuthStore } from "../auth/authStore";
-import { getMyDashboardSummary, type SubsidiaryDashboardSummary } from "../api/subsidiaryFormsApi";
+import { getMyDashboardSummary, type CampaignStatusType, type SubsidiaryDashboardSummary } from "../api/subsidiaryFormsApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { SectionHeader } from "../components/common/SectionHeader";
 import { LoadingState } from "../components/common/LoadingState";
@@ -20,6 +20,12 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { alpha } from "@mui/material/styles";
 
+const CAMPAIGN_STATUS_TYPE_LABEL: Record<CampaignStatusType, string> = {
+  all: "All",
+  adhoc: "Ad-hoc",
+  hr: "Flagship HR",
+};
+
 /**
  * A subsidiary user's post-login landing page — oriented around creating,
  * managing, and tracking their own campaigns (contrast
@@ -33,6 +39,7 @@ export function SubsidiaryDashboardPage() {
   const [summary, setSummary] = useState<SubsidiaryDashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [campaignStatusType, setCampaignStatusType] = useState<CampaignStatusType>("all");
 
   useEffect(() => {
     (async () => {
@@ -48,12 +55,13 @@ export function SubsidiaryDashboardPage() {
     })();
   }, []);
 
-  const donutSegments: DonutSegment[] = summary
+  const campaignStatusCounts = summary?.campaignStatusByType[campaignStatusType];
+  const donutSegments: DonutSegment[] = campaignStatusCounts
     ? [
-        { label: "Drafts", value: summary.counts.drafts, color: theme.palette.grey[500] },
-        { label: "Pending Review", value: summary.counts.pendingReview, color: theme.palette.warning.main },
-        { label: "Changes Requested", value: summary.counts.changesRequested, color: theme.palette.error.main },
-        { label: "Published", value: summary.counts.published, color: theme.palette.success.main },
+        { label: "Drafts", value: campaignStatusCounts.drafts, color: theme.palette.grey[500] },
+        { label: "Pending Review", value: campaignStatusCounts.pendingReview, color: theme.palette.warning.main },
+        { label: "Changes Requested", value: campaignStatusCounts.changesRequested, color: theme.palette.error.main },
+        { label: "Published", value: campaignStatusCounts.published, color: theme.palette.success.main },
       ]
     : [];
 
@@ -80,6 +88,7 @@ export function SubsidiaryDashboardPage() {
         <LoadingState />
       ) : (
         <>
+          <SectionHeader title="Overall Campaign report" subtitle="Totals across your own campaigns" icon={null} sx={{ mb: 1.5 }} />
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5, 1fr)" }, gap: 2, mb: 3 }}>
             <StatCard
               icon={<DashboardIcon fontSize="small" />}
@@ -114,8 +123,27 @@ export function SubsidiaryDashboardPage() {
 
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 2fr" }, gap: 2.5, mb: 2.5, alignItems: "stretch" }}>
             <Paper sx={{ p: 2.5 }}>
-              <SectionHeader title="Campaign Status" subtitle="All your campaigns" icon={null} sx={{ mb: 2 }} />
-              <StatusDonutChart segments={donutSegments} total={summary.counts.total} />
+              <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1} sx={{ mb: 2 }}>
+                <SectionHeader
+                  title="Campaign Status"
+                  subtitle={`${CAMPAIGN_STATUS_TYPE_LABEL[campaignStatusType]} campaigns`}
+                  icon={null}
+                />
+                <TextField
+                  select
+                  size="small"
+                  value={campaignStatusType}
+                  onChange={(e) => setCampaignStatusType(e.target.value as CampaignStatusType)}
+                  sx={{ minWidth: 140 }}
+                >
+                  {(Object.keys(CAMPAIGN_STATUS_TYPE_LABEL) as CampaignStatusType[]).map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {CAMPAIGN_STATUS_TYPE_LABEL[type]}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Stack>
+              <StatusDonutChart segments={donutSegments} total={campaignStatusCounts?.total ?? 0} />
             </Paper>
             <Paper sx={{ p: 2.5 }}>
               <SectionHeader title="Recent Campaigns" subtitle="Your most recently updated campaigns" icon={null} sx={{ mb: 1 }} />

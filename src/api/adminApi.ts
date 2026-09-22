@@ -264,6 +264,31 @@ export function deleteSubsidiaryLocale(id: string): Promise<void> {
   return apiClient.delete(`/api/v1/admin/subsidiary-locales/${id}`);
 }
 
+/** Admin management of the subsidiary+locale -> Privacy Policy URL reference
+ * table (Configuration > Access & Locales) — read-only lookup for any
+ * authenticated user lives at /api/v1/subsidiary-privacy-links instead (see
+ * subsidiaryPrivacyLinksApi.ts). Row presence is the whole record — no soft
+ * delete, same as a subsidiary-project-code block. */
+export interface SubsidiaryPrivacyLink {
+  id: string;
+  subsidiaryName: string;
+  localeCode: string;
+  url: string;
+  createdAt: string;
+}
+
+export function listAllSubsidiaryPrivacyLinks(): Promise<SubsidiaryPrivacyLink[]> {
+  return apiClient.get<SubsidiaryPrivacyLink[]>("/api/v1/admin/subsidiary-privacy-links");
+}
+
+export function upsertSubsidiaryPrivacyLink(subsidiaryName: string, localeCode: string, url: string): Promise<SubsidiaryPrivacyLink> {
+  return apiClient.post<SubsidiaryPrivacyLink>("/api/v1/admin/subsidiary-privacy-links", { subsidiaryName, localeCode, url });
+}
+
+export function deleteSubsidiaryPrivacyLink(id: string): Promise<void> {
+  return apiClient.delete(`/api/v1/admin/subsidiary-privacy-links/${id}`);
+}
+
 /** DB-stored SMTP connection settings for outgoing notification email (see
  * backend's smtpSettingsService.ts) — `hasPassword` reflects whether one is
  * currently saved; the real password is never sent to the browser. */

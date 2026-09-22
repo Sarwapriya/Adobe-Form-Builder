@@ -313,9 +313,35 @@ async def _build_mcp_tools_section(role: str) -> Optional[str]:
         "",
     ]
     for t in tools:
-        lines.append(f"- {t['name']}: {t['description']}")
-        lines.append(f"  input schema: {json.dumps(t['inputSchema'])}")
+        lines.append(f"- {t['name']}: {_short_description(t['description'])}")
+        lines.append(f"  arguments: {_describe_tool_arguments(t['inputSchema'])}")
     return "\n".join(lines)
+
+
+# The full MCP tool catalog (long descriptions + verbose JSON schemas) added several
+# thousand tokens to every admin prompt — enough, together with Groq's completion
+# budget, to blow through its per-minute token cap and fail every chat turn.
+def _short_description(text: Any, limit: int = 240) -> str:
+    text = " ".join(str(text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    sentence_end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    return cut[: sentence_end + 1] if sentence_end > limit // 2 else cut.rstrip() + "..."
+
+
+def _describe_tool_arguments(schema: Any) -> str:
+    properties = (schema or {}).get("properties") or {}
+    required = set((schema or {}).get("required") or [])
+    if not properties:
+        return "{}"
+    parts = []
+    for name, spec in properties.items():
+        kind = spec.get("type", "any") if isinstance(spec, dict) else "any"
+        if isinstance(kind, list):
+            kind = "|".join(str(k) for k in kind)
+        parts.append(f"{name}{'' if name in required else '?'}: {kind}")
+    return "{ " + ", ".join(parts) + " }"
 
 
 def _build_base_turns(

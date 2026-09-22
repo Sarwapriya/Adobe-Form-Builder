@@ -6,6 +6,7 @@ import { ProjectCodeManager } from "../components/admin/ProjectCodeManager";
 import { SubsidiaryManager } from "../components/admin/SubsidiaryManager";
 import { SubsidiaryProjectCodeAccessManager } from "../components/admin/SubsidiaryProjectCodeAccessManager";
 import { SubsidiaryLocaleManager } from "../components/admin/SubsidiaryLocaleManager";
+import { SubsidiaryPrivacyLinkManager } from "../components/admin/SubsidiaryPrivacyLinkManager";
 import { SmtpSettingsManager } from "../components/admin/SmtpSettingsManager";
 import { FabrixSettingsManager } from "../components/admin/FabrixSettingsManager";
 import { FabrixModelManager } from "../components/admin/FabrixModelManager";
@@ -85,6 +86,7 @@ export function ConfigurationPage() {
 
       <TabPanel active={tab === "access"}>
         <SubsidiaryLocaleManager />
+        <SubsidiaryPrivacyLinkManager />
       </TabPanel>
 
       <TabPanel active={tab === "notifications"}>

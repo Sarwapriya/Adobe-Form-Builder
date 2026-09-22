@@ -10,6 +10,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  MenuItem,
   Paper,
   Stack,
   TextField,
@@ -19,7 +20,9 @@ import { showToast } from "../store/toastStore";
 import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import AddIcon from "@mui/icons-material/Add";
 import { ApiError } from "../api/apiClient";
+import { useAuthStore } from "../auth/authStore";
 import { createAdHocForm, deleteAdHocForm, listMyAdHocForms } from "../api/subsidiaryFormsApi";
+import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
 import type { ContributionProgress, FormListItem } from "../api/formBuilderApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
@@ -69,19 +72,24 @@ function adHocProgress(form: FormListItem): ContributionProgress | null {
 }
 
 /**
- * "Ad-hoc Forms" — the My Forms submenu page for brand-new forms a subsidiary
- * user builds themselves from scratch (see MyAdHocFormEditorPage). An admin
- * reviews and picks the Project Code before one goes live. Split out from the
- * combined My Forms page into its own sidebar submenu entry, alongside the
- * sibling "HR Forms" page (MyHrFormsListPage).
+ * "Ad-hoc Forms" — the Forms submenu page for brand-new forms a subsidiary
+ * user builds themselves from scratch (see MyAdHocFormEditorPage). The user
+ * picks an already-open (not locked/expired/blocked) admin-created Project
+ * Code up front, at creation — an admin still reviews the content and may
+ * override the code at approval time. Split out from the combined My Forms
+ * page into its own sidebar submenu entry, alongside the sibling "HR Forms"
+ * page (MyHrFormsListPage).
  */
 export function MyAdHocFormsListPage() {
   const navigate = useNavigate();
+  const subsidiaryName = useAuthStore((s) => s.user?.subsidiaryId ?? null);
   const [adHocForms, setAdHocForms] = useState<FormListItem[]>([]);
   const responsiveDialogProps = useResponsiveDialogProps();
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
+  const [newProjectCode, setNewProjectCode] = useState("");
   /** Set when "New Ad-hoc Form" is opened via a specific row's Copy action
    * (below) — the dialog still asks for a fresh Name; only the
    * questions/fields/consents are cloned from this form. Null for the
@@ -108,9 +116,17 @@ export function MyAdHocFormsListPage() {
     refresh();
   }, []);
 
+  useEffect(() => {
+    if (!subsidiaryName) return;
+    listOpenProjectCodes(subsidiaryName)
+      .then(setProjectCodes)
+      .catch(() => setProjectCodes([]));
+  }, [subsidiaryName]);
+
   function closeCreateDialog() {
     setCreateOpen(false);
     setNewName("");
+    setNewProjectCode("");
     setCopySourceForm(null);
   }
 
@@ -120,10 +136,10 @@ export function MyAdHocFormsListPage() {
   }
 
   async function handleCreate() {
-    if (!newName.trim()) return;
+    if (!newName.trim() || !newProjectCode) return;
     setCreating(true);
     try {
-      const created = await createAdHocForm(newName.trim(), copySourceForm?.id);
+      const created = await createAdHocForm(newName.trim(), newProjectCode, copySourceForm?.id);
       closeCreateDialog();
       navigate(`/my-forms/adhoc/${created.id}`);
     } catch (err) {
@@ -160,7 +176,7 @@ export function MyAdHocFormsListPage() {
       <PageHeader
         icon={<DesignServicesIcon />}
         title="Ad-hoc Forms"
-        subtitle="Brand-new forms you build yourself. An admin reviews each one (and picks its Project Code) before it goes live."
+        subtitle="Brand-new forms you build yourself, under a project code an admin has already created. An admin reviews each one before it goes live."
       />
 
       <Paper sx={{ p: 2, borderRadius: 3 }}>
@@ -247,13 +263,32 @@ export function MyAdHocFormsListPage() {
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             />
+            <TextField
+              select
+              fullWidth
+              size="small"
+              label="Project code"
+              value={newProjectCode}
+              onChange={(e) => setNewProjectCode(e.target.value)}
+              helperText={
+                projectCodes.length === 0
+                  ? "No open project codes yet — an admin needs to create one before you can start a new campaign."
+                  : "An admin must create the project code first; closed, locked, or expired codes aren't offered here."
+              }
+            >
+              {projectCodes.map((pc) => (
+                <MenuItem key={pc.id} value={pc.code}>
+                  {pc.code}
+                </MenuItem>
+              ))}
+            </TextField>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={closeCreateDialog} disabled={creating}>
             Cancel
           </Button>
-          <Button variant="contained" disabled={!newName.trim() || creating} onClick={handleCreate}>
+          <Button variant="contained" disabled={!newName.trim() || !newProjectCode || creating} onClick={handleCreate}>
             {creating ? "Creating..." : "Create"}
           </Button>
         </DialogActions>

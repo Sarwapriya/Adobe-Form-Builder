@@ -2,19 +2,29 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Any, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.errors import ConflictError, NotFoundError, ProjectCodeClosedError
+from app.errors import ConflictError, NotFoundError, ProjectCodeClosedError, ProjectCodeLockedError, ValidationError
 from app.models.form import Form
 from app.models.project_code import ProjectCode
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
 from app.services import email_service
 from app.services.subsidiary_recipients import resolve_subsidiary_recipients
 from app.utils.background import run_in_background
+
+# No spaces, no punctuation beyond "-", "_", "/" — keeps a code safe to embed
+# directly into generated file names (fileNames.ts/file_names.py) unescaped.
+PROJECT_CODE_PATTERN = re.compile(r"^[A-Za-z0-9_/-]+$")
+
+
+def validate_project_code_format(code: str) -> None:
+    if not PROJECT_CODE_PATTERN.match(code):
+        raise ValidationError('Project code can only contain letters, numbers, "-", "_", and "/" — no spaces or other punctuation')
 
 
 def _parse_date(value: Optional[str]) -> Optional[date]:
@@ -23,29 +33,38 @@ def _parse_date(value: Optional[str]) -> Optional[date]:
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
+def is_expired(project_code: ProjectCode) -> bool:
+    return project_code.endDate is not None and project_code.endDate < date.today()
+
+
 def list_project_codes(db: Session) -> list[ProjectCode]:
     """Every project code, newest first — the admin management view (shows
     both open and closed)."""
     return list(db.execute(select(ProjectCode).order_by(ProjectCode.createdAt.desc())).scalars().all())
 
 
-def list_open_project_codes(db: Session, exclude_locked: bool = False) -> list[ProjectCode]:
+def list_open_project_codes(db: Session, exclude_locked: bool = False, exclude_expired: bool = False) -> list[ProjectCode]:
     """Only the open ones, code ascending — what the upload form's dropdown
     offers to any authenticated user. `exclude_locked` additionally drops
-    locked codes for non-admin callers; admins stay exempt from the lock."""
+    locked codes for non-admin callers; admins stay exempt from the lock.
+    `exclude_expired` drops codes whose endDate has already passed — an
+    expired code can never be used for a new form, admins included."""
     stmt = select(ProjectCode).where(ProjectCode.isOpen == True)  # noqa: E712
     if exclude_locked:
         stmt = stmt.where(ProjectCode.isLocked == False)  # noqa: E712
     stmt = stmt.order_by(ProjectCode.code.asc())
-    return list(db.execute(stmt).scalars().all())
+    codes = list(db.execute(stmt).scalars().all())
+    if exclude_expired:
+        codes = [pc for pc in codes if not is_expired(pc)]
+    return codes
 
 
 def list_open_project_codes_for_subsidiary(
-    db: Session, subsidiary_name: str, exclude_locked: bool = False
+    db: Session, subsidiary_name: str, exclude_locked: bool = False, exclude_expired: bool = False
 ) -> list[ProjectCode]:
     """Only the open ones, minus any an admin has specifically blocked for
     this subsidiary."""
-    open_codes = list_open_project_codes(db, exclude_locked)
+    open_codes = list_open_project_codes(db, exclude_locked, exclude_expired)
     blocks = db.execute(
         select(SubsidiaryProjectBlock).where(SubsidiaryProjectBlock.subsidiaryName == subsidiary_name)
     ).scalars().all()
@@ -63,6 +82,7 @@ def create_project_code(
     """Creates a new project code, open by default. Rejects an
     exact-duplicate code (case-insensitive) with a `ConflictError`."""
     trimmed = code.strip()
+    validate_project_code_format(trimmed)
 
     existing = db.execute(
         select(ProjectCode).where(func.lower(ProjectCode.code) == trimmed.lower())
@@ -89,6 +109,7 @@ def set_project_code_value(db: Session, id: str, code: str) -> Optional[ProjectC
     the id doesn't exist. Does NOT retroactively rename anything already
     referencing the old value (text snapshot, not a foreign key)."""
     trimmed = code.strip()
+    validate_project_code_format(trimmed)
     existing = db.get(ProjectCode, id)
     if existing is None:
         return None
@@ -175,13 +196,25 @@ def set_project_code_date_range(db: Session, id: str, date_range: dict[str, Any]
     return existing
 
 
-def assert_project_code_open(db: Session, code: str) -> None:
+def assert_project_code_open(db: Session, code: str, *, exclude_locked: bool = False) -> None:
     """Raises `NotFoundError` if no project code matches, or
-    `ProjectCodeClosedError` if an admin has since closed it. A no-op if
-    it's open. Not called from any route in this phase — ported so the
-    form-builder phase can use it directly."""
+    `ProjectCodeClosedError`/`ProjectCodeLockedError` if it can't be used
+    right now. A no-op if it's open, current, and (when checked) unlocked.
+
+    Closed and expired apply to every caller, admins included. `exclude_locked`
+    additionally rejects a locked code — pass this only for a subsidiary
+    user's own action (matches `list_open_project_codes`'s same-named param);
+    admins stay exempt from the lock everywhere else in this app, so callers
+    on an admin-only path (creating/approving a form as an admin) leave this
+    at its default `False`. Called from `create_form`/`approve_adhoc_form` so
+    an expired, closed, or (for a subsidiary user) locked code can never be
+    attached to a new or newly-approved form."""
     project_code = db.execute(select(ProjectCode).where(ProjectCode.code == code)).scalar_one_or_none()
     if project_code is None:
         raise NotFoundError(f'Unknown project code "{code}"')
     if not project_code.isOpen:
         raise ProjectCodeClosedError(f'Project code "{code}" is closed')
+    if is_expired(project_code):
+        raise ProjectCodeClosedError(f'Project code "{code}" has expired')
+    if exclude_locked and project_code.isLocked:
+        raise ProjectCodeLockedError(f'Project code "{code}" is locked')

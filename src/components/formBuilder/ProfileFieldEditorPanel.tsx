@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Alert, Autocomplete, Chip, Stack, TextField, Typography } from "@mui/material";
 import type { FormVariant, TranslationTarget } from "@formbuilder/shared";
 import { CALLING_CODES, resolveCountryName, resolveMobileNumberCountries, subsidiaryCountryCodes } from "@formbuilder/shared";
@@ -7,6 +8,7 @@ import { consentVariants } from "./formBuilderHelpers";
 import { localeDir } from "../../utils/localeDir";
 import { MISSING_TRANSLATION_HELPER_TEXT, missingTranslationSx } from "../common/missingTranslationSx";
 import { PENDING_TRANSLATION_HELPER_TEXT, pendingTranslationFor } from "./pendingTranslationHint";
+import { getSubsidiaryPrivacyLinks } from "../../api/subsidiaryPrivacyLinksApi";
 
 export type ProfileFieldKey =
   | "firstName"
@@ -49,6 +51,38 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
   const contributions = useFormBuilderStore((s) => s.contributions);
   const field = fieldKey === "submitButton" ? definition?.fields.submitButton : definition?.fields[fieldKey];
+
+  // Subsidiary-wise Privacy Policy URL lookup (admin-managed, Configuration >
+  // Access & Locales — see SubsidiaryPrivacyLinkManager.tsx) — auto-fills the
+  // Privacy Policy consent's Link URL below instead of a user typing/guessing
+  // the right regional URL. Never overwrites a URL already present, whether
+  // set by an earlier auto-fill or typed by hand.
+  const subsidiaryName = definition?.meta.subsidiary;
+  const [privacyLinks, setPrivacyLinks] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!subsidiaryName) return;
+    getSubsidiaryPrivacyLinks(subsidiaryName)
+      .then(setPrivacyLinks)
+      .catch(() => setPrivacyLinks({}));
+  }, [subsidiaryName]);
+
+  useEffect(() => {
+    if (fieldKey !== "privacyPolicy" || !definition) return;
+    const suggestedUrl = privacyLinks[activeLocale];
+    const alreadySet = definition.fields.privacyPolicy?.linkUrlByLocale?.[activeLocale];
+    if (!suggestedUrl || alreadySet) return;
+    updateDefinition((d) => ({
+      ...d,
+      fields: {
+        ...d.fields,
+        privacyPolicy: {
+          ...d.fields.privacyPolicy!,
+          linkUrlByLocale: { ...d.fields.privacyPolicy!.linkUrlByLocale, [activeLocale]: suggestedUrl },
+        },
+      },
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldKey, activeLocale, privacyLinks]);
 
   if (!field) return null;
 

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Chip, CircularProgress, Divider, Paper, Stack, Typography } from "@mui/material";
+import { Box, Button, Chip, CircularProgress, Divider, Paper, Stack, Typography } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import { ApiError } from "../api/apiClient";
 import {
   listMyAllContributions,
@@ -75,7 +76,7 @@ export function MySubmissionsPage() {
     <Box>
       <PageHeader
         icon={<HistoryIcon />}
-        title="My Submissions"
+        title="Submissions and Review"
         subtitle="Every translation/question/consent you've submitted for review, across all forms."
       />
 
@@ -114,6 +115,19 @@ export function MySubmissionsPage() {
                     </Typography>
                     {isSuperseded && <Chip label="Superseded" size="small" variant="outlined" />}
                     <Chip label={CONTRIBUTION_STATUS_LABEL[c.status]} size="small" color={STATUS_COLOR[c.status]} />
+                    {!isSuperseded && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<VisibilityIcon fontSize="small" />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/my-forms/${c.formId}`);
+                        }}
+                      >
+                        View
+                      </Button>
+                    )}
                   </Stack>
                   <Typography variant="body2" sx={{ mb: 0.5 }}>
                     {describeContent(c)}

@@ -334,21 +334,48 @@ def _build_continue_working(db: Session, draft_forms: list[Form], limit: int = 3
     return items
 
 
+def _bucket_counts(forms: list[Form]) -> dict[str, int]:
+    counts = {"total": len(forms), "drafts": 0, "pendingReview": 0, "changesRequested": 0, "published": 0}
+    for f in forms:
+        bucket = subsidiary_bucket(f)
+        if bucket == "pendingReview":
+            counts["pendingReview"] += 1
+        elif bucket == "published":
+            counts["published"] += 1
+        elif bucket == "changesRequested":
+            counts["changesRequested"] += 1
+        else:
+            counts["drafts"] += 1
+    return counts
+
+
 def get_subsidiary_dashboard_summary(db: Session, subsidiary_id: str) -> dict[str, Any]:
-    """A subsidiary user's post-login "Dashboard" landing page — scoped to
-    their own ad-hoc campaigns only."""
-    forms = list(
+    """A subsidiary user's post-login "Dashboard" landing page. The stat
+    cards, "Recent Campaigns", "Continue Working" and "Action Required" stay
+    scoped to this subsidiary's own ad-hoc campaigns only — those are the
+    things a subsidiary user actually authors/acts on. "Campaign Status"
+    (the donut) additionally covers this subsidiary's admin-authored (HR/
+    "Flagship") campaigns via `campaignStatusByType`, since a subsidiary user
+    can reasonably want to see either bucket's status, or both combined."""
+    adhoc_forms = list(
         db.execute(
             select(Form)
             .where(Form.subsidiaryId == subsidiary_id, Form.origin == "adhoc", Form.isDeleted == False)  # noqa: E712
             .order_by(Form.updatedAt.desc())
         ).scalars()
     )
+    hr_forms = list(
+        db.execute(
+            select(Form)
+            .where(Form.subsidiaryId == subsidiary_id, Form.origin != "adhoc", Form.isDeleted == False)  # noqa: E712
+            .order_by(Form.updatedAt.desc())
+        ).scalars()
+    )
 
-    counts = {"total": len(forms), "drafts": 0, "pendingReview": 0, "changesRequested": 0, "published": 0}
+    counts = {"total": len(adhoc_forms), "drafts": 0, "pendingReview": 0, "changesRequested": 0, "published": 0}
     draft_forms: list[Form] = []
     changes_requested_forms: list[Form] = []
-    for f in forms:
+    for f in adhoc_forms:
         bucket = subsidiary_bucket(f)
         if bucket == "pendingReview":
             counts["pendingReview"] += 1
@@ -362,7 +389,7 @@ def get_subsidiary_dashboard_summary(db: Session, subsidiary_id: str) -> dict[st
             draft_forms.append(f)
 
     recent_campaigns = [
-        {"id": f.id, "name": f.name, "bucket": subsidiary_bucket(f), "updatedAt": f.updatedAt} for f in forms[:5]
+        {"id": f.id, "name": f.name, "bucket": subsidiary_bucket(f), "updatedAt": f.updatedAt} for f in adhoc_forms[:5]
     ]
 
     continue_working = _build_continue_working(db, draft_forms)
@@ -373,6 +400,11 @@ def get_subsidiary_dashboard_summary(db: Session, subsidiary_id: str) -> dict[st
 
     return {
         "counts": counts,
+        "campaignStatusByType": {
+            "all": _bucket_counts(adhoc_forms + hr_forms),
+            "adhoc": counts,
+            "hr": _bucket_counts(hr_forms),
+        },
         "recentCampaigns": recent_campaigns,
         "continueWorking": continue_working,
         "actionRequired": action_required,

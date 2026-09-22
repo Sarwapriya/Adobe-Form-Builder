@@ -50,13 +50,17 @@ export function AdHocActionBar() {
 
   const statusLabel = pendingReview ? "Pending review" : status === "published" ? "Published" : "Draft";
   const statusColor = pendingReview ? "warning" : status === "published" ? "success" : "default";
+  // Once approved and published, a campaign is final — same locked treatment
+  // as "awaiting review" (see MyAdHocFormEditorPage's matching field-selection
+  // gate), just for the opposite reason: nothing left to review, not "not yet".
+  const readOnly = pendingReview || status === "published";
 
   async function handleSave() {
     const ok = await saveDraft();
     if (ok) showToast("Draft saved.", "success");
   }
 
-  useSaveShortcut(() => void handleSave(), dirty && !saving && !pendingReview);
+  useSaveShortcut(() => void handleSave(), dirty && !saving && !readOnly);
 
   async function handleSubmit() {
     const confirmed = await confirm({
@@ -114,9 +118,9 @@ export function AdHocActionBar() {
           size="small"
           variant="outlined"
           startIcon={<SaveIcon />}
-          disabled={saving || pendingReview}
+          disabled={saving || readOnly}
           onClick={handleSave}
-          sx={unsavedChangesBlinkSx(dirty && !saving && !pendingReview)}
+          sx={unsavedChangesBlinkSx(dirty && !saving && !readOnly)}
         >
           {saving ? "Saving..." : "Save Draft"}
         </Button>
@@ -124,7 +128,7 @@ export function AdHocActionBar() {
           size="small"
           variant="contained"
           startIcon={<SendIcon />}
-          disabled={publishing || pendingReview || validation.errors.length > 0}
+          disabled={publishing || readOnly || validation.errors.length > 0}
           onClick={handleSubmit}
         >
           {publishing ? "Submitting..." : "Submit for Review"}
@@ -140,7 +144,12 @@ export function AdHocActionBar() {
           This form is awaiting admin review — editing is locked until it's approved or rejected.
         </Alert>
       )}
-      {!pendingReview && reviewNote && (
+      {!pendingReview && status === "published" && (
+        <Alert severity="success" sx={{ mt: 1.5, borderRadius: 2 }}>
+          This campaign has been approved and published — it can only be viewed from here on.
+        </Alert>
+      )}
+      {!pendingReview && status !== "published" && reviewNote && (
         <Alert severity="warning" sx={{ mt: 1.5, borderRadius: 2 }}>
           <Typography variant="body2" fontWeight={600}>
             An admin rejected your last submission:

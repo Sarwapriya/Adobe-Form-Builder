@@ -49,6 +49,18 @@ export function SubsidiaryLocalePicker({ subsidiaryName }: { subsidiaryName: str
         locales: [
           { code: fallback.code, langSubtag: fallback.langSubtag, isRtl: fallback.isRtl, sourceColumn: "builder" as const, label: fallback.label },
         ],
+        // Carry the placeholder's default Submit label over to the real fallback
+        // locale, so the button doesn't start blank/missing-translation-flagged.
+        fields: {
+          ...d.fields,
+          submitButton: {
+            ...d.fields.submitButton,
+            labelByLocale: {
+              ...d.fields.submitButton.labelByLocale,
+              [fallback.code]: d.fields.submitButton.labelByLocale?.en_GB ?? "Submit",
+            },
+          },
+        },
       }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,6 +81,16 @@ export function SubsidiaryLocalePicker({ subsidiaryName }: { subsidiaryName: str
           ...d.locales,
           { code: master.code, langSubtag: master.langSubtag, isRtl: master.isRtl, sourceColumn: "builder" as const, label: master.label },
         ],
+        // A newly-enabled locale otherwise starts with no Submit button text at
+        // all — default it to "Submit" so it isn't blank/missing-translation-flagged;
+        // still freely editable per-locale from "Predefined fields" > "Submit Button".
+        fields: {
+          ...d.fields,
+          submitButton: {
+            ...d.fields.submitButton,
+            labelByLocale: { ...d.fields.submitButton.labelByLocale, [master.code]: d.fields.submitButton.labelByLocale?.[master.code] ?? "Submit" },
+          },
+        },
       }));
     }
   }

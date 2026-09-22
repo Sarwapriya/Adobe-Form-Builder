@@ -19,6 +19,8 @@ import httpx
 from app.services.ai_providers_service import ProviderConfig, chat_completions_url
 
 
+GROQ_TOKENS_PER_MINUTE = 7600  # just under the 8000 TPM on-demand cap
+
 def _to_chat_role(role: str) -> str:
     # This codebase's "tool" role is a synthetic turn injecting tool-call
     # results back into the conversation, not a real tool_call_id-linked
@@ -44,7 +46,10 @@ def _build_body(provider: ProviderConfig, messages: list[dict[str, str]]) -> dic
         # left at the default effort that alone could eat the whole budget
         # (`finish_reason: "length"` with `content` still empty), so it is
         # pinned low.
-        body["max_completion_tokens"] = 4096
+        # The cap counts prompt + requested completion, so shrink the completion
+        # budget as the prompt grows instead of asking for 4096 on top of a big prompt.
+        prompt_tokens = sum(len(m["content"]) for m in messages) // 3
+        body["max_completion_tokens"] = max(1024, min(4096, GROQ_TOKENS_PER_MINUTE - prompt_tokens))
         body["reasoning_effort"] = "low"
     elif host.endswith("openai.com"):
         body["max_completion_tokens"] = 4096
@@ -69,7 +74,8 @@ async def send_message(request: dict[str, Any], provider: ProviderConfig) -> dic
     except httpx.TimeoutException:
         return {"ok": False, "error": f"{label} request timed out"}
     except httpx.HTTPError as exc:
-        return {"ok": False, "error": f"{label} request failed: {exc}"}
+        # Typically the host can't reach the provider at all (firewall / no outbound internet / DNS).
+        return {"ok": False, "error": f"{label} request failed ({type(exc).__name__}): {exc}"}
 
     elapsed_ms = (time.time() - started_at) * 1000
     log_prefix = f"[openaiCompatAIService] provider={label!r} model={provider.model} durationMs={elapsed_ms:.0f}"
@@ -78,10 +84,11 @@ async def send_message(request: dict[str, Any], provider: ProviderConfig) -> dic
         print(f"{log_prefix} status=auth_error")
         return {"ok": False, "error": f"{label} authentication failed — check the API key."}
     if response.status_code == 429:
-        print(f"{log_prefix} status=rate_limited")
-        return {"ok": False, "error": f"{label} rate limit exceeded — try again shortly."}
+        # The body says which limit was hit (per-minute tokens vs. requests vs. daily) — keep it for the server log.
+        print(f"{log_prefix} status=rate_limited detail={response.text[:300]!r}")
+        return {"ok": False, "error": f"{label} rate limit exceeded — try again shortly. ({response.text[:300]})"}
     if response.status_code != 200:
-        print(f"{log_prefix} status=error httpStatus={response.status_code}")
+        print(f"{log_prefix} status=error httpStatus={response.status_code} detail={response.text[:300]!r}")
         return {"ok": False, "error": f"{label} error ({response.status_code}): {response.text[:500]}"}
 
     try:
