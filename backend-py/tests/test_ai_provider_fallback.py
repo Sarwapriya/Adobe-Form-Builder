@@ -1,4 +1,4 @@
-"""Two related AI-provider bugs surfaced together in production once FabriX
+"""Three related AI-provider bugs surfaced together in production once FabriX
 was deliberately disabled and Groq became the sole active provider:
 
 1. `openaiCompatAIService.send_message` reported a bare, useless "response
@@ -12,6 +12,15 @@ was deliberately disabled and Groq became the sole active provider:
    "disabled") error as the final failure once every other provider had also
    been tried and failed -- hiding the real, and often actionable, reason
    the actually-active provider (Groq) just failed for.
+
+3. Empty-content responses (both the `finish_reason == "length"` case above
+   and the plain "finished with `stop` but content is still empty" case seen
+   in production, where gpt-oss's hidden reasoning ran to completion without
+   ever producing a visible answer) are a stochastic side effect of sampling,
+   not a persistent condition -- an immediate retry with the identical
+   request frequently succeeds. With Groq as the sole active provider (no
+   other provider for `aiProviderService` to fall back to), that retry has
+   to happen inside `openaiCompatAIService.send_message` itself.
 """
 
 from __future__ import annotations
@@ -41,7 +50,10 @@ class _FakeResponse:
 
 
 def test_empty_content_with_length_finish_reason_gives_an_actionable_error(monkeypatch):
+    calls = {"n": 0}
+
     async def fake_post(self, url, json=None, headers=None):
+        calls["n"] += 1
         return _FakeResponse(200, {"choices": [{"finish_reason": "length", "message": {"content": ""}}], "model": "x"})
 
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
@@ -52,6 +64,36 @@ def test_empty_content_with_length_finish_reason_gives_an_actionable_error(monke
     assert "response budget" in result["error"] or "reasoning" in result["error"]
     # Not the old generic, undiagnosable message.
     assert result["error"] != "Groq response did not include any text"
+    # Retried once (the empty-content failure mode is retryable) before giving up.
+    assert calls["n"] == 2
+    # The internal retry marker never leaks out to the caller.
+    assert "_retryableEmptyContent" not in result
+
+
+def test_empty_content_recovers_on_retry(monkeypatch):
+    """The exact scenario reported in production: the model returns no
+    visible text on the first attempt but succeeds on an identical retry."""
+    calls = {"n": 0}
+
+    async def fake_post(self, url, json=None, headers=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _FakeResponse(200, {"choices": [{"finish_reason": "stop", "message": {"content": ""}}], "model": "x"})
+        return _FakeResponse(
+            200,
+            {
+                "choices": [{"finish_reason": "stop", "message": {"content": "Here are some campaign questions..."}}],
+                "model": "openai/gpt-oss-120b",
+                "usage": {"total_tokens": 42},
+            },
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    result = asyncio.run(send_message({"messages": [{"role": "user", "content": "hi"}]}, _groq()))
+
+    assert calls["n"] == 2
+    assert result == {"ok": True, "replyText": "Here are some campaign questions...", "model": "openai/gpt-oss-120b", "tokenUsage": 42}
 
 
 def test_empty_content_without_length_finish_reason_keeps_generic_message(monkeypatch):

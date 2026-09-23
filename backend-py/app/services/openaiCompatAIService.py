@@ -60,13 +60,23 @@ def _build_body(provider: ProviderConfig, messages: list[dict[str, str]]) -> dic
     return body
 
 
-async def send_message(request: dict[str, Any], provider: ProviderConfig) -> dict[str, Any]:
-    """Sends one conversation turn to `provider` and returns its reply."""
-    label = provider.name
-    messages = [{"role": _to_chat_role(m["role"]), "content": m["content"]} for m in request["messages"]]
-    body = _build_body(provider, messages)
-    headers = {"Authorization": f"Bearer {provider.apiKey}", "Content-Type": "application/json"}
+# Empty-content failures (a reasoning-capable model like gpt-oss burning its
+# whole completion budget on hidden chain-of-thought and never emitting a
+# visible answer) are a stochastic side effect of sampling, not a persistent
+# condition like a bad API key or a closed connection -- an immediate retry
+# with the exact same request often succeeds outright. Every other failure
+# (auth, rate limit, timeout, network, refusal) is retried zero times, since
+# retrying those either can't help or actively makes things worse (burning
+# more of a per-minute rate limit right after hitting it).
+_RETRYABLE_EMPTY_CONTENT_ATTEMPTS = 2
 
+
+async def _attempt(
+    provider: ProviderConfig, messages: list[dict[str, str]], body: dict[str, Any], headers: dict[str, str], label: str
+) -> dict[str, Any]:
+    """One HTTP round trip + response parse. A dict with `_retryableEmptyContent: True`
+    means the call itself succeeded but produced no visible text -- worth retrying;
+    every other shape (success, or any other failure) is final."""
     started_at = time.time()
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -117,10 +127,12 @@ async def send_message(request: dict[str, Any], provider: ProviderConfig) -> dic
             print(f"{log_prefix} status=empty_length maxCompletionTokens={body.get('max_completion_tokens') or body.get('max_tokens')}")
             return {
                 "ok": False,
+                "_retryableEmptyContent": True,
                 "error": f"{label} ran out of its response budget before producing any visible text "
                          "(likely spent it on internal reasoning) — try a shorter question or a shorter conversation.",
             }
-        return {"ok": False, "error": f"{label} response did not include any text"}
+        print(f"{log_prefix} status=empty_content")
+        return {"ok": False, "_retryableEmptyContent": True, "error": f"{label} response did not include any text"}
 
     usage = payload.get("usage") or {}
     print(f"{log_prefix} status=ok")
@@ -130,3 +142,23 @@ async def send_message(request: dict[str, Any], provider: ProviderConfig) -> dic
         "model": payload.get("model", provider.model),
         "tokenUsage": usage.get("total_tokens", 0),
     }
+
+
+async def send_message(request: dict[str, Any], provider: ProviderConfig) -> dict[str, Any]:
+    """Sends one conversation turn to `provider` and returns its reply,
+    retrying up to `_RETRYABLE_EMPTY_CONTENT_ATTEMPTS` times total when the
+    model produces no visible text (see `_attempt`'s docstring)."""
+    label = provider.name
+    messages = [{"role": _to_chat_role(m["role"]), "content": m["content"]} for m in request["messages"]]
+    body = _build_body(provider, messages)
+    headers = {"Authorization": f"Bearer {provider.apiKey}", "Content-Type": "application/json"}
+
+    result = await _attempt(provider, messages, body, headers, label)
+    attempt = 1
+    while result.get("_retryableEmptyContent") and attempt < _RETRYABLE_EMPTY_CONTENT_ATTEMPTS:
+        attempt += 1
+        print(f"[openaiCompatAIService] provider={label!r} got no visible text on attempt {attempt - 1} — retrying (attempt {attempt}/{_RETRYABLE_EMPTY_CONTENT_ATTEMPTS})")
+        result = await _attempt(provider, messages, body, headers, label)
+
+    result.pop("_retryableEmptyContent", None)
+    return result
