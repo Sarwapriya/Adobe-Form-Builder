@@ -4,6 +4,7 @@ budget must stay under Groq's per-minute token cap, or every chat turn fails."""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 from app.services import aiAssistantService, mcp_sql_client
 from app.services.ai_providers_service import ProviderConfig
@@ -59,3 +60,32 @@ def test_non_groq_hosts_keep_their_own_body_shape():
     body = _build_body(provider, [{"role": "user", "content": "hi"}])
     assert body["max_tokens"] == 4096
     assert "reasoning_effort" not in body
+
+
+def test_short_conversation_keeps_all_history():
+    history = [SimpleNamespace(role="user", message="hi"), SimpleNamespace(role="assistant", message="hello")]
+    turns = aiAssistantService._build_base_turns(None, history, {"role": "standard"})
+    # system turn + both history turns, nothing dropped.
+    assert len(turns) == 3
+    assert turns[1]["content"] == "hi"
+    assert turns[2]["content"] == "hello"
+
+
+def test_long_conversation_drops_oldest_history_but_keeps_the_most_recent(monkeypatch):
+    # Force a tiny budget so the trimming logic is exercised deterministically,
+    # independent of how large the real system prompt happens to be.
+    monkeypatch.setattr(aiAssistantService, "_MAX_PROMPT_CHARS_FOR_HISTORY_BUDGET", 10_000)
+
+    history = [SimpleNamespace(role="user" if i % 2 == 0 else "assistant", message="x" * 3000) for i in range(10)]
+    turns = aiAssistantService._build_base_turns(None, history, {"role": "standard"})
+
+    history_turns = turns[1:]
+    assert 0 < len(history_turns) < len(history)
+    # Whatever survived is a contiguous, most-recent suffix of the original history.
+    assert [t["content"] for t in history_turns] == [h.message for h in history[len(history) - len(history_turns):]]
+
+
+def test_trim_history_to_budget_always_keeps_the_latest_turn_even_if_it_overflows():
+    history_turns = [{"role": "user", "content": "x" * 5000}]
+    kept = aiAssistantService._trim_history_to_budget(history_turns, budget_chars=10)
+    assert kept == history_turns

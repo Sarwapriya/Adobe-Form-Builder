@@ -280,15 +280,23 @@ class TestAiProviderFallback:
         assert result["replyText"] == "two"
         assert called == ["fabrix", "One", "Two"]
 
-    def test_every_provider_failing_returns_fabrixs_error(self, monkeypatch):
+    def test_every_provider_failing_returns_the_last_ones_error(self, monkeypatch):
+        # Not FabriX's error: once other providers were actually tried, FabriX's
+        # own (often stale -- e.g. "disabled") error would hide the real, more
+        # actionable reason the last-tried provider just failed for.
         result, called = self._run(
             monkeypatch,
             {"ok": False, "error": "fabrix down"},
             {"One": {"ok": False, "error": "a"}, "Two": {"ok": False, "error": "b"}},
             self._configs(),
         )
-        assert result == {"ok": False, "error": "fabrix down"}
+        assert result == {"ok": False, "error": "b"}
         assert called == ["fabrix", "One", "Two"]
+
+    def test_fabrixs_error_still_returned_when_no_other_provider_is_enabled(self, monkeypatch):
+        result, called = self._run(monkeypatch, {"ok": False, "error": "fabrix down"}, {}, configs=[])
+        assert result == {"ok": False, "error": "fabrix down"}
+        assert called == ["fabrix"]
 
     def test_only_enabled_providers_with_a_key_are_considered(self, db_session: Session):
         from app.models.ai_provider import AiProvider

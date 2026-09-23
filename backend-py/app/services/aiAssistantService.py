@@ -38,8 +38,29 @@ from app.services.aiCampaignTools import (
 from app.services import mcp_sql_client
 from app.services.aiProviderService import send_message as send_ai_message
 from app.services.aiSystemPrompt import build_system_prompt
+from app.services.openaiCompatAIService import GROQ_TOKENS_PER_MINUTE
 
 HISTORY_LIMIT = 20
+
+# The same messages list is built once and tried against every provider in
+# turn (FabriX, then each enabled other provider) -- so it has to fit
+# whichever one is tightest, which in practice is Groq's combined 7600
+# tokens-per-minute prompt+completion cap (openaiCompatAIService._build_body
+# already shrinks the *completion* side of that budget as the prompt grows,
+# down to a 1024-token floor). The admin system prompt alone already runs
+# ~4000 estimated tokens (the fixed tool descriptions plus the MCP-capability
+# note), and MCP's own live tool catalog and campaign-data context add more
+# on top of that -- so on anything but the first turn of a conversation,
+# accumulated history could push the prompt large enough that only that
+# 1024-token floor is left for the actual answer, which is often not enough
+# for a reasoning model (gpt-oss) to produce any visible text at all before
+# exhausting it on hidden chain-of-thought. Reserving this much headroom by
+# trimming *history* (the one part of the prompt that's safe to shrink
+# without losing the tools/campaign-data/current-question context) keeps a
+# realistic completion budget available regardless of how long the
+# conversation has run.
+_MIN_SAFE_COMPLETION_TOKENS = 2048
+_MAX_PROMPT_CHARS_FOR_HISTORY_BUDGET = (GROQ_TOKENS_PER_MINUTE - _MIN_SAFE_COMPLETION_TOKENS) * 3
 
 # Shown to the customer whenever every AI provider tier (FabriX, then each other provider)
 # failed, or an unexpected exception was raised — never the raw
@@ -374,10 +395,32 @@ def _build_base_turns(
         turns.append({"role": "system", "content": _section("DATABASE QUERY TOOLS", mcp_tools_section)})
     if campaign_context_json:
         turns.append({"role": "system", "content": _section("CAMPAIGN DATA", campaign_context_json)})
-    for row in history_rows:
-        if row.role in ("user", "assistant"):
-            turns.append({"role": row.role, "content": row.message})
+
+    history_turns = [{"role": row.role, "content": row.message} for row in history_rows if row.role in ("user", "assistant")]
+    fixed_chars = sum(len(t["content"]) for t in turns)
+    kept_history = _trim_history_to_budget(history_turns, _MAX_PROMPT_CHARS_FOR_HISTORY_BUDGET - fixed_chars)
+    if len(kept_history) < len(history_turns):
+        print(f"[aiAssistantService] trimmed {len(history_turns) - len(kept_history)} history turn(s) to keep a safe completion budget")
+    turns.extend(kept_history)
     return turns
+
+
+def _trim_history_to_budget(history_turns: list[dict[str, str]], budget_chars: int) -> list[dict[str, str]]:
+    """Keeps as many of the most recent history turns as fit `budget_chars`,
+    dropping the oldest ones first — always keeps at least the single most
+    recent turn (if any) even when it alone exceeds the budget, since a
+    conversation with zero history is a bigger loss than a slightly
+    over-budget one."""
+    kept: list[dict[str, str]] = []
+    used = 0
+    for turn in reversed(history_turns):
+        turn_len = len(turn["content"])
+        if kept and used + turn_len > budget_chars:
+            break
+        used += turn_len
+        kept.append(turn)
+    kept.reverse()
+    return kept
 
 
 async def _persist_message(
