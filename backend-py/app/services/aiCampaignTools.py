@@ -60,6 +60,7 @@ class QuestionSearchResult(TypedDict):
     questionId: str
     heading: str
     controlType: str
+    answers: list[str]
 
 
 def _list_caller_forms(
@@ -244,6 +245,12 @@ def get_campaign_questions(
 def search_questions(
     db: Session, ctx: AiToolCallerContext, args: dict[str, Any]
 ) -> list[QuestionSearchResult]:
+    """Searches a question's heading AND its answer choices — "campaign
+    content", not just question titles — so e.g. asking which campaign
+    mentions a specific answer/option surfaces it even when that word never
+    appears in any question heading. This (plus SEARCH_CAMPAIGNS) is the
+    chatbot's sole grounding in real data: every answer must come from one of
+    these direct-database tools, never invented."""
     form_id = args.get("formId")
     search_text = args["searchText"]
     needle = search_text.lower()
@@ -268,13 +275,15 @@ def search_questions(
         default_locale = definition.meta.defaultLocale
         for q in definition.questions:
             heading = resolve_localized_text(q.headingByLocale, default_locale, default_locale)
-            if needle in heading.lower():
+            answers = [resolve_localized_text(a.textByLocale, default_locale, default_locale) for a in sorted(q.answers, key=lambda a: a.order)]
+            if needle in heading.lower() or any(needle in a.lower() for a in answers):
                 results.append({
                     "formId": form["id"],
                     "formName": form["name"],
                     "questionId": q.id,
                     "heading": heading,
                     "controlType": q.controlType,
+                    "answers": answers,
                 })
             if len(results) >= RESULT_LIMIT:
                 break
@@ -354,6 +363,10 @@ def find_similar_questions(
                         "questionId": q.id,
                         "heading": heading,
                         "controlType": q.controlType,
+                        "answers": [
+                            resolve_localized_text(a.textByLocale, default_locale, default_locale)
+                            for a in sorted(q.answers, key=lambda a: a.order)
+                        ],
                     },
                     score,
                 ))
