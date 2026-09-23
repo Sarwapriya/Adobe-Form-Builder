@@ -8,6 +8,7 @@ import { AIActionCard } from "./AIActionCard";
 import { QuestionSuggestionCard } from "./QuestionSuggestionCard";
 import { ProposalCard } from "./ProposalCard";
 import { AiBotAvatar } from "./AiBotAvatar";
+import { AIThinkingIndicator } from "./AIThinkingIndicator";
 
 /**
  * The floating AI panel's content: header (title + minimize), a scrollable
@@ -38,7 +39,7 @@ export function AIChatPanel() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, pendingActions, proposal]);
+  }, [messages, pendingActions, proposal, loading]);
 
   const addQuestionActions = pendingActions.filter((a) => a.actionType === "ADD_QUESTION");
   const suggestionGroup = addQuestionActions.length > 1 ? addQuestionActions : [];
@@ -78,6 +79,8 @@ export function AIChatPanel() {
         {messages.map((m) => (
           <AIChatMessage key={m.id} message={m} />
         ))}
+
+        {loading && <AIThinkingIndicator />}
 
         {suggestionGroup.length > 0 && (
           <Box sx={{ mt: 1 }}>
