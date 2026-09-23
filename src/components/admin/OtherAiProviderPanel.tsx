@@ -17,6 +17,7 @@ import { showToast } from "../../store/toastStore";
 const PRESETS = [
   { label: "Groq", baseUrl: "https://api.groq.com/openai/v1", model: "openai/gpt-oss-120b" },
   { label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+  { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-oss-120b" },
 ];
 
 function errorMessage(err: unknown, fallback: string): string {
