@@ -1,12 +1,7 @@
-"""MCP-SQL access is disabled at the code level (not just via the
-MCP_SQL_ENABLED env var) -- the AI assistant must ground every answer only in
-this app's own direct database access (ax-innovation-sqlserver.database.windows.net,
-via the four fixed tools in aiCampaignTools.py). mcp_sql_client.is_enabled()
-is the single point every other MCP code path funnels through
-(list_tools/call_tool internally, _build_mcp_tools_section/_execute_mcp_tool
-in aiAssistantService.py), so locking that one function down is enough to
-verify the whole surface is inert.
-"""
+"""The raw-SQL MCP path (arbitrary queries against either connected database,
+including DWF) stays disabled at the code level. The chatbot's only retrieval
+path is the fixed FormIQ tools (mcp_sql_client.call_formiq_tool), which read
+AX-Innovation only — see tests/test_mcp_user_context.py."""
 
 from __future__ import annotations
 
@@ -35,11 +30,18 @@ def test_call_tool_reports_not_configured_even_with_env_enabled(monkeypatch):
     assert result == {"ok": False, "error": "MCP-SQL is not configured"}
 
 
-def test_build_mcp_tools_section_returns_none_by_default():
-    assert asyncio.run(aiAssistantService._build_mcp_tools_section("admin")) is None
+def test_prompt_never_mentions_dwf_or_raw_database_tools():
+    for role in ("admin", "superadmin", "standard"):
+        prompt = aiSystemPrompt.build_system_prompt(role)
+        for forbidden in ("DATABASE QUERY TOOLS", "dwf", "DWF", "execute_sql_query", "CampaignFeedBack"):
+            assert forbidden not in prompt
 
 
-def test_admin_system_prompt_no_longer_mentions_database_query_tools():
-    prompt = aiSystemPrompt.build_system_prompt("admin")
-    assert "DATABASE QUERY TOOLS" not in prompt
-    assert "dwf-microsite-db-prd" not in prompt
+def test_prompt_is_the_versioned_file():
+    assert aiSystemPrompt.CHATBOT_PROMPT_VERSION == 2
+    assert aiSystemPrompt.build_system_prompt("standard") == aiSystemPrompt.load_chatbot_prompt(2)
+
+
+def test_no_raw_sql_tool_is_offered_to_the_model():
+    names = {t["function"]["name"] for t in aiAssistantService.chat_tools(True)}
+    assert not names & {"execute_sql_query", "execute_parameterized_query", "get_table_sample", "list_connections", "get_database_schema"}

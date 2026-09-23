@@ -234,69 +234,53 @@ class TestAiProviders:
 
 
 class TestAiProviderFallback:
-    """`aiProviderService.send_message`: FabriX first, then every enabled other provider in order."""
+    """`aiProviderService.send_message`: the AI chatbot is Groq-only — FabriX and
+    non-Groq provider rows are never called from the chatbot path."""
 
-    def _configs(self):
-        from app.services.ai_providers_service import ProviderConfig
-
-        return [
-            ProviderConfig(id="1", name="One", baseUrl="https://one.example/v1", model="m1", apiKey="k1"),
-            ProviderConfig(id="2", name="Two", baseUrl="https://two.example/v1", model="m2", apiKey="k2"),
-        ]
-
-    def _run(self, monkeypatch, fabrix_result, provider_results, configs):
+    def _run(self, monkeypatch, groq_config, groq_result):
         import asyncio
 
-        from app.services import ai_providers_service, aiProviderService, fabrixAIService, openaiCompatAIService
+        from app.services import ai_providers_service, aiProviderService, fabrixAIService, llmChatService
 
         called: list[str] = []
 
         async def fake_fabrix(request, db):
             called.append("fabrix")
-            return fabrix_result
+            return {"ok": True, "replyText": "fabrix"}
 
-        async def fake_provider(request, provider):
+        async def fake_groq(provider, messages, tools=None, **kwargs):
             called.append(provider.name)
-            return provider_results[provider.name]
+            return groq_result
 
         monkeypatch.setattr(fabrixAIService, "send_message", fake_fabrix)
-        monkeypatch.setattr(openaiCompatAIService, "send_message", fake_provider)
-        monkeypatch.setattr(ai_providers_service, "list_enabled_provider_configs", lambda db: configs)
-        result = asyncio.run(aiProviderService.send_message({"messages": []}, None))
+        monkeypatch.setattr(llmChatService, "chat", fake_groq)
+        monkeypatch.setattr(ai_providers_service, "get_chat_provider_config", lambda db: groq_config)
+        result = asyncio.run(aiProviderService.send_message({"messages": [{"role": "user", "content": "hi"}]}, None))
         return result, called
 
-    def test_fabrix_answering_means_no_other_provider_is_called(self, monkeypatch):
-        result, called = self._run(monkeypatch, {"ok": True, "replyText": "fabrix"}, {}, self._configs())
-        assert result["replyText"] == "fabrix"
-        assert called == ["fabrix"]
+    def _groq(self):
+        from app.services.ai_providers_service import ProviderConfig
 
-    def test_falls_through_the_providers_in_order_until_one_answers(self, monkeypatch):
+        return ProviderConfig(id="1", name="Groq", baseUrl="https://api.groq.com/openai/v1", model="openai/gpt-oss-120b", apiKey="k")
+
+    def test_groq_answers_and_fabrix_is_never_called(self, monkeypatch):
         result, called = self._run(
-            monkeypatch,
-            {"ok": False, "error": "fabrix down"},
-            {"One": {"ok": False, "error": "one down"}, "Two": {"ok": True, "replyText": "two"}},
-            self._configs(),
+            monkeypatch, self._groq(),
+            {"ok": True, "content": "hello", "toolCalls": [], "model": "openai/gpt-oss-120b", "tokenUsage": 5},
         )
-        assert result["replyText"] == "two"
-        assert called == ["fabrix", "One", "Two"]
+        assert result == {"ok": True, "replyText": "hello", "model": "openai/gpt-oss-120b", "tokenUsage": 5}
+        assert called == ["Groq"]
 
-    def test_every_provider_failing_returns_the_last_ones_error(self, monkeypatch):
-        # Not FabriX's error: once other providers were actually tried, FabriX's
-        # own (often stale -- e.g. "disabled") error would hide the real, more
-        # actionable reason the last-tried provider just failed for.
-        result, called = self._run(
-            monkeypatch,
-            {"ok": False, "error": "fabrix down"},
-            {"One": {"ok": False, "error": "a"}, "Two": {"ok": False, "error": "b"}},
-            self._configs(),
-        )
-        assert result == {"ok": False, "error": "b"}
-        assert called == ["fabrix", "One", "Two"]
+    def test_groq_failure_is_returned_without_trying_fabrix(self, monkeypatch):
+        result, called = self._run(monkeypatch, self._groq(), {"ok": False, "kind": "rate_limit", "error": "Groq rate limit reached"})
+        assert result == {"ok": False, "error": "Groq rate limit reached"}
+        assert called == ["Groq"]
 
-    def test_fabrixs_error_still_returned_when_no_other_provider_is_enabled(self, monkeypatch):
-        result, called = self._run(monkeypatch, {"ok": False, "error": "fabrix down"}, {}, configs=[])
-        assert result == {"ok": False, "error": "fabrix down"}
-        assert called == ["fabrix"]
+    def test_no_groq_configured_fails_without_fabrix(self, monkeypatch):
+        result, called = self._run(monkeypatch, None, {})
+        assert result["ok"] is False
+        assert called == []
+
 
     def test_only_enabled_providers_with_a_key_are_considered(self, db_session: Session):
         from app.models.ai_provider import AiProvider

@@ -53,17 +53,19 @@ class Settings(BaseSettings):
     FABRIX_OPENAPI_TOKEN: Optional[str] = None
     FABRIX_USER_EMAIL: Optional[str] = None
 
-    # --- Groq/OpenRouter env fallback. Other AI providers are now managed in the
+    # --- OpenAI/Groq/OpenRouter env fallback. AI providers are managed in the
     # admin UI (Configuration > AI Assistant > Other AI Providers, table
-    # fq.AiProviders); these variables are only used to build a provider while
-    # that table has no rows at all — see
-    # ai_providers_service.list_enabled_provider_configs. When both are set,
-    # OpenRouter is preferred (listed first) since it isn't a hidden-reasoning
-    # model like Groq's default openai/gpt-oss-120b, which was intermittently
-    # producing empty responses under Groq's tight per-minute token cap. ---
-    # GROQ_API_KEY: Optional[str] = None
-    # GROQ_MODEL: str = "openai/gpt-oss-120b"
-    # GROQ_ENABLED: bool = True
+    # fq.AiProviders); the chatbot picks OpenAI (an api.openai.com row, else
+    # OPENAI_*), then Groq (an api.groq.com row, else GROQ_*) — see
+    # ai_providers_service.get_chat_provider_config. OpenRouter is only used by
+    # the admin provider list, never by the chatbot. ---
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4.1-mini"
+    OPENAI_ENABLED: bool = True
+
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    GROQ_ENABLED: bool = True
 
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_MODEL: str = "google/gemma-4-26b-a4b-it:free"
@@ -85,6 +87,15 @@ class Settings(BaseSettings):
     MCP_SQL_AUTH_TOKEN: Optional[str] = None
     MCP_SQL_ENABLED: bool = True
     MCP_SQL_TIMEOUT_SECONDS: int = 30
+    # Shared with the MCP server (same variable name there): signs the
+    # authenticated user's context for its FormIQ campaign tools — see
+    # app/services/mcp_user_context.py. Without it the chatbot has no
+    # campaign retrieval at all (fail closed).
+    MCP_USER_CONTEXT_SECRET: Optional[str] = None
+
+    # --- AI chatbot (Groq, native local tool calling) ---
+    # Upper bound on model <-> tool round trips within one user message.
+    AI_MAX_TOOL_ROUNDS: int = 6
 
     # --- DKMS (PII encryption/hashing service) ---
     # Base URL only (no trailing /dkms/v1/... suffix) — app/security/dkms_client.py

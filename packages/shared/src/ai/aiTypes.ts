@@ -1,5 +1,5 @@
 /**
- * Wire contract for the FabriXAI-backed Form Builder assistant, shared
+ * Wire contract for the Groq-backed Form Builder assistant, shared
  * between the backend's ai.router.ts/aiAssistantService.ts and the
  * frontend's aiChatApi.ts/aiChatStore.ts — one source of truth, mirrored
  * by aiTypesZod.ts the same way formDefinition.ts/formDefinitionZod.ts are
@@ -135,11 +135,57 @@ export interface AICampaignReference {
   updatedAt: string;
 }
 
+/** One question of a chatbot form proposal, as previewed in the chat. */
+export interface AIFormProposalQuestion {
+  heading: string;
+  subheading: string | null;
+  controlType: "radio" | "checkbox" | "dropdown" | "text" | "shortText";
+  required: boolean;
+  answers: string[];
+  /** True when the question was reused from an existing campaign
+   * (sourceFormId/sourceQuestionId), false when newly written. */
+  reused: boolean;
+  sourceFormId: string | null;
+  sourceQuestionId: string | null;
+}
+
+/** A new campaign draft the chatbot proposed that already passed backend
+ * validation. It is only saved when the user clicks "Approve & Save"
+ * (POST /ai/proposals/:id/approve then /save) — never by the LLM. */
+export interface AIFormProposal {
+  id: string;
+  /** Increments each time the user asks for changes; only the latest
+   * version of a conversation can be approved. */
+  version: number;
+  name: string;
+  subsidiary: string;
+  projectCode: string | null;
+  baseFormId: string | null;
+  questions: AIFormProposalQuestion[];
+  warnings: string[];
+  saved: boolean;
+  savedFormId: string | null;
+}
+
 export interface AIChatResponse {
   conversationId: string;
   message: string;
   actions: AIActionSummary[];
   references: AICampaignReference[];
+  /** Present when this turn produced a validated new-form proposal. */
+  proposal?: AIFormProposal;
+}
+
+export interface AIApproveProposalResponse {
+  approvalToken: string;
+  expiresAt: string;
+}
+
+export interface AISaveProposalResponse {
+  formId: string;
+  /** App route of the created draft's editor (admin or ad-hoc). */
+  route: string;
+  proposalId: string;
 }
 
 export interface AIConversationSummary {

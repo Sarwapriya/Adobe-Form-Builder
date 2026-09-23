@@ -25,6 +25,7 @@ from app.models.question_master_version import QuestionMasterVersion
 from app.models.ai_conversation import AIConversation
 from app.models.ai_conversation_message import AIConversationMessage
 from app.models.ai_action import AIAction
+from app.models.ai_form_proposal import AIFormProposal
 from app.models.fabrix_model import FabrixModel
 from app.models.ai_provider import AiProvider
 
@@ -51,6 +52,7 @@ __all__ = [
     "AIConversation",
     "AIConversationMessage",
     "AIAction",
+    "AIFormProposal",
     "FabrixModel",
     "AiProvider",
 ]

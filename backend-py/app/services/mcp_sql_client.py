@@ -25,6 +25,7 @@ external server, so re-fetching on every message would add needless latency.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Optional
 
@@ -132,3 +133,62 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         for block in result.content
     ]
     return {"ok": True, "result": content}
+
+
+# --- FormIQ campaign tools (the chatbot's only retrieval source) -------------
+#
+# Separate from the raw-SQL path above, which stays disabled: these call the
+# MCP server's fixed FormIQ tools (mcp_mssql/tools/formiq_tools.py there),
+# which only read AX-Innovation (crm-ax) and apply the caller's subsidiary
+# scope server-side from the signed user-context header — never from anything
+# the LLM passes. Only names in FORMIQ_MCP_TOOLS can ever be called.
+
+FORMIQ_MCP_TOOLS = frozenset({"search_previous_campaigns", "get_campaign_details", "search_question_library"})
+
+
+def formiq_tools_enabled() -> bool:
+    return bool(settings.MCP_SQL_SERVER_URL and settings.MCP_USER_CONTEXT_SECRET)
+
+
+async def call_formiq_tool(name: str, arguments: dict[str, Any], auth: dict) -> dict[str, Any]:
+    """Runs one FormIQ MCP tool as the authenticated user in `auth`. Returns the
+    tool's decoded JSON result (which may itself be `{"error": {...}}`), or
+    `{"error": {"code": ..., "message": ...}}` when the server can't be
+    reached. Never raises; never includes connection details in the result."""
+    from app.services.mcp_user_context import HEADER_NAME, mint_user_context
+
+    if name not in FORMIQ_MCP_TOOLS:
+        return {"error": {"code": "UNKNOWN_TOOL", "message": f"{name} is not an available tool"}}
+    if not formiq_tools_enabled():
+        return {"error": {"code": "UNAVAILABLE", "message": "campaign lookup is not configured"}}
+
+    try:
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+    except ImportError:
+        return {"error": {"code": "UNAVAILABLE", "message": "campaign lookup is not available"}}
+
+    headers = dict(_auth_headers() or {})
+    headers[HEADER_NAME] = mint_user_context(auth, settings.MCP_USER_CONTEXT_SECRET or "")
+    started = time.time()
+    try:
+        async with streamablehttp_client(
+            settings.MCP_SQL_SERVER_URL, headers=headers, timeout=settings.MCP_SQL_TIMEOUT_SECONDS
+        ) as (read, write, _get_session_id):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(name, arguments)
+    except Exception as exc:  # noqa: BLE001 - see module docstring
+        print(f"[mcpSqlClient] {name} failed ({type(exc).__name__}) after {(time.time() - started) * 1000:.0f}ms")
+        return {"error": {"code": "UNAVAILABLE", "message": "campaign lookup is temporarily unavailable"}}
+
+    text_blocks = [getattr(block, "text", "") for block in result.content if getattr(block, "type", "") == "text"]
+    raw = "".join(text_blocks)
+    try:
+        decoded = json.loads(raw) if raw else {}
+    except ValueError:
+        return {"error": {"code": "BAD_RESPONSE", "message": "campaign lookup returned an unreadable result"}}
+    if result.isError and not (isinstance(decoded, dict) and "error" in decoded):
+        return {"error": {"code": "TOOL_ERROR", "message": "campaign lookup failed"}}
+    print(f"[mcpSqlClient] {name} ok in {(time.time() - started) * 1000:.0f}ms")
+    return decoded if isinstance(decoded, dict) else {"result": decoded}

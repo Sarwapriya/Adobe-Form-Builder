@@ -60,7 +60,7 @@ export { resolveCountryName, subsidiaryCountryCodes } from "./form/subsidiaryDat
 // Excel metadata row to derive LocaleInfo from automatically.
 export { isRtlLangSubtag, langDisplayName, RTL_LANGS } from "./form/langNames";
 
-// FabriXAI-backed Form Builder assistant — chat/tool-call wire contract shared
+// Groq-backed Form Builder assistant — chat/tool-call wire contract shared
 // between the backend's ai.router.ts/aiAssistantService.ts and the frontend's
 // aiChatApi.ts/aiChatStore.ts. See aiTypes.ts's own doc comment.
 export {
@@ -94,6 +94,10 @@ export {
   type AIConversationMessageView,
   type AIConversationDetail,
   type AIConfirmActionResponse,
+  type AIFormProposal,
+  type AIFormProposalQuestion,
+  type AIApproveProposalResponse,
+  type AISaveProposalResponse,
 } from "./ai/aiTypes";
 export { aiToolCallSchema, aiChatRequestSchema } from "./ai/aiTypesZod";
 

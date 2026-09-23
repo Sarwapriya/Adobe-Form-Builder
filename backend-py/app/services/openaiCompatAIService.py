@@ -1,17 +1,15 @@
-"""Talks to any OpenAI-compatible chat completions API (Groq, OpenAI, Together,
-a self-hosted gateway, ...) — one call to `<baseUrl>/chat/completions` for one
-`ProviderConfig` (see `ai_providers_service.py`). Same result contract as
-`fabrixAIService.py`: takes `request["messages"]` (a flat list of `{role,
-content}` turns, `role` one of "system"/"user"/"assistant"/"tool") and returns
-`{ok, replyText, model, tokenUsage}`, or a structured `{ok: False, error}`.
-Never raises. Uses `httpx` (already a dependency), not a vendor SDK, since each
-call is a single JSON POST.
+"""Talks to any OpenAI-compatible chat completions API — one call to
+`<baseUrl>/chat/completions` for one `ProviderConfig`. Used only by the admin
+"Send test message" button on Configuration > AI Assistant > Other AI
+Providers (routers/admin.py). The AI chatbot itself does NOT use this: it
+talks to OpenAI/Groq through llmChatService.py (native local tool calling).
+
+Takes `request["messages"]` (`[{role, content}]`) and returns `{ok, replyText,
+model, tokenUsage}` or `{ok: False, error}`. Never raises.
 """
 
 from __future__ import annotations
 
-import json
-import re
 import time
 from typing import Any
 from urllib.parse import urlparse
@@ -60,75 +58,6 @@ def _build_body(provider: ProviderConfig, messages: list[dict[str, str]]) -> dic
         # vendor-specific extras, which other servers may reject outright.
         body["max_tokens"] = 4096
     return body
-
-
-def _native_tool_call_as_fenced_json(message: dict[str, Any]) -> str | None:
-    """This app never sends a `tools` parameter — tools are described in the
-    system prompt and called by replying with a fenced ```json {"tool", "args"}```
-    block (aiSystemPrompt.TOOL_CALL_CONVENTION). Models trained on native
-    function calling (gpt-oss on Groq especially) still sometimes emit a real
-    `tool_calls` entry with `content` empty, which would otherwise surface as
-    "response did not include any text" on every lookup question. Rewrites the
-    first such call into the text convention aiAssistantService already parses."""
-    tool_calls = message.get("tool_calls") or []
-    if not tool_calls:
-        return None
-    function = (tool_calls[0] or {}).get("function") or {}
-    name = (function.get("name") or "").strip()
-    # gpt-oss's harmony format namespaces calls as "functions.<NAME>".
-    name = name.rsplit(".", 1)[-1]
-    if not name:
-        return None
-    raw_args = function.get("arguments")
-    try:
-        args = json.loads(raw_args) if isinstance(raw_args, str) and raw_args.strip() else (raw_args or {})
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if not isinstance(args, dict):
-        return None
-    return "```json\n" + json.dumps({"tool": name, "args": args}) + "\n```"
-
-
-def _tool_call_from_reasoning(reasoning: Any) -> str | None:
-    """gpt-oss on Groq often decides on a tool call in its hidden `reasoning`
-    and then tries to emit it on its native function-calling channel; with no
-    `tools` declared, Groq drops that output and returns `finish_reason: stop`
-    with `content` empty. When the reasoning already contains the call as a
-    JSON object — `{"tool": ..., "args": ...}` or `functions.NAME` followed by
-    its argument object — rebuild it in the fenced-JSON convention."""
-    if not isinstance(reasoning, str) or not reasoning:
-        return None
-    decoder = json.JSONDecoder()
-    # Last occurrence wins: the model's final decision comes after any drafts.
-    for match in reversed(list(re.finditer(r"\{", reasoning))):
-        try:
-            value, _ = decoder.raw_decode(reasoning, match.start())
-        except (json.JSONDecodeError, ValueError):
-            continue
-        if isinstance(value, dict) and isinstance(value.get("tool"), str) and isinstance(value.get("args"), dict):
-            name = value["tool"].rsplit(".", 1)[-1]
-            return "```json\n" + json.dumps({"tool": name, "args": value["args"]}) + "\n```"
-    for match in reversed(list(re.finditer(r"functions\.([A-Za-z_][A-Za-z0-9_]*)", reasoning))):
-        brace = reasoning.find("{", match.end())
-        if brace == -1 or brace - match.end() > 80:
-            continue
-        try:
-            args, _ = decoder.raw_decode(reasoning, brace)
-        except (json.JSONDecodeError, ValueError):
-            continue
-        if isinstance(args, dict):
-            return "```json\n" + json.dumps({"tool": match.group(1), "args": args}) + "\n```"
-    return None
-
-
-# Sent as an extra user turn on the retry after an empty reply, since an
-# identical request tends to fail identically (the model keeps routing its
-# answer to a function-calling channel that isn't there).
-_EMPTY_REPLY_NUDGE = (
-    "Your previous reply was empty. Function calling is not available. Write your reply as plain "
-    "visible text now: either a single fenced ```json {\"tool\": \"TOOL_NAME\", \"args\": {...}}``` "
-    "block to call a tool, or a normal answer to the user."
-)
 
 
 # Empty-content failures (a reasoning-capable model like gpt-oss burning its
@@ -185,14 +114,6 @@ async def _attempt(
     message = choices[0].get("message") or {}
     content = message.get("content")
     if not content:
-        content = _native_tool_call_as_fenced_json(message)
-        if content:
-            print(f"{log_prefix} status=ok_native_tool_call finishReason={finish_reason}")
-    if not content:
-        content = _tool_call_from_reasoning(message.get("reasoning"))
-        if content:
-            print(f"{log_prefix} status=ok_reasoning_tool_call finishReason={finish_reason}")
-    if not content:
         if finish_reason == "content_filter":
             print(f"{log_prefix} status=refusal")
             return {"ok": False, "error": f"{label} declined to respond to this request."}
@@ -211,8 +132,7 @@ async def _attempt(
                 "error": f"{label} ran out of its response budget before producing any visible text "
                          "(likely spent it on internal reasoning) — try a shorter question or a shorter conversation.",
             }
-        reasoning_tail = str(message.get("reasoning") or "")[-300:]
-        print(f"{log_prefix} status=empty_content finishReason={finish_reason} messageKeys={sorted(message.keys())} reasoningTail={reasoning_tail!r}")
+        print(f"{log_prefix} status=empty_content finishReason={finish_reason}")
         return {"ok": False, "_retryableEmptyContent": True, "error": f"{label} response did not include any text"}
 
     usage = payload.get("usage") or {}
@@ -239,8 +159,7 @@ async def send_message(request: dict[str, Any], provider: ProviderConfig) -> dic
     while result.get("_retryableEmptyContent") and attempt < _RETRYABLE_EMPTY_CONTENT_ATTEMPTS:
         attempt += 1
         print(f"[openaiCompatAIService] provider={label!r} got no visible text on attempt {attempt - 1} — retrying (attempt {attempt}/{_RETRYABLE_EMPTY_CONTENT_ATTEMPTS})")
-        retry_messages = messages + [{"role": "user", "content": _EMPTY_REPLY_NUDGE}]
-        result = await _attempt(provider, retry_messages, _build_body(provider, retry_messages), headers, label)
+        result = await _attempt(provider, messages, body, headers, label)
 
     result.pop("_retryableEmptyContent", None)
     return result

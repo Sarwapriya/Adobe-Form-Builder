@@ -1,8 +1,9 @@
-"""Port of `backend/src/routes/ai.router.ts` — mounted at `/api/v1/ai`.
+"""The FormIQ AI chatbot API — mounted at `/api/v1/ai`.
 
-FabriXAI-backed Form Builder assistant. `require_auth` on every route, no
-blanket admin gate: both admin and subsidiary-scoped standard users use the
-chatbot.
+Groq-backed assistant (see services/aiAssistantService.py). `require_auth` on
+every route, no blanket admin gate: both admin and subsidiary-scoped standard
+users use the chatbot; what each can see is enforced by the MCP server and
+the services, not here.
 """
 
 from __future__ import annotations
@@ -14,9 +15,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.errors import AppError, ConflictError, NotFoundError
 from app.middleware.rate_limit import AI_RATE_LIMIT, limiter
 from app.security.deps import require_auth
-from app.services import aiAssistantService
+from app.services import ai_proposal_service, aiAssistantService, mcp_sql_client
 
 router = APIRouter(dependencies=[Depends(require_auth)])
 
@@ -108,34 +110,63 @@ async def reject(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
-@router.get("/campaigns/search")
-async def search_campaigns(
-    search_text: Optional[str] = Query(None),
-    project_code: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-    auth: dict = Depends(require_auth),
-) -> list[dict]:
-    """Direct non-chat convenience endpoint wrapping SEARCH_CAMPAIGNS."""
-    ctx = aiAssistantService._to_caller_context(auth)
-    from app.services.aiCampaignTools import search_campaigns as sc
-    return sc(db, ctx, {
-        "searchText": search_text,
-        "projectCode": project_code,
-        "status": status,
-    })
+class SaveProposalRequest(BaseModel):
+    approvalToken: str = Field(min_length=1, max_length=200)
 
 
-@router.get("/campaigns/{form_id}")
-async def get_campaign(
-    form_id: str,
+@router.post("/proposals/{proposal_id}/approve")
+async def approve_proposal(
+    proposal_id: str,
     db: Session = Depends(get_db),
     auth: dict = Depends(require_auth),
 ) -> dict:
-    """Direct non-chat convenience endpoint wrapping GET_CAMPAIGN."""
-    ctx = aiAssistantService._to_caller_context(auth)
-    from app.services.aiCampaignTools import get_campaign as gc
-    campaign = gc(db, ctx, {"formId": form_id})
-    if not campaign:
+    """The user's explicit "Approve & Save" click, part 1: issues a one-time
+    approval token bound to exactly this proposal version. Only reachable from
+    the UI with the user's own session — never an LLM tool."""
+    try:
+        return ai_proposal_service.approve_proposal(db, auth, proposal_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+
+
+@router.post("/proposals/{proposal_id}/save")
+async def save_proposal(
+    proposal_id: str,
+    body: SaveProposalRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_auth),
+) -> dict:
+    """Part 2 (save_draft_form): creates the draft only with a valid approval
+    token for this exact, unchanged, still-valid proposal version."""
+    try:
+        return await ai_proposal_service.save_draft_form(db, auth, proposal_id, body.approvalToken)
+    except ai_proposal_service.ApprovalError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except (ConflictError, AppError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+
+
+@router.get("/campaigns/search")
+async def search_campaigns(
+    search_text: Optional[str] = Query(None, alias="searchText"),
+    project_code: Optional[str] = Query(None, alias="projectCode"),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    auth: dict = Depends(require_auth),
+) -> list[dict]:
+    """Non-chat convenience endpoint over the MCP search_previous_campaigns tool."""
+    args = {k: v for k, v in {"query": search_text, "projectCode": project_code, "status": status_filter}.items() if v}
+    result = await mcp_sql_client.call_formiq_tool("search_previous_campaigns", args, auth)
+    return aiAssistantService._references_from_search(result)
+
+
+@router.get("/campaigns/{form_id}")
+async def get_campaign(form_id: str, auth: dict = Depends(require_auth)) -> dict:
+    """Non-chat convenience endpoint over the MCP get_campaign_details tool."""
+    campaign = await mcp_sql_client.call_formiq_tool("get_campaign_details", {"formId": form_id}, auth)
+    if "error" in campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="campaign not found")
     return campaign

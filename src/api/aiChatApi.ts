@@ -1,6 +1,8 @@
 import type {
+  AIApproveProposalResponse,
   AIChatRequest,
   AIChatResponse,
+  AISaveProposalResponse,
   AIConfirmActionResponse,
   AIConversationDetail,
   AIConversationSummary,
@@ -9,7 +11,7 @@ import type {
 import { apiClient } from "./apiClient";
 
 /**
- * Thin wrappers over apiClient for the FabriXAI-backed copilot's `/api/v1/ai/*`
+ * Thin wrappers over apiClient for the Groq-backed copilot's `/api/v1/ai/*`
  * routes (see backend-py's ai.py router, mounted alongside every other `/api/v1/*`
  * router — same base-path convention formBuilderApi.ts/uploadsApi.ts use, just
  * an "ai" segment instead of "admin/forms"/"uploads"). Every type here is
@@ -68,6 +70,18 @@ export function confirmAction(actionId: string): Promise<AIConfirmActionResponse
  * records the audit row as unconfirmed and nothing is ever applied. */
 export function rejectAction(actionId: string): Promise<void> {
   return apiClient.post<void>(`/api/v1/ai/actions/${actionId}/reject`);
+}
+
+/** POST /api/v1/ai/proposals/:id/approve — the user's explicit approval of
+ * one validated proposal version; returns a one-time token bound to it. */
+export function approveProposal(proposalId: string): Promise<AIApproveProposalResponse> {
+  return apiClient.post<AIApproveProposalResponse>(`/api/v1/ai/proposals/${proposalId}/approve`);
+}
+
+/** POST /api/v1/ai/proposals/:id/save — creates the draft form. Rejected
+ * (403/409) without a valid token for this exact, unchanged version. */
+export function saveProposal(proposalId: string, approvalToken: string): Promise<AISaveProposalResponse> {
+  return apiClient.post<AISaveProposalResponse>(`/api/v1/ai/proposals/${proposalId}/save`, { approvalToken });
 }
 
 export interface SearchCampaignsParams {

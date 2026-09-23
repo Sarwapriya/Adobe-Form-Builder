@@ -22,9 +22,12 @@ from app.errors import ValidationError
 from app.models.ai_provider import AiProvider
 from app.security.secret_cipher import decrypt_secret, encrypt_secret
 
-# DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-# DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
-DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
+DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+# Base URL only — chat_completions_url() appends /chat/completions itself.
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENROUTER_MODEL = "google/gemma-4-26b-a4b-it:free"
 _CHAT_SUFFIX = "/chat/completions"
 
@@ -70,6 +73,30 @@ def get_ai_provider(db: Session, id: str) -> Optional[AiProvider]:
 def _env_fallback_provider_configs() -> list[ProviderConfig]:
     configs: list[ProviderConfig] = []
 
+    openai_key = (env_settings.OPENAI_API_KEY or "").strip()
+    if openai_key and env_settings.OPENAI_ENABLED:
+        configs.append(
+            ProviderConfig(
+                id=None,
+                name="OpenAI",
+                baseUrl=DEFAULT_OPENAI_BASE_URL,
+                model=env_settings.OPENAI_MODEL or DEFAULT_OPENAI_MODEL,
+                apiKey=openai_key,
+            )
+        )
+
+    groq_key = (env_settings.GROQ_API_KEY or "").strip()
+    if groq_key and env_settings.GROQ_ENABLED:
+        configs.append(
+            ProviderConfig(
+                id=None,
+                name="Groq",
+                baseUrl=DEFAULT_GROQ_BASE_URL,
+                model=env_settings.GROQ_MODEL or DEFAULT_GROQ_MODEL,
+                apiKey=groq_key,
+            )
+        )
+
     openrouter_key = (env_settings.OPENROUTER_API_KEY or "").strip()
     if openrouter_key and env_settings.OPENROUTER_ENABLED:
         configs.append(
@@ -82,28 +109,15 @@ def _env_fallback_provider_configs() -> list[ProviderConfig]:
             )
         )
 
-    # groq_key = (env_settings.GROQ_API_KEY or "").strip()
-    # if groq_key and env_settings.GROQ_ENABLED:
-    #     configs.append(
-    #         ProviderConfig(
-    #             id=None,
-    #             name="Groq",
-    #             baseUrl=DEFAULT_GROQ_BASE_URL,
-    #             model=env_settings.GROQ_MODEL or DEFAULT_GROQ_MODEL,
-    #             apiKey=groq_key,
-    #         )
-    #     )
-
     return configs
 
 
 def list_enabled_provider_configs(db: Session) -> list[ProviderConfig]:
     """The enabled providers that have a usable key, in fallback order. If none
     have ever been added in the DB, falls back to whichever of the legacy
-    `OPENROUTER_*`/`GROQ_*` environment variables are configured (so a
+    `GROQ_*`/`OPENROUTER_*` environment variables are configured (so a
     deployment that was only ever configured through env keeps working) —
-    OpenRouter first when both are set, since it isn't a hidden-reasoning
-    model the way Groq's default is."""
+    Groq first, OpenRouter only as a second fallback when both are set."""
     rows = list_ai_providers(db)
     if not rows:
         return _env_fallback_provider_configs()
@@ -117,6 +131,58 @@ def list_enabled_provider_configs(db: Session) -> list[ProviderConfig]:
             continue
         configs.append(ProviderConfig(id=row.id, name=row.name, baseUrl=row.baseUrl, model=row.model, apiKey=api_key))
     return configs
+
+
+def _host(base_url: str) -> str:
+    return (urlparse(base_url or "").hostname or "").lower()
+
+
+def is_groq_base_url(base_url: str) -> bool:
+    return _host(base_url).endswith("api.groq.com")
+
+
+def is_openai_base_url(base_url: str) -> bool:
+    return _host(base_url) == "api.openai.com"
+
+
+def _first_enabled_row(db: Session, matches, default_model: str) -> Optional[ProviderConfig]:
+    for row in list_ai_providers(db):
+        if not row.isEnabled or not matches(row.baseUrl):
+            continue
+        api_key = decrypt_secret(row.apiKeyEnc).strip() if row.apiKeyEnc else ""
+        if api_key:
+            return ProviderConfig(id=row.id, name=row.name, baseUrl=row.baseUrl, model=row.model or default_model, apiKey=api_key)
+    return None
+
+
+def get_chat_provider_config(db: Session) -> Optional[ProviderConfig]:
+    """The ONE provider the AI chatbot uses, in priority order:
+    1. the first enabled `fq.AiProviders` row pointing at api.openai.com with a key,
+    2. the `OPENAI_*` environment variables,
+    3. the first enabled api.groq.com row with a key,
+    4. the `GROQ_*` environment variables.
+    Never FabriX or any other vendor's row. `None` means the chatbot has no
+    usable LLM configured."""
+    row = _first_enabled_row(db, is_openai_base_url, DEFAULT_OPENAI_MODEL)
+    if row is not None:
+        return row
+    openai_key = (env_settings.OPENAI_API_KEY or "").strip()
+    if openai_key and env_settings.OPENAI_ENABLED:
+        return ProviderConfig(
+            id=None, name="OpenAI", baseUrl=DEFAULT_OPENAI_BASE_URL,
+            model=env_settings.OPENAI_MODEL or DEFAULT_OPENAI_MODEL, apiKey=openai_key,
+        )
+
+    row = _first_enabled_row(db, is_groq_base_url, DEFAULT_GROQ_MODEL)
+    if row is not None:
+        return row
+    groq_key = (env_settings.GROQ_API_KEY or "").strip()
+    if groq_key and env_settings.GROQ_ENABLED:
+        return ProviderConfig(
+            id=None, name="Groq", baseUrl=DEFAULT_GROQ_BASE_URL,
+            model=env_settings.GROQ_MODEL or DEFAULT_GROQ_MODEL, apiKey=groq_key,
+        )
+    return None
 
 
 def config_for_provider(row: AiProvider) -> Optional[ProviderConfig]:

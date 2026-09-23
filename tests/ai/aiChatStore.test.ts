@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AIActionSummary, AIChatResponse, AIConfirmActionResponse } from "@formbuilder/shared";
+import type { AIActionSummary, AIChatResponse, AIConfirmActionResponse, AIFormProposal } from "@formbuilder/shared";
 import { sampleFormDefinition } from "../codegen/fixtures.ts";
 
 // aiChatStore.ts imports `* as aiChatApi from "../api/aiChatApi"` and calls its
@@ -9,11 +9,15 @@ import { sampleFormDefinition } from "../codegen/fixtures.ts";
 const sendChatMessageMock = vi.fn();
 const confirmActionMock = vi.fn();
 const rejectActionMock = vi.fn();
+const approveProposalMock = vi.fn();
+const saveProposalMock = vi.fn();
 
 vi.mock("../../src/api/aiChatApi.ts", () => ({
   sendChatMessage: (...args: unknown[]) => sendChatMessageMock(...args),
   confirmAction: (...args: unknown[]) => confirmActionMock(...args),
   rejectAction: (...args: unknown[]) => rejectActionMock(...args),
+  approveProposal: (...args: unknown[]) => approveProposalMock(...args),
+  saveProposal: (...args: unknown[]) => saveProposalMock(...args),
   listConversations: vi.fn(),
   getConversation: vi.fn(),
   searchCampaigns: vi.fn(),
@@ -31,10 +35,60 @@ describe("aiChatStore", () => {
       conversationId: null,
       messages: [],
       pendingActions: [],
+      proposal: null,
+      savingProposal: false,
       loading: false,
       error: null,
     });
     useFormBuilderStore.getState().reset();
+  });
+
+  const proposal = (id: string, version: number): AIFormProposal => ({
+    id,
+    version,
+    name: "Hand raiser TV",
+    subsidiary: "SGE",
+    projectCode: "F2H26",
+    baseFormId: null,
+    questions: [
+      { heading: "Which TV model?", subheading: null, controlType: "radio", required: true, answers: ["QLED", "OLED"], reused: true, sourceFormId: "f1", sourceQuestionId: "Q1" },
+    ],
+    warnings: [],
+    saved: false,
+    savedFormId: null,
+  });
+
+  it("sendMessage keeps only the latest proposal version", async () => {
+    sendChatMessageMock.mockResolvedValueOnce({ conversationId: "c", message: "v1", actions: [], references: [], proposal: proposal("p1", 1) });
+    await useAiChatStore.getState().sendMessage("make a form");
+    sendChatMessageMock.mockResolvedValueOnce({ conversationId: "c", message: "v2", actions: [], references: [], proposal: proposal("p2", 2) });
+    await useAiChatStore.getState().sendMessage("add a question");
+    expect(useAiChatStore.getState().proposal?.id).toBe("p2");
+  });
+
+  it("approveAndSaveProposal approves first, then saves with that exact token", async () => {
+    useAiChatStore.setState({ proposal: proposal("p1", 1) });
+    approveProposalMock.mockResolvedValue({ approvalToken: "tok", expiresAt: "x" });
+    saveProposalMock.mockResolvedValue({ formId: "new-form", route: "/admin/form-builder/new-form", proposalId: "p1" });
+
+    const result = await useAiChatStore.getState().approveAndSaveProposal("p1");
+
+    expect(approveProposalMock).toHaveBeenCalledWith("p1");
+    expect(saveProposalMock).toHaveBeenCalledWith("p1", "tok");
+    expect(result).toEqual({ formId: "new-form", route: "/admin/form-builder/new-form" });
+    expect(useAiChatStore.getState().proposal).toMatchObject({ saved: true, savedFormId: "new-form" });
+  });
+
+  it("approveAndSaveProposal surfaces a refused save and never navigates", async () => {
+    useAiChatStore.setState({ proposal: proposal("p1", 1) });
+    approveProposalMock.mockRejectedValue(new Error("This proposal was changed after it was shown"));
+
+    const result = await useAiChatStore.getState().approveAndSaveProposal("p1");
+
+    expect(result).toBeNull();
+    expect(saveProposalMock).not.toHaveBeenCalled();
+    expect(useAiChatStore.getState().error).toBe("This proposal was changed after it was shown");
+    expect(useAiChatStore.getState().proposal?.saved).toBe(false);
   });
 
   it("sendMessage pushes the user turn, calls the API, and appends the assistant reply + any actions", async () => {
