@@ -10,6 +10,7 @@ call is a single JSON POST.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 from urllib.parse import urlparse
@@ -58,6 +59,33 @@ def _build_body(provider: ProviderConfig, messages: list[dict[str, str]]) -> dic
         # vendor-specific extras, which other servers may reject outright.
         body["max_tokens"] = 4096
     return body
+
+
+def _native_tool_call_as_fenced_json(message: dict[str, Any]) -> str | None:
+    """This app never sends a `tools` parameter — tools are described in the
+    system prompt and called by replying with a fenced ```json {"tool", "args"}```
+    block (aiSystemPrompt.TOOL_CALL_CONVENTION). Models trained on native
+    function calling (gpt-oss on Groq especially) still sometimes emit a real
+    `tool_calls` entry with `content` empty, which would otherwise surface as
+    "response did not include any text" on every lookup question. Rewrites the
+    first such call into the text convention aiAssistantService already parses."""
+    tool_calls = message.get("tool_calls") or []
+    if not tool_calls:
+        return None
+    function = (tool_calls[0] or {}).get("function") or {}
+    name = (function.get("name") or "").strip()
+    # gpt-oss's harmony format namespaces calls as "functions.<NAME>".
+    name = name.rsplit(".", 1)[-1]
+    if not name:
+        return None
+    raw_args = function.get("arguments")
+    try:
+        args = json.loads(raw_args) if isinstance(raw_args, str) and raw_args.strip() else (raw_args or {})
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(args, dict):
+        return None
+    return "```json\n" + json.dumps({"tool": name, "args": args}) + "\n```"
 
 
 # Empty-content failures (a reasoning-capable model like gpt-oss burning its
@@ -111,7 +139,12 @@ async def _attempt(
         return {"ok": False, "error": f"{label} response did not include any choices"}
 
     finish_reason = choices[0].get("finish_reason")
-    content = (choices[0].get("message") or {}).get("content")
+    message = choices[0].get("message") or {}
+    content = message.get("content")
+    if not content:
+        content = _native_tool_call_as_fenced_json(message)
+        if content:
+            print(f"{log_prefix} status=ok_native_tool_call finishReason={finish_reason}")
     if not content:
         if finish_reason == "content_filter":
             print(f"{log_prefix} status=refusal")
@@ -131,7 +164,7 @@ async def _attempt(
                 "error": f"{label} ran out of its response budget before producing any visible text "
                          "(likely spent it on internal reasoning) — try a shorter question or a shorter conversation.",
             }
-        print(f"{log_prefix} status=empty_content")
+        print(f"{log_prefix} status=empty_content finishReason={finish_reason} messageKeys={sorted(message.keys())}")
         return {"ok": False, "_retryableEmptyContent": True, "error": f"{label} response did not include any text"}
 
     usage = payload.get("usage") or {}

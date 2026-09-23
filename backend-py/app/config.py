@@ -61,12 +61,12 @@ class Settings(BaseSettings):
     # OpenRouter is preferred (listed first) since it isn't a hidden-reasoning
     # model like Groq's default openai/gpt-oss-120b, which was intermittently
     # producing empty responses under Groq's tight per-minute token cap. ---
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "openai/gpt-oss-120b"
-    GROQ_ENABLED: bool = True
+    # GROQ_API_KEY: Optional[str] = None
+    # GROQ_MODEL: str = "openai/gpt-oss-120b"
+    # GROQ_ENABLED: bool = True
 
     OPENROUTER_API_KEY: Optional[str] = None
-    OPENROUTER_MODEL: str = "openai/gpt-4o"
+    OPENROUTER_MODEL: str = "google/gemma-4-26b-a4b-it:free"
     OPENROUTER_ENABLED: bool = True
 
     FORMBUILDER_NOTIFY_EMAIL: Optional[str] = None

@@ -62,19 +62,19 @@ GO
 
 -- Carry the existing Groq fallback over (only while the table is still empty, so
 -- re-running never duplicates it or resurrects a provider you've since changed).
-IF NOT EXISTS (SELECT 1 FROM fq.AiProviders)
-   AND EXISTS (SELECT 1 FROM fq.AdminSettings WHERE [key] = 'groqApiKeyEnc' AND LEN([value]) > 0)
-BEGIN
-    INSERT INTO fq.AiProviders (name, baseUrl, model, apiKeyEnc, isEnabled, sortOrder)
-    SELECT
-        N'Groq',
-        N'https://api.groq.com/openai/v1',
-        COALESCE(NULLIF((SELECT [value] FROM fq.AdminSettings WHERE [key] = 'groqModel'), N''), N'openai/gpt-oss-120b'),
-        (SELECT [value] FROM fq.AdminSettings WHERE [key] = 'groqApiKeyEnc'),
-        CASE WHEN (SELECT [value] FROM fq.AdminSettings WHERE [key] = 'groqEnabled') = N'false' THEN 0 ELSE 1 END,
-        0;
-END
-GO
+-- IF NOT EXISTS (SELECT 1 FROM fq.AiProviders)
+--    AND EXISTS (SELECT 1 FROM fq.AdminSettings WHERE [key] = 'groqApiKeyEnc' AND LEN([value]) > 0)
+-- BEGIN
+--     INSERT INTO fq.AiProviders (name, baseUrl, model, apiKeyEnc, isEnabled, sortOrder)
+--     SELECT
+--         N'Groq',
+--         N'https://api.groq.com/openai/v1',
+--         COALESCE(NULLIF((SELECT [value] FROM fq.AdminSettings WHERE [key] = 'groqModel'), N''), N'openai/gpt-oss-120b'),
+--         (SELECT [value] FROM fq.AdminSettings WHERE [key] = 'groqApiKeyEnc'),
+--         CASE WHEN (SELECT [value] FROM fq.AdminSettings WHERE [key] = 'groqEnabled') = N'false' THEN 0 ELSE 1 END,
+--         0;
+-- END
+-- GO
 
 -- Verify
 SELECT 'Users.isDeleted' AS [check], CASE WHEN COL_LENGTH('fq.Users', 'isDeleted') IS NOT NULL THEN 'ok' ELSE 'MISSING' END AS result

@@ -22,10 +22,10 @@ from app.errors import ValidationError
 from app.models.ai_provider import AiProvider
 from app.security.secret_cipher import decrypt_secret, encrypt_secret
 
-DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
-DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o"
+# DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+# DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_OPENROUTER_MODEL = "google/gemma-4-26b-a4b-it:free"
 _CHAT_SUFFIX = "/chat/completions"
 
 
@@ -82,17 +82,17 @@ def _env_fallback_provider_configs() -> list[ProviderConfig]:
             )
         )
 
-    groq_key = (env_settings.GROQ_API_KEY or "").strip()
-    if groq_key and env_settings.GROQ_ENABLED:
-        configs.append(
-            ProviderConfig(
-                id=None,
-                name="Groq",
-                baseUrl=DEFAULT_GROQ_BASE_URL,
-                model=env_settings.GROQ_MODEL or DEFAULT_GROQ_MODEL,
-                apiKey=groq_key,
-            )
-        )
+    # groq_key = (env_settings.GROQ_API_KEY or "").strip()
+    # if groq_key and env_settings.GROQ_ENABLED:
+    #     configs.append(
+    #         ProviderConfig(
+    #             id=None,
+    #             name="Groq",
+    #             baseUrl=DEFAULT_GROQ_BASE_URL,
+    #             model=env_settings.GROQ_MODEL or DEFAULT_GROQ_MODEL,
+    #             apiKey=groq_key,
+    #         )
+    #     )
 
     return configs
 
