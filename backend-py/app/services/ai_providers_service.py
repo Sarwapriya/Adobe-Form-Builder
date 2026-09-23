@@ -24,6 +24,8 @@ from app.security.secret_cipher import decrypt_secret, encrypt_secret
 
 DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o"
 _CHAT_SUFFIX = "/chat/completions"
 
 
@@ -65,25 +67,46 @@ def get_ai_provider(db: Session, id: str) -> Optional[AiProvider]:
     return db.get(AiProvider, id)
 
 
+def _env_fallback_provider_configs() -> list[ProviderConfig]:
+    configs: list[ProviderConfig] = []
+
+    openrouter_key = (env_settings.OPENROUTER_API_KEY or "").strip()
+    if openrouter_key and env_settings.OPENROUTER_ENABLED:
+        configs.append(
+            ProviderConfig(
+                id=None,
+                name="OpenRouter",
+                baseUrl=DEFAULT_OPENROUTER_BASE_URL,
+                model=env_settings.OPENROUTER_MODEL or DEFAULT_OPENROUTER_MODEL,
+                apiKey=openrouter_key,
+            )
+        )
+
+    groq_key = (env_settings.GROQ_API_KEY or "").strip()
+    if groq_key and env_settings.GROQ_ENABLED:
+        configs.append(
+            ProviderConfig(
+                id=None,
+                name="Groq",
+                baseUrl=DEFAULT_GROQ_BASE_URL,
+                model=env_settings.GROQ_MODEL or DEFAULT_GROQ_MODEL,
+                apiKey=groq_key,
+            )
+        )
+
+    return configs
+
+
 def list_enabled_provider_configs(db: Session) -> list[ProviderConfig]:
     """The enabled providers that have a usable key, in fallback order. If none
-    have ever been added in the DB, falls back to a Groq provider built from the
-    legacy `GROQ_*` environment variables (so a deployment that was only ever
-    configured through env keeps working)."""
+    have ever been added in the DB, falls back to whichever of the legacy
+    `OPENROUTER_*`/`GROQ_*` environment variables are configured (so a
+    deployment that was only ever configured through env keeps working) —
+    OpenRouter first when both are set, since it isn't a hidden-reasoning
+    model the way Groq's default is."""
     rows = list_ai_providers(db)
     if not rows:
-        api_key = (env_settings.GROQ_API_KEY or "").strip()
-        if api_key and env_settings.GROQ_ENABLED:
-            return [
-                ProviderConfig(
-                    id=None,
-                    name="Groq",
-                    baseUrl=DEFAULT_GROQ_BASE_URL,
-                    model=env_settings.GROQ_MODEL or DEFAULT_GROQ_MODEL,
-                    apiKey=api_key,
-                )
-            ]
-        return []
+        return _env_fallback_provider_configs()
 
     configs: list[ProviderConfig] = []
     for row in rows:

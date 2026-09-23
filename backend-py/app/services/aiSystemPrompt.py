@@ -55,8 +55,15 @@ MUTATING_TOOL_DESCRIPTIONS = """
 
 def _build_tool_descriptions(role: str) -> str:
     lookup_section = FORMIQ_LOOKUP_TOOL_DESCRIPTIONS
-    if is_admin_role(role):
-        lookup_section = f"{lookup_section}\n\n{ADMIN_MCP_SUPPLEMENT_NOTE}"
+    # MCP-SQL access is disabled at the code level (see
+    # mcp_sql_client.is_enabled) -- admins get only the same four fixed
+    # tools as every other role. Telling the model about a "DATABASE QUERY
+    # TOOLS" section that _build_mcp_tools_section will now never actually
+    # append would be actively misleading, not just unused. Uncomment both
+    # this block and mcp_sql_client.is_enabled's override together to
+    # restore MCP access.
+    # if is_admin_role(role):
+    #     lookup_section = f"{lookup_section}\n\n{ADMIN_MCP_SUPPLEMENT_NOTE}"
     return "\n".join([
         "Read-only tools (executed immediately; results are given back to you as a TOOL RESULTS section):",
         lookup_section,

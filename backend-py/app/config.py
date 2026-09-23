@@ -53,13 +53,21 @@ class Settings(BaseSettings):
     FABRIX_OPENAPI_TOKEN: Optional[str] = None
     FABRIX_USER_EMAIL: Optional[str] = None
 
-    # --- Groq env fallback. Other AI providers are now managed in the admin UI
-    # (Configuration > AI Assistant > Other AI Providers, table fq.AiProviders);
-    # these variables are only used to build a Groq provider while that table has
-    # no rows at all — see ai_providers_service.list_enabled_provider_configs. ---
+    # --- Groq/OpenRouter env fallback. Other AI providers are now managed in the
+    # admin UI (Configuration > AI Assistant > Other AI Providers, table
+    # fq.AiProviders); these variables are only used to build a provider while
+    # that table has no rows at all — see
+    # ai_providers_service.list_enabled_provider_configs. When both are set,
+    # OpenRouter is preferred (listed first) since it isn't a hidden-reasoning
+    # model like Groq's default openai/gpt-oss-120b, which was intermittently
+    # producing empty responses under Groq's tight per-minute token cap. ---
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL: str = "openai/gpt-oss-120b"
     GROQ_ENABLED: bool = True
+
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_MODEL: str = "openai/gpt-4o"
+    OPENROUTER_ENABLED: bool = True
 
     FORMBUILDER_NOTIFY_EMAIL: Optional[str] = None
 

@@ -36,7 +36,8 @@ async def send_message(request: dict[str, Any], db: Any) -> dict[str, Any]:
         print(f"[aiProviderService] FabriX unavailable ({fabrix_result['error']}) — no other AI provider is enabled")
         return fabrix_result
 
-    print(f"[aiProviderService] FabriX unavailable ({fabrix_result['error']}) — trying {len(providers)} other provider(s)")
+    provider_names = [f"{p.name!r} (id={getattr(p, 'id', None)})" for p in providers]
+    print(f"[aiProviderService] FabriX unavailable ({fabrix_result['error']}) — trying {len(providers)} other provider(s): {provider_names}")
     last_result = fabrix_result
     for provider in providers:
         last_result = await send_provider(request, provider)

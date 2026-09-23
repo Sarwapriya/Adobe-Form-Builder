@@ -37,7 +37,19 @@ _tools_cache_at: float = 0.0
 
 
 def is_enabled() -> bool:
-    return bool(settings.MCP_SQL_ENABLED and settings.MCP_SQL_SERVER_URL)
+    # MCP-SQL access is disabled at the code level per explicit request — the
+    # AI assistant must ground every answer only in this app's own direct
+    # database access (ax-innovation-sqlserver.database.windows.net, via the
+    # four fixed tools in aiCampaignTools.py), not MCP's raw-SQL bridge to
+    # either connected database. This deliberately overrides MCP_SQL_ENABLED
+    # so a stray env-var flip on a VM can't silently re-enable it. Every
+    # caller (list_tools, call_tool, and aiAssistantService's
+    # _build_mcp_tools_section/_execute_mcp_tool) funnels through this one
+    # function, so disabling it here is the single point of control — to
+    # restore the original env-driven behavior, delete this early return and
+    # uncomment the line below it.
+    return False
+    # return bool(settings.MCP_SQL_ENABLED and settings.MCP_SQL_SERVER_URL)
 
 
 def _auth_headers() -> Optional[dict[str, str]]:
