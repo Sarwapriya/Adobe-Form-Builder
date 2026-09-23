@@ -106,6 +106,20 @@ async def send_message(request: dict[str, Any], provider: ProviderConfig) -> dic
         if finish_reason == "content_filter":
             print(f"{log_prefix} status=refusal")
             return {"ok": False, "error": f"{label} declined to respond to this request."}
+        if finish_reason == "length":
+            # Reasoning-capable models (gpt-oss on Groq, etc.) emit hidden
+            # chain-of-thought tokens before the real answer, counted against
+            # the same completion budget _build_body computed above — on a
+            # long conversation (more history/campaign-context turns already
+            # eating into the prompt side of Groq's combined TPM cap), that
+            # budget can be small enough that the model exhausts it on
+            # reasoning alone and never emits a single visible token.
+            print(f"{log_prefix} status=empty_length maxCompletionTokens={body.get('max_completion_tokens') or body.get('max_tokens')}")
+            return {
+                "ok": False,
+                "error": f"{label} ran out of its response budget before producing any visible text "
+                         "(likely spent it on internal reasoning) — try a shorter question or a shorter conversation.",
+            }
         return {"ok": False, "error": f"{label} response did not include any text"}
 
     usage = payload.get("usage") or {}

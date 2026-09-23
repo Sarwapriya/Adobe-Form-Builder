@@ -16,8 +16,13 @@ from typing import Any
 
 async def send_message(request: dict[str, Any], db: Any) -> dict[str, Any]:
     """Tries FabriX first, then each enabled other provider in turn. Returns
-    the first success; if every one fails, FabriX's own error (the primary
-    provider's, and what the customer-facing message is based on). Never raises."""
+    the first success; if every one fails, the LAST one actually attempted —
+    FabriX's own error only when it was the only one tried (no other provider
+    enabled). Returning FabriX's error after other providers were tried and
+    failed would be actively misleading whenever FabriX is deliberately
+    disabled (its error is then always the same stale "disabled" message,
+    which hides the real, and often transient, reason the other provider(s)
+    just failed for). Never raises."""
     from app.services.ai_providers_service import list_enabled_provider_configs
     from app.services.fabrixAIService import send_message as send_fabrix
     from app.services.openaiCompatAIService import send_message as send_provider
@@ -32,10 +37,11 @@ async def send_message(request: dict[str, Any], db: Any) -> dict[str, Any]:
         return fabrix_result
 
     print(f"[aiProviderService] FabriX unavailable ({fabrix_result['error']}) — trying {len(providers)} other provider(s)")
+    last_result = fabrix_result
     for provider in providers:
-        result = await send_provider(request, provider)
-        if result["ok"]:
-            return result
-        print(f"[aiProviderService] {provider.name!r} failed ({result['error']})")
+        last_result = await send_provider(request, provider)
+        if last_result["ok"]:
+            return last_result
+        print(f"[aiProviderService] {provider.name!r} failed ({last_result['error']})")
 
-    return fabrix_result
+    return last_result
