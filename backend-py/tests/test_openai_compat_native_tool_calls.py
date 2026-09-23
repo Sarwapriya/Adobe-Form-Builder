@@ -40,3 +40,37 @@ def test_empty_content_without_tool_calls_still_fails(monkeypatch):
     result = _run_with_response(monkeypatch, {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": ""}}]})
     assert result["ok"] is False
     assert "_retryableEmptyContent" not in result
+
+
+def test_tool_call_recovered_from_reasoning(monkeypatch):
+    reasoning = 'User wants HR questions. Use SEARCH_QUESTIONS.\n{"tool": "SEARCH_QUESTIONS", "args": {"searchText": "HR"}}'
+    result = _run_with_response(monkeypatch, {"choices": [{
+        "finish_reason": "stop", "message": {"role": "assistant", "content": "", "reasoning": reasoning},
+    }]})
+    assert result["ok"] is True
+    assert _extract_tool_call(result["replyText"])["call"] == {"tool": "SEARCH_QUESTIONS", "args": {"searchText": "HR"}}
+
+
+def test_harmony_functions_prefix_recovered_from_reasoning(monkeypatch):
+    reasoning = 'Need to search. to=functions.SEARCH_QUESTIONS json {"searchText": "hand raiser"}'
+    result = _run_with_response(monkeypatch, {"choices": [{
+        "finish_reason": "stop", "message": {"role": "assistant", "content": "", "reasoning": reasoning},
+    }]})
+    assert _extract_tool_call(result["replyText"])["call"] == {"tool": "SEARCH_QUESTIONS", "args": {"searchText": "hand raiser"}}
+
+
+def test_empty_reply_retry_adds_nudge_turn(monkeypatch):
+    seen: list[list[dict]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append(body["messages"])
+        content = "" if len(seen) == 1 else "Here are some HR question ideas."
+        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": content, "reasoning": "thinking"}}]})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(openaiCompatAIService.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    result = asyncio.run(openaiCompatAIService.send_message({"messages": [{"role": "user", "content": "hi"}]}, _provider()))
+    assert result == {"ok": True, "replyText": "Here are some HR question ideas.", "model": "openai/gpt-oss-120b", "tokenUsage": 0}
+    assert len(seen) == 2 and len(seen[1]) == len(seen[0]) + 1
+    assert seen[1][-1]["content"] == openaiCompatAIService._EMPTY_REPLY_NUDGE
