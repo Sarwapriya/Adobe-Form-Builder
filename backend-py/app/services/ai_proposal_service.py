@@ -4,7 +4,7 @@
     and, only if it passes, stores it as a new immutable `AIFormProposal`
     version. Reused items must cite `sourceFormId`/`sourceQuestionId`/
     `sourceAnswerId`, verified to exist AND be visible to the user through the
-    MCP server's scoped `get_campaign_details`; new items must use `id: null`
+    scoped `get_campaign_details` (campaign_retrieval); new items must use `id: null`
     (the model never invents database ids). The target subsidiary comes from
     the session for standard users, and is validated for admins.
   * `approve_proposal` (UI only, `POST /ai/proposals/{id}/approve`): the user's
@@ -172,11 +172,11 @@ def build_questions(proposal: FormProposal, default_locale: str) -> list[Questio
     return questions
 
 
-async def _fetch_source(cache: dict[str, dict[str, Any]], form_id: str, auth: dict) -> dict[str, Any]:
-    from app.services.mcp_sql_client import call_formiq_tool
+async def _fetch_source(db: Session, cache: dict[str, dict[str, Any]], form_id: str, auth: dict) -> dict[str, Any]:
+    from app.services.campaign_retrieval import call_campaign_tool
 
     if form_id not in cache:
-        cache[form_id] = await call_formiq_tool("get_campaign_details", {"formId": form_id}, auth)
+        cache[form_id] = await call_campaign_tool(db, "get_campaign_details", {"formId": form_id}, auth)
     return cache[form_id]
 
 
@@ -205,7 +205,7 @@ async def check_proposal(db: Session, auth: dict, raw: Any) -> dict[str, Any]:
     # Base campaign (settings/profile fields to copy) — must be visible to this user.
     base_details: Optional[dict[str, Any]] = None
     if proposal.baseFormId:
-        base_details = await _fetch_source(sources, proposal.baseFormId, auth)
+        base_details = await _fetch_source(db, sources, proposal.baseFormId, auth)
         if "error" in base_details:
             errors.append(_issue("baseFormId", "UNKNOWN_SOURCE_ID", "baseFormId is not a campaign you can access"))
             base_details = None
@@ -258,7 +258,7 @@ async def check_proposal(db: Session, auth: dict, raw: Any) -> dict[str, Any]:
         if q.sourceQuestionId and not q.sourceFormId:
             errors.append(_issue(f"{path}.sourceFormId", "REQUIRED", "sourceQuestionId needs its sourceFormId"))
         elif q.sourceFormId:
-            details = await _fetch_source(sources, q.sourceFormId, auth)
+            details = await _fetch_source(db, sources, q.sourceFormId, auth)
             if "error" in details:
                 errors.append(_issue(f"{path}.sourceFormId", "UNKNOWN_SOURCE_ID", "sourceFormId is not a campaign you can access"))
             elif q.sourceQuestionId:
@@ -282,7 +282,7 @@ async def check_proposal(db: Session, auth: dict, raw: Any) -> dict[str, Any]:
         if proposal.baseFormId:
             from app.services.aiCampaignTools import get_caller_form_detail
 
-            # Backend business-rule read (never sent to the LLM), same access rule as the MCP check above.
+            # Backend business-rule read (never sent to the LLM), same access rule as the retrieval check above.
             ctx = {"userId": auth["sub"], "role": auth["role"], "subsidiaryId": auth.get("subsidiaryId")}
             detail = get_caller_form_detail(db, ctx, proposal.baseFormId)
             content = (detail or {}).get("draft") or (detail or {}).get("published")

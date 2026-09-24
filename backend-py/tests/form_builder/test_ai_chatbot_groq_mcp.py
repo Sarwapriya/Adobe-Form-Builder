@@ -11,6 +11,7 @@ import uuid
 import pytest
 from sqlalchemy import select, update
 
+from app.config import settings
 from app.models.ai_action import AIAction
 from app.models.ai_conversation import AIConversation
 from app.models.ai_form_proposal import AIFormProposal
@@ -43,6 +44,9 @@ def fake_mcp(monkeypatch):
                                    "origin": "admin", "questionCount": 1, "locales": ["en_GB"], "updatedAt": None}]}
         return {"questions": []}
 
+    # These tests drive retrieval through the MCP switch with a fake server;
+    # the default direct path is covered in test_campaign_retrieval.py.
+    monkeypatch.setattr(settings, "AI_RETRIEVAL_SOURCE", "mcp")
     monkeypatch.setattr(mcp_sql_client, "call_formiq_tool", call)
     return calls
 

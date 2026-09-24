@@ -8,10 +8,11 @@ Flow for one user message (`send_chat_message`):
 
 Tools (CHAT_TOOLS):
   * Retrieval (RAG): search_previous_campaigns / get_campaign_details /
-    search_question_library run on the MCP server (mcp_sql_client.
-    call_formiq_tool), which reads only AX-Innovation (crm-ax) and scopes every
-    query to the authenticated user from a signed header. The chatbot itself
-    has no database access for retrieval, and nothing from DWF is reachable.
+    search_question_library (campaign_retrieval.call_campaign_tool) — fixed,
+    parameterized reads of the backend's own FormIQ database (AX-Innovation
+    crm-ax on the VM), scoped to the authenticated session user, returning an
+    allow-listed projection. AI_RETRIEVAL_SOURCE=mcp routes them to the MCP
+    server instead. Nothing from DWF is reachable.
   * validate_form: checks a proposed new draft (ai_proposal_service); only a
     valid one is stored and shown to the user, with an "Approve & Save" action.
     Saving happens only through that click (routers/ai.py), never from here.
@@ -38,7 +39,7 @@ from app.models.ai_action import AIAction
 from app.models.ai_conversation import AIConversation
 from app.models.ai_conversation_message import AIConversationMessage
 from app.models.user import is_admin_role
-from app.services import ai_proposal_service, llmChatService, mcp_sql_client
+from app.services import ai_proposal_service, campaign_retrieval, llmChatService
 from app.services.aiCampaignTools import AiToolCallerContext, get_caller_form_detail
 from app.services.aiProviderService import send_message as send_ai_message
 from app.services.aiSystemPrompt import HELPER_SYSTEM_PROMPT, build_system_prompt
@@ -376,7 +377,7 @@ async def send_chat_message(db: Session, auth: dict, request: dict[str, Any]) ->
         form_id = conversation.formId or request.get("formId")
         campaign = None
         if form_id:
-            details = await mcp_sql_client.call_formiq_tool("get_campaign_details", {"formId": form_id}, auth)
+            details = await campaign_retrieval.call_campaign_tool(db, "get_campaign_details", {"formId": form_id}, auth)
             campaign = None if "error" in details else details
 
         tools = chat_tools(campaign is not None)
@@ -441,8 +442,8 @@ async def _run_tool_loop(
                 result: Any = {"error": {"code": "UNKNOWN_TOOL", "message": f"{name} is not available"}}
             elif args is None:
                 result = {"error": {"code": "BAD_ARGUMENTS", "message": "arguments must be a JSON object"}}
-            elif name in mcp_sql_client.FORMIQ_MCP_TOOLS:
-                result = await mcp_sql_client.call_formiq_tool(name, args, auth)
+            elif name in campaign_retrieval.CAMPAIGN_TOOLS:
+                result = await campaign_retrieval.call_campaign_tool(db, name, args, auth)
                 if name == "search_previous_campaigns":
                     references = _references_from_search(result) or references
             elif name == "validate_form":

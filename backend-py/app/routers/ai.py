@@ -18,7 +18,7 @@ from app.db import get_db
 from app.errors import AppError, ConflictError, NotFoundError
 from app.middleware.rate_limit import AI_RATE_LIMIT, limiter
 from app.security.deps import require_auth
-from app.services import ai_proposal_service, aiAssistantService, mcp_sql_client
+from app.services import ai_proposal_service, aiAssistantService, campaign_retrieval
 
 router = APIRouter(dependencies=[Depends(require_auth)])
 
@@ -156,17 +156,18 @@ async def search_campaigns(
     project_code: Optional[str] = Query(None, alias="projectCode"),
     status_filter: Optional[str] = Query(None, alias="status"),
     auth: dict = Depends(require_auth),
+    db: Session = Depends(get_db),
 ) -> list[dict]:
-    """Non-chat convenience endpoint over the MCP search_previous_campaigns tool."""
+    """Non-chat convenience endpoint over the search_previous_campaigns retrieval tool."""
     args = {k: v for k, v in {"query": search_text, "projectCode": project_code, "status": status_filter}.items() if v}
-    result = await mcp_sql_client.call_formiq_tool("search_previous_campaigns", args, auth)
+    result = await campaign_retrieval.call_campaign_tool(db, "search_previous_campaigns", args, auth)
     return aiAssistantService._references_from_search(result)
 
 
 @router.get("/campaigns/{form_id}")
-async def get_campaign(form_id: str, auth: dict = Depends(require_auth)) -> dict:
-    """Non-chat convenience endpoint over the MCP get_campaign_details tool."""
-    campaign = await mcp_sql_client.call_formiq_tool("get_campaign_details", {"formId": form_id}, auth)
+async def get_campaign(form_id: str, auth: dict = Depends(require_auth), db: Session = Depends(get_db)) -> dict:
+    """Non-chat convenience endpoint over the get_campaign_details retrieval tool."""
+    campaign = await campaign_retrieval.call_campaign_tool(db, "get_campaign_details", {"formId": form_id}, auth)
     if "error" in campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="campaign not found")
     return campaign

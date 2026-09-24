@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     # OPENAI_*), then Groq (an api.groq.com row, else GROQ_*) — see
     # ai_providers_service.get_chat_provider_config. OpenRouter is only used by
     # the admin provider list, never by the chatbot. ---
+    # Where the chatbot's campaign retrieval runs: "direct" (default — the
+    # backend's own DB session, see campaign_retrieval.py) or "mcp" (the MCP
+    # server's FormIQ tools; needs MCP_SQL_SERVER_URL + MCP_USER_CONTEXT_SECRET).
+    AI_RETRIEVAL_SOURCE: str = "direct"
+
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4.1-mini"
     OPENAI_ENABLED: bool = True
