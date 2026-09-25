@@ -9,6 +9,7 @@ import {
   Radio,
   RadioGroup,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from "@mui/material";
@@ -16,8 +17,11 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import { ApiError } from "../../api/apiClient";
 import {
   getDeploymentSettings,
+  getResourceCheckSettings,
   saveDeploymentTarget,
+  saveResourceCheckSettings,
   setActiveDeploymentEnvironment,
+  type ResourceCheckSettings,
   type SftpDeploymentSettings,
   type SftpEnvironment,
   type SftpTargetConfig,
@@ -137,6 +141,134 @@ function SftpTargetPanel({
   );
 }
 
+function validMinutes(value: string): boolean {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= 1440;
+}
+
+/** After each successful SFTP deploy, the backend checks (after `delayMinutes`)
+ * that every published file is served by each Adobe Campaign frontal server
+ * listed here; if anything is missing it re-checks `recheckDelayMinutes` after
+ * that first check completed, and emails the admins if it still fails (see
+ * backend's resource_check_service.py and the form page's ResourceCheckPanel). */
+function ResourceCheckSettingsPanel() {
+  const [settings, setSettings] = useState<ResourceCheckSettings | null>(null);
+  const [enabled, setEnabled] = useState(true);
+  const [hostsText, setHostsText] = useState("");
+  const [delay, setDelay] = useState("20");
+  const [recheckDelay, setRecheckDelay] = useState("5");
+  const [saving, setSaving] = useState(false);
+
+  function apply(next: ResourceCheckSettings) {
+    setSettings(next);
+    setEnabled(next.enabled);
+    setHostsText(next.hosts.join("\n"));
+    setDelay(String(next.delayMinutes));
+    setRecheckDelay(String(next.recheckDelayMinutes));
+  }
+
+  useEffect(() => {
+    getResourceCheckSettings()
+      .then(apply)
+      .catch((err) => showToast(err instanceof ApiError ? err.message : "Failed to load availability check settings", "error"));
+  }, []);
+
+  const hosts = hostsText.split(/[\n,]+/).map((h) => h.trim()).filter(Boolean);
+  const delayValid = validMinutes(delay);
+  const recheckDelayValid = validMinutes(recheckDelay);
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      apply(
+        await saveResourceCheckSettings({
+          enabled,
+          hosts,
+          delayMinutes: Number(delay),
+          recheckDelayMinutes: Number(recheckDelay),
+        }),
+      );
+      showToast("Saved.", "success");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to save availability check settings", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+      <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+        Availability check after deployment
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+        After every successful SFTP push, FormIQ waits the first delay below, then requests each published file from
+        every server listed (https://&lt;server&gt;.campaign.adobe.com/res/tracking/&lt;file&gt;). If anything is
+        missing, it re-checks once the re-check delay after that first check finished, and emails the admins if it
+        still fails. Results show on the form page.
+      </Typography>
+      {!settings ? (
+        <LoadingState />
+      ) : (
+        <Box component="form" onSubmit={handleSave}>
+          <Stack spacing={1.5} sx={{ mb: 1.5, maxWidth: 520 }}>
+            <FormControlLabel
+              control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
+              label={enabled ? "Automatic checks on" : "Automatic checks off"}
+            />
+            <TextField
+              label="Frontal servers (one per line)"
+              size="small"
+              multiline
+              minRows={4}
+              value={hostsText}
+              onChange={(e) => setHostsText(e.target.value)}
+              helperText="Adobe Campaign server names like samsung-mena-mid-prod7-1, or a full host name"
+              error={hosts.length === 0}
+            />
+            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+              <TextField
+                label="First check (minutes after deployment)"
+                size="small"
+                type="number"
+                value={delay}
+                onChange={(e) => setDelay(e.target.value)}
+                error={!delayValid}
+                helperText={delayValid ? " " : "Between 1 and 1440 minutes"}
+                sx={{ width: 250 }}
+              />
+              <TextField
+                label="Re-check (minutes after a failed check)"
+                size="small"
+                type="number"
+                value={recheckDelay}
+                onChange={(e) => setRecheckDelay(e.target.value)}
+                error={!recheckDelayValid}
+                helperText={recheckDelayValid ? " " : "Between 1 and 1440 minutes"}
+                sx={{ width: 250 }}
+              />
+            </Stack>
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            <Button
+              type="submit"
+              size="small"
+              variant="contained"
+              disabled={saving || hosts.length === 0 || !delayValid || !recheckDelayValid}
+            >
+              {saving ? "Saving..." : "Save availability check"}
+            </Button>
+            <Button size="small" onClick={() => setHostsText(settings.defaultHosts.join("\n"))}>
+              Reset to the 4 MENA servers
+            </Button>
+          </Stack>
+        </Box>
+      )}
+    </Paper>
+  );
+}
+
 /**
  * Admin-only Adobe Campaign SFTP deployment settings (Configuration >
  * Deployment) — two independent targets (Staging/Production), each with its
@@ -220,6 +352,8 @@ export function DeploymentSettingsManager() {
             <SftpTargetPanel environment="staging" target={settings.staging} onSaved={setSettings} />
             <SftpTargetPanel environment="production" target={settings.production} onSaved={setSettings} />
           </Stack>
+
+          <ResourceCheckSettingsPanel />
         </>
       )}
     </Paper>

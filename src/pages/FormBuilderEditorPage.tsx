@@ -16,6 +16,7 @@ import { BuilderValidationPanel } from "../components/formBuilder/BuilderValidat
 import { BuilderActionBar } from "../components/formBuilder/BuilderActionBar";
 import { ContributionReviewPanel } from "../components/formBuilder/ContributionReviewPanel";
 import { AdHocReviewPanel } from "../components/formBuilder/AdHocReviewPanel";
+import { ResourceCheckPanel } from "../components/formBuilder/ResourceCheckPanel";
 
 const PROFILE_FIELD_KEYS = new Set<string>([
   "firstName",
@@ -99,6 +100,8 @@ export function FormBuilderEditorPage() {
       {id && pendingReview && <AdHocReviewPanel formId={id} />}
 
       {id && <ContributionReviewPanel formId={id} />}
+
+      {id && <ResourceCheckPanel formId={id} />}
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2, alignItems: "flex-start" }}>
         <Box sx={{ flex: "1 1 auto", minWidth: 0, width: "100%" }}>

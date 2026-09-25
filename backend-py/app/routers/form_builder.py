@@ -22,7 +22,7 @@ from app.schemas.form_builder import (
     ReviewNoteBody,
 )
 from app.security.deps import require_admin
-from app.services import form_builder_service, form_contribution_service
+from app.services import form_builder_service, form_contribution_service, resource_check_service
 from app.services.preview_service import PreviewVariant, build_form_version_preview
 
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -115,6 +115,21 @@ def publish_form(id: str, db: Session = Depends(get_db), auth: dict = Depends(re
         validation: ValidationResult = result["validation"]
         raise HTTPException(status_code=422, detail={"error": "form is not valid", "validation": validation.model_dump()})
     return {"validation": result["validation"], "deployment": result["deployment"]}
+
+
+@router.get("/{id}/resource-checks")
+def list_resource_checks(id: str, db: Session = Depends(get_db)) -> dict:
+    """The form's recent Adobe frontal-server availability checks (newest
+    first, each with per-URL results) — see resource_check_service."""
+    settings = resource_check_service.get_resource_check_settings(db)
+    return {"enabled": settings.enabled, "checks": resource_check_service.list_checks_for_form(db, id)}
+
+
+@router.post("/{id}/resource-checks", status_code=status.HTTP_202_ACCEPTED)
+def start_resource_check(id: str, db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> dict:
+    """"Check now": checks the published files right away, in the background."""
+    check = resource_check_service.start_manual_check(db, id, auth["sub"])
+    return resource_check_service.serialize_check(check, [])
 
 
 @router.post("/{id}/unpublish", status_code=status.HTTP_204_NO_CONTENT)

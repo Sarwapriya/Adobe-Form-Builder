@@ -44,6 +44,7 @@ from app.services import (
     project_code_service,
     qa_run_service,
     question_master_service,
+    resource_check_service,
     sftp_settings_service,
     smtp_settings_service,
     subsidiary_locale_service,
@@ -944,6 +945,35 @@ class SetActiveSftpEnvironmentBody(BaseModel):
 def post_active_deployment_environment(body: SetActiveSftpEnvironmentBody, db: Session = Depends(get_db)) -> dict:
     sftp_settings_service.set_active_sftp_environment(db, body.environment)
     return _serialize_sftp_settings(sftp_settings_service.get_sftp_deployment_settings(db))
+
+
+# --- Post-deployment availability check settings -------------------------------
+# Which Adobe Campaign frontal servers to check a published form's files on,
+# and how long after an SFTP deploy (see resource_check_service).
+
+
+class ResourceCheckSettingsBody(BaseModel):
+    enabled: bool
+    hosts: list[str] = Field(min_length=1, max_length=resource_check_service.MAX_HOSTS)
+    delayMinutes: int = Field(ge=resource_check_service.MIN_DELAY_MINUTES, le=resource_check_service.MAX_DELAY_MINUTES)
+    recheckDelayMinutes: int = Field(
+        default=resource_check_service.DEFAULT_RECHECK_DELAY_MINUTES,
+        ge=resource_check_service.MIN_DELAY_MINUTES,
+        le=resource_check_service.MAX_DELAY_MINUTES,
+    )
+
+
+@router.get("/resource-check-settings")
+def get_resource_check_settings(db: Session = Depends(get_db)) -> dict:
+    return resource_check_service.serialize_settings(resource_check_service.get_resource_check_settings(db))
+
+
+@router.patch("/resource-check-settings")
+def patch_resource_check_settings(body: ResourceCheckSettingsBody, db: Session = Depends(get_db)) -> dict:
+    saved = resource_check_service.save_resource_check_settings(
+        db, body.enabled, body.hosts, body.delayMinutes, body.recheckDelayMinutes
+    )
+    return resource_check_service.serialize_settings(saved)
 
 
 # --- QA runs ---------------------------------------------------------------

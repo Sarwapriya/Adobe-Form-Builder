@@ -487,3 +487,24 @@ export function saveDeploymentTarget(environment: SftpEnvironment, input: SftpTa
 export function setActiveDeploymentEnvironment(environment: SftpEnvironment): Promise<SftpDeploymentSettings> {
   return apiClient.post<SftpDeploymentSettings>("/api/v1/admin/deployment-settings/active", { environment });
 }
+
+/** Post-deployment availability check settings (Configuration > Deployment) —
+ * see backend's resource_check_service.py. `hosts` are Adobe Campaign server
+ * names (`<host>.campaign.adobe.com`) or full host names. */
+export interface ResourceCheckSettings {
+  enabled: boolean;
+  hosts: string[];
+  /** First check: minutes after the SFTP deploy (default 20). */
+  delayMinutes: number;
+  /** Re-check: minutes after a failed first check completed (default 5). */
+  recheckDelayMinutes: number;
+  defaultHosts: string[];
+}
+
+export function getResourceCheckSettings(): Promise<ResourceCheckSettings> {
+  return apiClient.get<ResourceCheckSettings>("/api/v1/admin/resource-check-settings");
+}
+
+export function saveResourceCheckSettings(input: Omit<ResourceCheckSettings, "defaultHosts">): Promise<ResourceCheckSettings> {
+  return apiClient.patch<ResourceCheckSettings>("/api/v1/admin/resource-check-settings", input);
+}

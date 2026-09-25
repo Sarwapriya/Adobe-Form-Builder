@@ -31,6 +31,7 @@ from app.errors import AppError, status_code_for
 from app.middleware.rate_limit import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.services.cutoff_reminder_service import start_cutoff_reminder_scheduler
+from app.services.resource_check_service import start_resource_check_scheduler
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.form_builder import router as form_builder_router
@@ -127,6 +128,7 @@ def _start_background_jobs() -> None:
     `cutoff_reminder_service.start_cutoff_reminder_scheduler`'s own doc
     comment for the scheduling contract."""
     start_cutoff_reminder_scheduler()
+    start_resource_check_scheduler()
 
 
 @app.get("/health")

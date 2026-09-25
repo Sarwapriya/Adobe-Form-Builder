@@ -177,6 +177,52 @@ export async function publishForm(formId: string): Promise<PublishResponse> {
   }
 }
 
+/** One post-deployment availability check of a published form's files on the
+ * Adobe Campaign frontal servers — see backend's resource_check_service.py. */
+export type ResourceCheckStatus = "scheduled" | "running" | "passed" | "failed" | "error";
+
+export interface ResourceCheckUrlResult {
+  fileName: string;
+  host: string;
+  url: string;
+  statusCode: number | null;
+  ok: boolean;
+  elapsedMs: number | null;
+  error: string | null;
+}
+
+export interface ResourceCheck {
+  id: string;
+  trigger: "scheduled" | "recheck" | "manual";
+  status: ResourceCheckStatus;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  fileNames: string[];
+  hosts: string[];
+  totalUrls: number;
+  okUrls: number;
+  failedUrls: number;
+  errorMessage: string | null;
+  notifiedAt: string | null;
+  results: ResourceCheckUrlResult[];
+}
+
+export interface ResourceChecksResponse {
+  enabled: boolean;
+  /** Newest first. */
+  checks: ResourceCheck[];
+}
+
+export function getResourceChecks(formId: string): Promise<ResourceChecksResponse> {
+  return apiClient.get<ResourceChecksResponse>(`/api/v1/admin/forms/${formId}/resource-checks`);
+}
+
+/** "Check now" — runs in the background; poll getResourceChecks for the result. */
+export function startResourceCheck(formId: string): Promise<ResourceCheck> {
+  return apiClient.post<ResourceCheck>(`/api/v1/admin/forms/${formId}/resource-checks`);
+}
+
 export function unpublishForm(formId: string): Promise<void> {
   return apiClient.post<void>(`/api/v1/admin/forms/${formId}/unpublish`);
 }

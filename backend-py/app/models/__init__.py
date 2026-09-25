@@ -28,6 +28,7 @@ from app.models.ai_action import AIAction
 from app.models.ai_form_proposal import AIFormProposal
 from app.models.fabrix_model import FabrixModel
 from app.models.ai_provider import AiProvider
+from app.models.resource_check import ResourceCheck, ResourceCheckResult
 
 __all__ = [
     "Base",
@@ -55,4 +56,6 @@ __all__ = [
     "AIFormProposal",
     "FabrixModel",
     "AiProvider",
+    "ResourceCheck",
+    "ResourceCheckResult",
 ]

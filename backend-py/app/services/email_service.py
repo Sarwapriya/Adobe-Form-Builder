@@ -272,6 +272,74 @@ def send_admin_pending_items_summary(db: Session, recipients: list[str], items: 
         print(f"[email_service] Failed to send admin pending-items summary email: {result.error}")
 
 
+# --- Published files missing on the Adobe frontal servers -------------------
+
+
+@dataclass
+class ResourceCheckFailure:
+    file_name: str
+    host: str
+    problem: str
+
+
+_MAX_LISTED_FAILURES = 60
+
+
+def _build_resource_check_failed_message(
+    form_id: str, form_name: str, subsidiary_id: str, project_code: Optional[str], trigger: str,
+    total_urls: int, failures: list[ResourceCheckFailure],
+) -> EmailContent:
+    link = f"{settings.FRONTEND_URL or ''}/admin/form-builder/{form_id}"
+    subject = f"Published files missing on Adobe servers: {form_name}"
+    when = "on both automatic checks after deployment" if trigger == "recheck" else "on a manual check"
+    intro = (
+        f"{len(failures)} of {total_urls} file URLs for this form could not be loaded from the Adobe Campaign "
+        f"frontal servers {when}."
+    )
+    listed = [f"{f.file_name} on {f.host}: {f.problem}" for f in failures[:_MAX_LISTED_FAILURES]]
+    if len(failures) > _MAX_LISTED_FAILURES:
+        listed.append(f"...and {len(failures) - _MAX_LISTED_FAILURES} more (see FormIQ)")
+    rows = [("Form", form_name), ("Subsidiary", subsidiary_id), ("Project code", project_code or "-")]
+    text = (
+        f"{intro}\n\n"
+        + "".join(f"{label}: {value}\n" for label, value in rows)
+        + "\nFailing URLs:\n"
+        + "".join(f"- {line}\n" for line in listed)
+        + f"\nSee the full results and re-check here: {link}\n"
+    )
+    html = _render_email_html(
+        title="Published files missing on Adobe servers",
+        intro=intro,
+        rows=rows,
+        items=listed,
+        cta_label="Open the form in FormIQ",
+        cta_url=link,
+        footer_note="Check the SFTP deployment and the Adobe Campaign server sync, then use \"Check now\" on the form page.",
+    )
+    return EmailContent(subject=subject, text=text, html=html)
+
+
+def send_resource_check_failed_notification(
+    db: Session, *, form_id: str, form_name: str, subsidiary_id: str, project_code: Optional[str],
+    trigger: str, total_urls: int, failures: list[ResourceCheckFailure],
+) -> bool:
+    """Emails every admin (same recipients as every other admin notification).
+    Returns whether it was sent. Never raises."""
+    try:
+        recipients = _resolve_admin_recipients(db)
+        if not recipients or not failures:
+            return False
+        result = send_email(db, recipients, _build_resource_check_failed_message(
+            form_id, form_name, subsidiary_id, project_code, trigger, total_urls, failures,
+        ))
+        if not result.ok:
+            print(f"[email_service] Failed to send resource-check failure email: {result.error}")
+        return result.ok
+    except Exception as err:  # noqa: BLE001
+        print(f"[email_service] Failed to send resource-check failure email: {err}")
+        return False
+
+
 # --- Ad-hoc form submitted for review ---------------------------------------
 
 
