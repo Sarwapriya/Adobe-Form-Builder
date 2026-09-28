@@ -440,10 +440,12 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
 
     # Once Adobe has had time to pick the files up, check they're actually
     # served by every frontal server (resource_check_service; never raises).
-    if deployment.ok and deployment.filesDeployed:
+    if deployment.ok and deployment.filesDeployed and deployment.environment:
         from app.services import resource_check_service
 
-        resource_check_service.schedule_after_deploy(db, form_id, draft_version.id, [f.fileName for f in saved], user_id)
+        resource_check_service.schedule_after_deploy(
+            db, form_id, draft_version.id, [f.fileName for f in saved], user_id, deployment.environment
+        )
 
     return {"outcome": "ok", "validation": validation, "deployment": deployment}
 

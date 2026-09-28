@@ -954,7 +954,8 @@ def post_active_deployment_environment(body: SetActiveSftpEnvironmentBody, db: S
 
 class ResourceCheckSettingsBody(BaseModel):
     enabled: bool
-    hosts: list[str] = Field(min_length=1, max_length=resource_check_service.MAX_HOSTS)
+    staging: list[str] = Field(min_length=1, max_length=resource_check_service.MAX_HOSTS)
+    production: list[str] = Field(min_length=1, max_length=resource_check_service.MAX_HOSTS)
     delayMinutes: int = Field(ge=resource_check_service.MIN_DELAY_MINUTES, le=resource_check_service.MAX_DELAY_MINUTES)
     recheckDelayMinutes: int = Field(
         default=resource_check_service.DEFAULT_RECHECK_DELAY_MINUTES,
@@ -971,7 +972,7 @@ def get_resource_check_settings(db: Session = Depends(get_db)) -> dict:
 @router.patch("/resource-check-settings")
 def patch_resource_check_settings(body: ResourceCheckSettingsBody, db: Session = Depends(get_db)) -> dict:
     saved = resource_check_service.save_resource_check_settings(
-        db, body.enabled, body.hosts, body.delayMinutes, body.recheckDelayMinutes
+        db, body.enabled, body.staging, body.production, body.delayMinutes, body.recheckDelayMinutes
     )
     return resource_check_service.serialize_settings(saved)
 

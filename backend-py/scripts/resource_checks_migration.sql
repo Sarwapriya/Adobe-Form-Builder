@@ -50,8 +50,19 @@ BEGIN
 END
 GO
 
+-- Staging/production split: which SFTP environment each check's deploy
+-- actually targeted, so a staging deploy is checked against staging's
+-- frontal servers, never production's (and vice versa). NULL on
+-- already-existing rows is treated as "production" in code (the only
+-- environment that existed before this column did).
+IF COL_LENGTH('fq.ResourceChecks', 'environment') IS NULL
+    ALTER TABLE fq.ResourceChecks ADD environment NVARCHAR(20) NULL;
+GO
+
 -- Verify
 SELECT 'ResourceChecks table' AS [check], CASE WHEN OBJECT_ID('fq.ResourceChecks', 'U') IS NOT NULL THEN 'ok' ELSE 'MISSING' END AS result
 UNION ALL
-SELECT 'ResourceCheckResults table', CASE WHEN OBJECT_ID('fq.ResourceCheckResults', 'U') IS NOT NULL THEN 'ok' ELSE 'MISSING' END;
+SELECT 'ResourceCheckResults table', CASE WHEN OBJECT_ID('fq.ResourceCheckResults', 'U') IS NOT NULL THEN 'ok' ELSE 'MISSING' END
+UNION ALL
+SELECT 'ResourceChecks.environment column', CASE WHEN COL_LENGTH('fq.ResourceChecks', 'environment') IS NOT NULL THEN 'ok' ELSE 'MISSING' END;
 GO

@@ -55,24 +55,25 @@ function shortHost(host: string): string {
 
 function describe(check: ResourceCheck): { label: string; color: "default" | "info" | "success" | "error" | "warning"; detail: string } {
   const kind = check.trigger === "recheck" ? "Re-check" : check.trigger === "manual" ? "Manual check" : "Automatic check";
+  const env = check.environment === "production" ? "Production" : "Staging";
   switch (check.status) {
     case "scheduled": {
       const minutes = minutesUntil(check.scheduledFor);
       return {
         label: "Scheduled",
         color: "info",
-        detail: `${kind} at ${formatTime(check.scheduledFor)}${minutes > 0 ? ` (in ${minutes} min)` : " (starting shortly)"}`,
+        detail: `${kind} (${env}) at ${formatTime(check.scheduledFor)}${minutes > 0 ? ` (in ${minutes} min)` : " (starting shortly)"}`,
       };
     }
     case "running":
-      return { label: "Checking…", color: "info", detail: `${kind}: checking ${check.totalUrls} URLs` };
+      return { label: "Checking…", color: "info", detail: `${kind} (${env}): checking ${check.totalUrls} URLs` };
     case "passed":
-      return { label: `All ${check.totalUrls} URLs OK`, color: "success", detail: `${kind} at ${formatTime(check.completedAt)}` };
+      return { label: `All ${check.totalUrls} URLs OK`, color: "success", detail: `${kind} (${env}) at ${formatTime(check.completedAt)}` };
     case "failed":
       return {
         label: `${check.failedUrls} of ${check.totalUrls} failed`,
         color: "error",
-        detail: `${kind} at ${formatTime(check.completedAt)}${check.notifiedAt ? " · admins emailed" : ""}`,
+        detail: `${kind} (${env}) at ${formatTime(check.completedAt)}${check.notifiedAt ? " · admins emailed" : ""}`,
       };
     default:
       return { label: "Check error", color: "warning", detail: check.errorMessage ?? "The check could not run." };

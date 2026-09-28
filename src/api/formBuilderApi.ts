@@ -195,6 +195,9 @@ export interface ResourceCheck {
   id: string;
   trigger: "scheduled" | "recheck" | "manual";
   status: ResourceCheckStatus;
+  /** Which SFTP environment this check's deploy actually targeted — the
+   * hosts checked are always that environment's, never a mixed list. */
+  environment: "staging" | "production";
   scheduledFor: string | null;
   startedAt: string | null;
   completedAt: string | null;

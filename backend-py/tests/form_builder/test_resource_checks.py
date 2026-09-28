@@ -53,8 +53,8 @@ def _form_id() -> str:
     return str(uuid.uuid4())
 
 
-def _schedule(db, form_id=None, due_now=True):
-    check = svc.schedule_after_deploy(db, form_id or _form_id(), str(uuid.uuid4()), FILES, None)
+def _schedule(db, form_id=None, due_now=True, environment="production"):
+    check = svc.schedule_after_deploy(db, form_id or _form_id(), str(uuid.uuid4()), FILES, None, environment)
     if due_now:
         check.scheduledFor = datetime.now(timezone.utc) - timedelta(seconds=1)
         db.commit()
@@ -74,36 +74,67 @@ def test_urls_match_the_frontal_server_pattern():
     assert svc.build_url("cdn.example.com", "a b.js") == "https://cdn.example.com/res/tracking/a%20b.js"
 
 
-def test_default_settings_are_the_four_mena_servers_and_20_minutes(db_session):
+def test_default_settings_are_staging_and_production_lists(db_session):
     config = svc.get_resource_check_settings(db_session)
     assert config.enabled and config.delayMinutes == 20 and config.recheckDelayMinutes == 5
-    assert config.hosts == svc.DEFAULT_HOSTS and len(config.hosts) == 4
+    assert config.production == svc.DEFAULT_PRODUCTION_HOSTS and len(config.production) == 4
+    assert config.staging == svc.DEFAULT_STAGING_HOSTS and len(config.staging) == 2
 
 
-def test_settings_are_cleaned_and_validated(db_session):
-    saved = svc.save_resource_check_settings(db_session, True, [" HTTPS://Host-A/ ", "host-a", "host-b"], 30)
-    assert saved.hosts == ["host-a", "host-b"] and saved.delayMinutes == 30
+def test_hosts_for_picks_the_matching_environment(db_session):
+    config = svc.get_resource_check_settings(db_session)
+    assert svc.hosts_for(config, "staging") == config.staging
+    assert svc.hosts_for(config, "production") == config.production
+
+
+def test_settings_are_cleaned_and_validated_independently(db_session):
+    saved = svc.save_resource_check_settings(
+        db_session, True, [" HTTPS://Stage-A/ ", "stage-a"], ["host-a", "host-b"], 30,
+    )
+    assert saved.staging == ["stage-a"] and saved.production == ["host-a", "host-b"] and saved.delayMinutes == 30
     with pytest.raises(svc.ValidationError):
-        svc.save_resource_check_settings(db_session, True, ["bad host/../x"], 20)
+        svc.save_resource_check_settings(db_session, True, ["bad host/../x"], ["host-a"], 20)
     with pytest.raises(svc.ValidationError):
-        svc.save_resource_check_settings(db_session, True, ["   "], 20)
+        svc.save_resource_check_settings(db_session, True, ["   "], ["host-a"], 20)
+    with pytest.raises(svc.ValidationError):
+        svc.save_resource_check_settings(db_session, True, ["host-a"], ["   "], 20)
+
+
+def test_legacy_single_host_list_is_read_as_production_until_replaced(db_session):
+    from app.services.admin_settings_service import set_admin_setting
+
+    set_admin_setting(db_session, "resourceCheckHosts", "legacy-host-1\nlegacy-host-2")
+    config = svc.get_resource_check_settings(db_session)
+    assert config.production == ["legacy-host-1", "legacy-host-2"]
+    assert config.staging == svc.DEFAULT_STAGING_HOSTS  # untouched, still the default
+
+    svc.save_resource_check_settings(db_session, True, config.staging, ["new-prod-host"], 20)
+    assert svc.get_resource_check_settings(db_session).production == ["new-prod-host"]
 
 
 # --- scheduling -------------------------------------------------------------------
 
-def test_deploy_schedules_a_check_after_the_delay(db_session):
+def test_deploy_schedules_a_check_against_its_own_environments_hosts(db_session):
     before = datetime.now(timezone.utc)
-    check = svc.schedule_after_deploy(db_session, _form_id(), str(uuid.uuid4()), FILES + FILES, None)
-    assert check.status == "scheduled" and check.trigger == "scheduled"
+    check = svc.schedule_after_deploy(db_session, _form_id(), str(uuid.uuid4()), FILES + FILES, None, "staging")
+    assert check.status == "scheduled" and check.trigger == "scheduled" and check.environment == "staging"
     assert json.loads(check.fileNames) == sorted(FILES)  # de-duplicated
-    assert check.totalUrls == len(FILES) * 4
+    assert json.loads(check.hosts) == svc.DEFAULT_STAGING_HOSTS
+    assert check.totalUrls == len(FILES) * len(svc.DEFAULT_STAGING_HOSTS)
     due = check.scheduledFor if check.scheduledFor.tzinfo else check.scheduledFor.replace(tzinfo=timezone.utc)
     assert timedelta(minutes=19) < due - before < timedelta(minutes=21)
 
 
+def test_production_deploy_uses_production_hosts(db_session):
+    check = svc.schedule_after_deploy(db_session, _form_id(), str(uuid.uuid4()), FILES, None, "production")
+    assert check.environment == "production"
+    assert json.loads(check.hosts) == svc.DEFAULT_PRODUCTION_HOSTS
+
+
 def test_disabled_setting_schedules_nothing(db_session):
-    svc.save_resource_check_settings(db_session, False, svc.DEFAULT_HOSTS, 20)
-    assert svc.schedule_after_deploy(db_session, _form_id(), str(uuid.uuid4()), FILES, None) is None
+    config = svc.get_resource_check_settings(db_session)
+    svc.save_resource_check_settings(db_session, False, config.staging, config.production, 20)
+    assert svc.schedule_after_deploy(db_session, _form_id(), str(uuid.uuid4()), FILES, None, "production") is None
 
 
 # --- running --------------------------------------------------------------------------
@@ -113,17 +144,18 @@ def test_all_ok_passes_without_recheck_or_email(db_session, fake_http, sent_emai
     done = svc.run_check(db_session, check.id)
     assert done.status == "passed" and done.okUrls == 8 and done.failedUrls == 0
     results = db_session.execute(select(ResourceCheckResult).where(ResourceCheckResult.checkId == check.id)).scalars().all()
-    assert len(results) == 8 and {r.host for r in results} == set(svc.DEFAULT_HOSTS)
+    assert len(results) == 8 and {r.host for r in results} == set(svc.DEFAULT_PRODUCTION_HOSTS)
     assert len(_checks_for(db_session, check.formId)) == 1 and sent_emails == []
 
 
 def test_first_failure_schedules_one_recheck_without_email(db_session, fake_http, sent_emails):
-    fake_http["failing"].add(svc.build_url(svc.DEFAULT_HOSTS[2], FILES[0]))
+    fake_http["failing"].add(svc.build_url(svc.DEFAULT_PRODUCTION_HOSTS[2], FILES[0]))
     check = _schedule(db_session)
     done = svc.run_check(db_session, check.id)
     assert done.status == "failed" and done.failedUrls == 1
     checks = _checks_for(db_session, check.formId)
     assert [c.trigger for c in checks] == ["scheduled", "recheck"] and checks[1].status == "scheduled"
+    assert checks[1].environment == "production"  # inherited from the original check, not re-derived
     assert sent_emails == []
     # The re-check waits 5 minutes after the first check completed — not another 20.
     completed = done.completedAt if done.completedAt.tzinfo else done.completedAt.replace(tzinfo=timezone.utc)
@@ -131,9 +163,19 @@ def test_first_failure_schedules_one_recheck_without_email(db_session, fake_http
     assert timedelta(minutes=4, seconds=50) < due - completed < timedelta(minutes=5, seconds=10)
 
 
+def test_recheck_reuses_the_original_checks_environment_even_if_active_env_changes(db_session, fake_http, sent_emails):
+    fake_http["failing"].add(svc.build_url(svc.DEFAULT_STAGING_HOSTS[0], FILES[0]))
+    check = _schedule(db_session, environment="staging")
+    svc.run_check(db_session, check.id)
+    recheck = _checks_for(db_session, check.formId)[1]
+    assert recheck.environment == "staging"
+    assert json.loads(recheck.hosts) == svc.DEFAULT_STAGING_HOSTS
+
+
 def test_recheck_delay_is_its_own_setting(db_session, fake_http, sent_emails):
-    svc.save_resource_check_settings(db_session, True, svc.DEFAULT_HOSTS, 20, 3)
-    fake_http["failing"].add(svc.build_url(svc.DEFAULT_HOSTS[0], FILES[0]))
+    config = svc.get_resource_check_settings(db_session)
+    svc.save_resource_check_settings(db_session, True, config.staging, config.production, 20, 3)
+    fake_http["failing"].add(svc.build_url(svc.DEFAULT_PRODUCTION_HOSTS[0], FILES[0]))
     check = _schedule(db_session)
     svc.run_check(db_session, check.id)
     recheck = _checks_for(db_session, check.formId)[1]
@@ -142,7 +184,7 @@ def test_recheck_delay_is_its_own_setting(db_session, fake_http, sent_emails):
 
 
 def test_failed_recheck_emails_admins(db_session, fake_http, sent_emails):
-    failing_url = svc.build_url(svc.DEFAULT_HOSTS[1], FILES[1])
+    failing_url = svc.build_url(svc.DEFAULT_PRODUCTION_HOSTS[1], FILES[1])
     fake_http["failing"].add(failing_url)
     first = _schedule(db_session)
     svc.run_check(db_session, first.id)
@@ -155,7 +197,7 @@ def test_failed_recheck_emails_admins(db_session, fake_http, sent_emails):
     assert len(_checks_for(db_session, first.formId)) == 2  # no endless re-checks
     assert len(sent_emails) == 1
     failure = sent_emails[0]["failures"][0]
-    assert (failure.file_name, failure.host, failure.problem) == (FILES[1], svc.DEFAULT_HOSTS[1], "HTTP 404")
+    assert (failure.file_name, failure.host, failure.problem) == (FILES[1], svc.DEFAULT_PRODUCTION_HOSTS[1], "HTTP 404")
 
 
 def test_a_check_runs_only_once(db_session, fake_http, sent_emails):
@@ -218,7 +260,10 @@ def test_real_http_client_head_fallback_and_connection_errors(monkeypatch):
 
 @pytest.fixture
 def deploy_ok(monkeypatch):
-    monkeypatch.setattr(form_builder_service, "deploy_generated_files", lambda db, files: SftpDeployResult(ok=True, filesDeployed=len(files)))
+    monkeypatch.setattr(
+        form_builder_service, "deploy_generated_files",
+        lambda db, files: SftpDeployResult(ok=True, filesDeployed=len(files), environment="staging"),
+    )
 
 
 def test_publish_schedules_check_and_api_lists_it(client, db_session, admin_headers, subsidiary_row, deploy_ok):
@@ -228,8 +273,9 @@ def test_publish_schedules_check_and_api_lists_it(client, db_session, admin_head
     body = resp.json()
     assert body["enabled"] is True and len(body["checks"]) == 1
     check = body["checks"][0]
-    assert check["trigger"] == "scheduled" and check["status"] == "scheduled"
+    assert check["trigger"] == "scheduled" and check["status"] == "scheduled" and check["environment"] == "staging"
     assert check["fileNames"] and all(name.endswith((".html", ".js", ".css")) for name in check["fileNames"])
+    assert check["hosts"] == svc.DEFAULT_STAGING_HOSTS
 
 
 def test_failed_sftp_deploy_schedules_nothing(client, db_session, admin_headers, subsidiary_row):
@@ -246,7 +292,7 @@ def test_check_now_runs_in_background(client, db_session, admin_headers, subsidi
 
     resp = client.post(f"/api/v1/admin/forms/{form_id}/resource-checks", headers=admin_headers)
     assert resp.status_code == 202, resp.text
-    assert resp.json()["trigger"] == "manual" and len(queued) == 1
+    assert resp.json()["trigger"] == "manual" and resp.json()["environment"] == "staging" and len(queued) == 1
     # A second click while one is pending is refused.
     assert client.post(f"/api/v1/admin/forms/{form_id}/resource-checks", headers=admin_headers).status_code == 409
 
@@ -263,11 +309,15 @@ def test_check_now_requires_a_published_form_and_an_admin(client, admin_headers,
 
 def test_settings_api(client, admin_headers, standard_headers):
     resp = client.get("/api/v1/admin/resource-check-settings", headers=admin_headers)
-    assert resp.status_code == 200 and resp.json()["hosts"] == svc.DEFAULT_HOSTS
+    assert resp.status_code == 200
+    assert resp.json()["production"] == svc.DEFAULT_PRODUCTION_HOSTS
+    assert resp.json()["staging"] == svc.DEFAULT_STAGING_HOSTS
     saved = client.patch("/api/v1/admin/resource-check-settings", headers=admin_headers,
-                       json={"enabled": True, "hosts": ["samsung-mena-mid-prod7-1"], "delayMinutes": 25, "recheckDelayMinutes": 4})
+                       json={"enabled": True, "staging": ["samsung-mena-mid-stage7-1"],
+                             "production": ["samsung-mena-mid-prod7-1"], "delayMinutes": 25, "recheckDelayMinutes": 4})
     assert saved.status_code == 200 and saved.json()["delayMinutes"] == 25 and saved.json()["recheckDelayMinutes"] == 4
+    assert saved.json()["staging"] == ["samsung-mena-mid-stage7-1"]
     bad = client.patch("/api/v1/admin/resource-check-settings", headers=admin_headers,
-                     json={"enabled": True, "hosts": ["x"], "delayMinutes": 0})
+                     json={"enabled": True, "staging": ["x"], "production": ["x"], "delayMinutes": 0})
     assert bad.status_code == 400  # this app maps request-body validation errors to 400
     assert client.get("/api/v1/admin/resource-check-settings", headers=standard_headers).status_code == 403

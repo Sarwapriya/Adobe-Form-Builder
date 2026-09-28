@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import paramiko
 from sqlalchemy.orm import Session
 
-from app.services.sftp_settings_service import get_active_sftp_target
+from app.services.sftp_settings_service import SftpEnvironment, get_sftp_deployment_settings
 
 # Matches `ssh2-sftp-client`'s `readyTimeout: 15000` in the Node original —
 # this host is normally only reachable from the office network/VPN, so a
@@ -47,6 +47,12 @@ class SftpDeployResult:
     ok: bool
     filesDeployed: int = 0
     error: str | None = None
+    # Which environment this deploy actually targeted — `None` only when `ok`
+    # is False because no environment was configured at all. Downstream,
+    # resource_check_service uses this to check the SAME environment's
+    # frontal servers (a staging deploy must never be checked against
+    # production's servers, and vice versa).
+    environment: SftpEnvironment | None = None
 
 
 def _mkdir_p(sftp: paramiko.SFTPClient, remote_directory: str) -> None:
@@ -73,13 +79,15 @@ def _mkdir_p(sftp: paramiko.SFTPClient, remote_directory: str) -> None:
 def deploy_generated_files(db: Session, files: list[SftpDeployFile]) -> SftpDeployResult:
     """Best-effort push of a just-published form's generated output files to
     the active SFTP deployment target. Never raises."""
-    target = get_active_sftp_target(db)
-    if target is None:
-        return SftpDeployResult(ok=False, error="SFTP deployment is not configured for the active environment (Configuration > Deployment)")
+    settings = get_sftp_deployment_settings(db)
+    environment = settings.activeEnvironment
+    target = settings.production if environment == "production" else settings.staging
+    if not target.host or not target.username or not target.privateKeyPath:
+        return SftpDeployResult(ok=False, environment=environment, error="SFTP deployment is not configured for the active environment (Configuration > Deployment)")
     if not os.path.isfile(target.privateKeyPath):
-        return SftpDeployResult(ok=False, error="SFTP private key file not found at the configured path (when the backend runs in Docker this is a path inside the container - mount the key file into it)")
+        return SftpDeployResult(ok=False, environment=environment, error="SFTP private key file not found at the configured path (when the backend runs in Docker this is a path inside the container - mount the key file into it)")
     if not files:
-        return SftpDeployResult(ok=True, filesDeployed=0)
+        return SftpDeployResult(ok=True, environment=environment, filesDeployed=0)
 
     log_context = {"host": target.host, "username": target.username, "remotePath": target.remotePath, "fileCount": len(files)}
     sock: socket.socket | None = None
@@ -106,11 +114,11 @@ def deploy_generated_files(db: Session, files: list[SftpDeployFile]) -> SftpDepl
 
         sftp.close()
         print(f"[sftp_service] deploy succeeded {log_context}")
-        return SftpDeployResult(ok=True, filesDeployed=len(files))
+        return SftpDeployResult(ok=True, environment=environment, filesDeployed=len(files))
     except Exception as err:  # noqa: BLE001 — normalized into the same {ok, error} shape as every other best-effort sender
         message = str(err) or "Unknown SFTP error"
         print(f"[sftp_service] deploy failed {({**log_context, 'error': message})}")
-        return SftpDeployResult(ok=False, error=message)
+        return SftpDeployResult(ok=False, environment=environment, error=message)
     finally:
         if transport is not None:
             transport.close()

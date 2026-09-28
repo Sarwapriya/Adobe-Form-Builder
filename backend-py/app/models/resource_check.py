@@ -45,6 +45,11 @@ class ResourceCheck(Base):
     # settings change can't alter what this run means.
     fileNames: Mapped[str] = nvarchar_max()
     hosts: Mapped[str] = nvarchar_max()
+    # "staging"/"production" — which SFTP environment the deploy this check
+    # covers actually targeted (nullable only for rows created before this
+    # column existed; treat those as "production", the only environment that
+    # existed at the time). See resource_check_service.hosts_for.
+    environment: Mapped[Optional[str]] = nvarchar(20, nullable=True)
     totalUrls: Mapped[int] = mapped_column(Integer, default=0)
     okUrls: Mapped[int] = mapped_column(Integer, default=0)
     failedUrls: Mapped[int] = mapped_column(Integer, default=0)

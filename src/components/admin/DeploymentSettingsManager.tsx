@@ -154,7 +154,8 @@ function validMinutes(value: string): boolean {
 function ResourceCheckSettingsPanel() {
   const [settings, setSettings] = useState<ResourceCheckSettings | null>(null);
   const [enabled, setEnabled] = useState(true);
-  const [hostsText, setHostsText] = useState("");
+  const [stagingText, setStagingText] = useState("");
+  const [productionText, setProductionText] = useState("");
   const [delay, setDelay] = useState("20");
   const [recheckDelay, setRecheckDelay] = useState("5");
   const [saving, setSaving] = useState(false);
@@ -162,7 +163,8 @@ function ResourceCheckSettingsPanel() {
   function apply(next: ResourceCheckSettings) {
     setSettings(next);
     setEnabled(next.enabled);
-    setHostsText(next.hosts.join("\n"));
+    setStagingText(next.staging.join("\n"));
+    setProductionText(next.production.join("\n"));
     setDelay(String(next.delayMinutes));
     setRecheckDelay(String(next.recheckDelayMinutes));
   }
@@ -173,7 +175,8 @@ function ResourceCheckSettingsPanel() {
       .catch((err) => showToast(err instanceof ApiError ? err.message : "Failed to load availability check settings", "error"));
   }, []);
 
-  const hosts = hostsText.split(/[\n,]+/).map((h) => h.trim()).filter(Boolean);
+  const staging = stagingText.split(/[\n,]+/).map((h) => h.trim()).filter(Boolean);
+  const production = productionText.split(/[\n,]+/).map((h) => h.trim()).filter(Boolean);
   const delayValid = validMinutes(delay);
   const recheckDelayValid = validMinutes(recheckDelay);
 
@@ -184,7 +187,8 @@ function ResourceCheckSettingsPanel() {
       apply(
         await saveResourceCheckSettings({
           enabled,
-          hosts,
+          staging,
+          production,
           delayMinutes: Number(delay),
           recheckDelayMinutes: Number(recheckDelay),
         }),
@@ -204,29 +208,52 @@ function ResourceCheckSettingsPanel() {
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
         After every successful SFTP push, FormIQ waits the first delay below, then requests each published file from
-        every server listed (https://&lt;server&gt;.campaign.adobe.com/res/tracking/&lt;file&gt;). If anything is
-        missing, it re-checks once the re-check delay after that first check finished, and emails the admins if it
-        still fails. Results show on the form page.
+        every server listed for whichever environment (Staging/Production above) that deploy actually targeted
+        (https://&lt;server&gt;.campaign.adobe.com/res/tracking/&lt;file&gt;). If anything is missing, it re-checks
+        once the re-check delay after that first check finished, and emails the admins if it still fails. Results
+        show on the form page.
       </Typography>
       {!settings ? (
         <LoadingState />
       ) : (
         <Box component="form" onSubmit={handleSave}>
-          <Stack spacing={1.5} sx={{ mb: 1.5, maxWidth: 520 }}>
+          <Stack spacing={1.5} sx={{ mb: 1.5, maxWidth: 560 }}>
             <FormControlLabel
               control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
               label={enabled ? "Automatic checks on" : "Automatic checks off"}
             />
-            <TextField
-              label="Frontal servers (one per line)"
-              size="small"
-              multiline
-              minRows={4}
-              value={hostsText}
-              onChange={(e) => setHostsText(e.target.value)}
-              helperText="Adobe Campaign server names like samsung-mena-mid-prod7-1, or a full host name"
-              error={hosts.length === 0}
-            />
+            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+              <Stack spacing={0.5} sx={{ flex: 1, minWidth: 240 }}>
+                <TextField
+                  label="Staging frontal servers (one per line)"
+                  size="small"
+                  multiline
+                  minRows={4}
+                  value={stagingText}
+                  onChange={(e) => setStagingText(e.target.value)}
+                  helperText="e.g. samsung-mena-mid-stage7-1, or a full host name"
+                  error={staging.length === 0}
+                />
+                <Button size="small" onClick={() => setStagingText(settings.defaultStagingHosts.join("\n"))}>
+                  Reset to the default staging servers
+                </Button>
+              </Stack>
+              <Stack spacing={0.5} sx={{ flex: 1, minWidth: 240 }}>
+                <TextField
+                  label="Production frontal servers (one per line)"
+                  size="small"
+                  multiline
+                  minRows={4}
+                  value={productionText}
+                  onChange={(e) => setProductionText(e.target.value)}
+                  helperText="e.g. samsung-mena-mid-prod7-1, or a full host name"
+                  error={production.length === 0}
+                />
+                <Button size="small" onClick={() => setProductionText(settings.defaultProductionHosts.join("\n"))}>
+                  Reset to the default production servers
+                </Button>
+              </Stack>
+            </Stack>
             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
               <TextField
                 label="First check (minutes after deployment)"
@@ -250,19 +277,14 @@ function ResourceCheckSettingsPanel() {
               />
             </Stack>
           </Stack>
-          <Stack direction="row" spacing={1}>
-            <Button
-              type="submit"
-              size="small"
-              variant="contained"
-              disabled={saving || hosts.length === 0 || !delayValid || !recheckDelayValid}
-            >
-              {saving ? "Saving..." : "Save availability check"}
-            </Button>
-            <Button size="small" onClick={() => setHostsText(settings.defaultHosts.join("\n"))}>
-              Reset to the 4 MENA servers
-            </Button>
-          </Stack>
+          <Button
+            type="submit"
+            size="small"
+            variant="contained"
+            disabled={saving || staging.length === 0 || production.length === 0 || !delayValid || !recheckDelayValid}
+          >
+            {saving ? "Saving..." : "Save availability check"}
+          </Button>
         </Box>
       )}
     </Paper>

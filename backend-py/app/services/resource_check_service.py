@@ -42,12 +42,17 @@ from app.models.form import Form
 from app.models.generated_file import GeneratedFile
 from app.models.resource_check import ResourceCheck, ResourceCheckResult
 from app.services.admin_settings_service import get_admin_setting, set_admin_setting
+from app.services.sftp_settings_service import SftpEnvironment, get_sftp_deployment_settings
 
-DEFAULT_HOSTS = [
+DEFAULT_PRODUCTION_HOSTS = [
     "samsung-mena-mid-prod7-1",
     "samsung-mena-mid-prod8-1",
     "samsung-mena-mid-prod7-2",
     "samsung-mena-mid-prod8-2",
+]
+DEFAULT_STAGING_HOSTS = [
+    "samsung-mena-mid-stage7-1",
+    "samsung-mena-mid-stage7-2",
 ]
 DEFAULT_DELAY_MINUTES = 20
 DEFAULT_RECHECK_DELAY_MINUTES = 5
@@ -63,7 +68,12 @@ STALE_RUNNING_MINUTES = 15
 HISTORY_LIMIT = 5
 
 _ENABLED_KEY = "resourceCheckEnabled"
-_HOSTS_KEY = "resourceCheckHosts"
+_STAGING_HOSTS_KEY = "resourceCheckStagingHosts"
+_PRODUCTION_HOSTS_KEY = "resourceCheckProductionHosts"
+# Pre-staging/production-split key — still read as a one-time fallback for
+# the production list only, so a deployment that customized its server list
+# before this split doesn't silently revert to the defaults.
+_LEGACY_HOSTS_KEY = "resourceCheckHosts"
 _DELAY_KEY = "resourceCheckDelayMinutes"
 _RECHECK_DELAY_KEY = "resourceCheckRecheckDelayMinutes"
 
@@ -73,11 +83,16 @@ _RECHECK_DELAY_KEY = "resourceCheckRecheckDelayMinutes"
 @dataclass
 class ResourceCheckSettings:
     enabled: bool
-    hosts: list[str]
+    staging: list[str]
+    production: list[str]
     # First check: minutes after the SFTP deploy.
     delayMinutes: int
     # Re-check: minutes after a failed first check completes.
     recheckDelayMinutes: int
+
+
+def hosts_for(settings: ResourceCheckSettings, environment: SftpEnvironment) -> list[str]:
+    return settings.production if environment == "production" else settings.staging
 
 
 def _minutes_setting(db: Session, key: str, default: int) -> int:
@@ -99,31 +114,42 @@ def _parse_hosts(raw: Optional[str]) -> list[str]:
 
 
 def get_resource_check_settings(db: Session) -> ResourceCheckSettings:
+    production = _parse_hosts(get_admin_setting(db, _PRODUCTION_HOSTS_KEY))
+    if not production:
+        production = _parse_hosts(get_admin_setting(db, _LEGACY_HOSTS_KEY)) or list(DEFAULT_PRODUCTION_HOSTS)
     return ResourceCheckSettings(
         enabled=get_admin_setting(db, _ENABLED_KEY) != "false",
-        hosts=_parse_hosts(get_admin_setting(db, _HOSTS_KEY)) or list(DEFAULT_HOSTS),
+        staging=_parse_hosts(get_admin_setting(db, _STAGING_HOSTS_KEY)) or list(DEFAULT_STAGING_HOSTS),
+        production=production,
         delayMinutes=_minutes_setting(db, _DELAY_KEY, DEFAULT_DELAY_MINUTES),
         recheckDelayMinutes=_minutes_setting(db, _RECHECK_DELAY_KEY, DEFAULT_RECHECK_DELAY_MINUTES),
     )
 
 
-def save_resource_check_settings(
-    db: Session, enabled: bool, hosts: list[str], delay_minutes: int,
-    recheck_delay_minutes: int = DEFAULT_RECHECK_DELAY_MINUTES,
-) -> ResourceCheckSettings:
+def _validate_hosts(hosts: list[str], label: str) -> list[str]:
     cleaned = _parse_hosts("\n".join(hosts))
     if not cleaned:
-        raise ValidationError("At least one server is required")
+        raise ValidationError(f"At least one {label} server is required")
     if len(cleaned) > MAX_HOSTS:
-        raise ValidationError(f"At most {MAX_HOSTS} servers are allowed")
+        raise ValidationError(f"At most {MAX_HOSTS} {label} servers are allowed")
     for host in cleaned:
         if any(c in host for c in "/?#@ ") or not all(c.isalnum() or c in ".-" for c in host):
             raise ValidationError(f'"{host}" is not a valid server name')
+    return cleaned
+
+
+def save_resource_check_settings(
+    db: Session, enabled: bool, staging_hosts: list[str], production_hosts: list[str], delay_minutes: int,
+    recheck_delay_minutes: int = DEFAULT_RECHECK_DELAY_MINUTES,
+) -> ResourceCheckSettings:
+    cleaned_staging = _validate_hosts(staging_hosts, "staging")
+    cleaned_production = _validate_hosts(production_hosts, "production")
     for label, minutes in (("Delay", delay_minutes), ("Re-check delay", recheck_delay_minutes)):
         if not MIN_DELAY_MINUTES <= minutes <= MAX_DELAY_MINUTES:
             raise ValidationError(f"{label} must be between {MIN_DELAY_MINUTES} and {MAX_DELAY_MINUTES} minutes")
     set_admin_setting(db, _ENABLED_KEY, "true" if enabled else "false")
-    set_admin_setting(db, _HOSTS_KEY, "\n".join(cleaned))
+    set_admin_setting(db, _STAGING_HOSTS_KEY, "\n".join(cleaned_staging))
+    set_admin_setting(db, _PRODUCTION_HOSTS_KEY, "\n".join(cleaned_production))
     set_admin_setting(db, _DELAY_KEY, str(delay_minutes))
     set_admin_setting(db, _RECHECK_DELAY_KEY, str(recheck_delay_minutes))
     return get_resource_check_settings(db)
@@ -132,10 +158,12 @@ def save_resource_check_settings(
 def serialize_settings(value: ResourceCheckSettings) -> dict[str, Any]:
     return {
         "enabled": value.enabled,
-        "hosts": value.hosts,
+        "staging": value.staging,
+        "production": value.production,
         "delayMinutes": value.delayMinutes,
         "recheckDelayMinutes": value.recheckDelayMinutes,
-        "defaultHosts": DEFAULT_HOSTS,
+        "defaultStagingHosts": DEFAULT_STAGING_HOSTS,
+        "defaultProductionHosts": DEFAULT_PRODUCTION_HOSTS,
     }
 
 
@@ -159,7 +187,7 @@ def _now() -> datetime:
 
 def _create_check(
     db: Session, form_id: str, version_id: str, file_names: list[str], hosts: list[str],
-    trigger: str, scheduled_for: datetime, user_id: Optional[str],
+    environment: SftpEnvironment, trigger: str, scheduled_for: datetime, user_id: Optional[str],
 ) -> ResourceCheck:
     check = ResourceCheck(
         formId=form_id,
@@ -169,6 +197,7 @@ def _create_check(
         scheduledFor=scheduled_for,
         fileNames=json.dumps(file_names),
         hosts=json.dumps(hosts),
+        environment=environment,
         totalUrls=len(file_names) * len(hosts),
         triggeredByUserId=user_id,
     )
@@ -179,20 +208,25 @@ def _create_check(
 
 
 def schedule_after_deploy(
-    db: Session, form_id: str, version_id: str, file_names: list[str], user_id: Optional[str]
+    db: Session, form_id: str, version_id: str, file_names: list[str], user_id: Optional[str],
+    environment: SftpEnvironment,
 ) -> Optional[ResourceCheck]:
-    """Schedules the automatic check for a just-deployed version. Never
-    raises — a scheduling problem must not fail the publish."""
+    """Schedules the automatic check for a just-deployed version, against the
+    SAME environment's frontal servers the SFTP push just targeted — a
+    staging deploy must never be checked against production's servers (they
+    were never sent there), and vice versa. Never raises — a scheduling
+    problem must not fail the publish."""
     try:
         config = get_resource_check_settings(db)
         if not config.enabled or not file_names:
             return None
+        hosts = hosts_for(config, environment)
         check = _create_check(
-            db, form_id, version_id, sorted(set(file_names)), config.hosts, "scheduled",
+            db, form_id, version_id, sorted(set(file_names)), hosts, environment, "scheduled",
             _now() + timedelta(minutes=config.delayMinutes), user_id,
         )
-        print(f"[resource_check] scheduled check {check.id} for form {form_id} in {config.delayMinutes} min "
-              f"({len(file_names)} files x {len(config.hosts)} servers)")
+        print(f"[resource_check] scheduled check {check.id} for form {form_id} ({environment}) in {config.delayMinutes} min "
+              f"({len(file_names)} files x {len(hosts)} servers)")
         return check
     except Exception as err:  # noqa: BLE001
         print(f"[resource_check] could not schedule a check for form {form_id}: {type(err).__name__}: {err}")
@@ -226,7 +260,13 @@ def start_manual_check(db: Session, form_id: str, user_id: str) -> ResourceCheck
         raise ConflictError("A check for this form is already running")
 
     config = get_resource_check_settings(db)
-    check = _create_check(db, form_id, form.publishedVersionId, file_names, config.hosts, "manual", _now(), user_id)
+    # "Check now" has no specific deploy event to inherit an environment
+    # from, so it checks whichever environment is currently active for
+    # Publish/Deploy — the best available proxy for "where these files
+    # actually are right now."
+    environment = get_sftp_deployment_settings(db).activeEnvironment
+    hosts = hosts_for(config, environment)
+    check = _create_check(db, form_id, form.publishedVersionId, file_names, hosts, environment, "manual", _now(), user_id)
     check_id = check.id
 
     from app.utils.background import run_in_background
@@ -329,9 +369,10 @@ def _after_failure(db: Session, check: ResourceCheck) -> None:
     check → email the admins."""
     if check.trigger == "scheduled":
         config = get_resource_check_settings(db)
+        environment: SftpEnvironment = "staging" if check.environment == "staging" else "production"
         recheck = _create_check(
             db, check.formId, check.formVersionId, json.loads(check.fileNames), json.loads(check.hosts),
-            "recheck", _now() + timedelta(minutes=config.recheckDelayMinutes), check.triggeredByUserId,
+            environment, "recheck", _now() + timedelta(minutes=config.recheckDelayMinutes), check.triggeredByUserId,
         )
         print(f"[resource_check] check {check.id} failed; re-check {recheck.id} in {config.recheckDelayMinutes} min")
         return
@@ -435,6 +476,7 @@ def serialize_check(check: ResourceCheck, results: list[ResourceCheckResult]) ->
         "id": check.id,
         "trigger": check.trigger,
         "status": check.status,
+        "environment": check.environment or "production",
         "scheduledFor": _iso(check.scheduledFor),
         "startedAt": _iso(check.startedAt),
         "completedAt": _iso(check.completedAt),
