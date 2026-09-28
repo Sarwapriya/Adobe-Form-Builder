@@ -217,15 +217,14 @@ function ResourceCheckSettingsPanel() {
         <LoadingState />
       ) : (
         <Box component="form" onSubmit={handleSave}>
-          <Stack spacing={1.5} sx={{ mb: 1.5, maxWidth: 560 }}>
-            <FormControlLabel
-              control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
-              label={enabled ? "Automatic checks on" : "Automatic checks off"}
-            />
-            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-              <Stack spacing={0.5} sx={{ flex: 1, minWidth: 240 }}>
+          <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+            <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 240 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+                Staging
+              </Typography>
+              <Stack spacing={1}>
                 <TextField
-                  label="Staging frontal servers (one per line)"
+                  label="Frontal servers (one per line)"
                   size="small"
                   multiline
                   minRows={4}
@@ -238,9 +237,14 @@ function ResourceCheckSettingsPanel() {
                   Reset to the default staging servers
                 </Button>
               </Stack>
-              <Stack spacing={0.5} sx={{ flex: 1, minWidth: 240 }}>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 240 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+                Production
+              </Typography>
+              <Stack spacing={1}>
                 <TextField
-                  label="Production frontal servers (one per line)"
+                  label="Frontal servers (one per line)"
                   size="small"
                   multiline
                   minRows={4}
@@ -253,7 +257,15 @@ function ResourceCheckSettingsPanel() {
                   Reset to the default production servers
                 </Button>
               </Stack>
-            </Stack>
+            </Paper>
+          </Stack>
+
+          {/* Shared by both environments — one check schedule/toggle, not a per-environment setting. */}
+          <Stack spacing={1.5} sx={{ mb: 1.5, maxWidth: 560 }}>
+            <FormControlLabel
+              control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
+              label={enabled ? "Automatic checks on" : "Automatic checks off"}
+            />
             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
               <TextField
                 label="First check (minutes after deployment)"
