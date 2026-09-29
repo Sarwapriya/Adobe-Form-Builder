@@ -38,8 +38,8 @@ def test_prompt_never_mentions_dwf_or_raw_database_tools():
 
 
 def test_prompt_is_the_versioned_file():
-    assert aiSystemPrompt.CHATBOT_PROMPT_VERSION == 2
-    assert aiSystemPrompt.build_system_prompt("standard") == aiSystemPrompt.load_chatbot_prompt(2)
+    assert aiSystemPrompt.CHATBOT_PROMPT_VERSION == 3
+    assert aiSystemPrompt.build_system_prompt("standard") == aiSystemPrompt.load_chatbot_prompt(3)
 
 
 def test_no_raw_sql_tool_is_offered_to_the_model():

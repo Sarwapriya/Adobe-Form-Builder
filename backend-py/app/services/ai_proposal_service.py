@@ -229,10 +229,11 @@ async def check_proposal(db: Session, auth: dict, raw: Any) -> dict[str, Any]:
         except AppError as exc:
             errors.append(_issue("subsidiary", "INVALID", exc.message))
 
-    if not proposal.projectCode:
-        if not admin:
-            errors.append(_issue("projectCode", "REQUIRED", "Ask the user which open project code to use"))
-    else:
+    # A blank project code is valid for everyone: a subsidiary user's ad-hoc
+    # campaign goes through the existing submit-for-review -> admin-approval
+    # flow (approve_adhoc_form/AdHocReviewPanel), which already lets an admin
+    # assign the code at that point if it's still missing.
+    if proposal.projectCode:
         try:
             project_code_service.assert_project_code_open(db, proposal.projectCode, exclude_locked=not admin)
             if subsidiary_id:
@@ -333,12 +334,10 @@ def proposal_view(row: AIFormProposal, warnings: Optional[list[dict[str, str]]] 
 
 # --- the three entry points --------------------------------------------------
 
-async def validate_form(db: Session, auth: dict, conversation_id: str, raw: Any) -> tuple[dict[str, Any], Optional[AIFormProposal]]:
-    """The validate_form tool. Returns (tool result for the LLM, stored row if valid)."""
-    checked = await check_proposal(db, auth, raw)
-    if not checked["valid"]:
-        return {"valid": False, "errors": checked["errors"], "warnings": checked["warnings"]}, None
-
+def _store_new_version(db: Session, conversation_id: str, user_id: str, checked: dict[str, Any]) -> AIFormProposal:
+    """Stores a validated proposal (`checked["valid"]` already True) as the
+    next version of its conversation. Shared by the LLM's validate_form tool
+    and the user-driven revise_proposal endpoint."""
     normalized = _normalized_proposal(checked["proposal"], checked["subsidiaryId"])
     body = canonical_json(normalized)
     latest = db.execute(
@@ -346,7 +345,7 @@ async def validate_form(db: Session, auth: dict, conversation_id: str, raw: Any)
     ).scalar()
     row = AIFormProposal(
         conversationId=conversation_id,
-        userId=auth["sub"],
+        userId=user_id,
         subsidiaryId=checked["subsidiaryId"],
         version=(latest or 0) + 1,
         proposalJson=body,
@@ -355,6 +354,16 @@ async def validate_form(db: Session, auth: dict, conversation_id: str, raw: Any)
     db.add(row)
     db.commit()
     db.refresh(row)
+    return row
+
+
+async def validate_form(db: Session, auth: dict, conversation_id: str, raw: Any) -> tuple[dict[str, Any], Optional[AIFormProposal]]:
+    """The validate_form tool. Returns (tool result for the LLM, stored row if valid)."""
+    checked = await check_proposal(db, auth, raw)
+    if not checked["valid"]:
+        return {"valid": False, "errors": checked["errors"], "warnings": checked["warnings"]}, None
+
+    row = _store_new_version(db, conversation_id, auth["sub"], checked)
     return {
         "valid": True,
         "proposalId": row.id,
@@ -362,6 +371,66 @@ async def validate_form(db: Session, auth: dict, conversation_id: str, raw: Any)
         "warnings": checked["warnings"],
         "note": "Shown to the user as a preview with an Approve & Save button. You cannot save it yourself.",
     }, row
+
+
+async def revise_proposal(db: Session, auth: dict, proposal_id: str, question_patches: list[dict[str, Any]]) -> dict[str, Any]:
+    """Applies the user's own inline edits (ProposalCard) directly onto the
+    proposal's own stored JSON — never onto anything reconstructed by the
+    client — so sourceFormId/sourceQuestionId/sourceAnswerId lineage can't be
+    corrupted, then re-validates and stores a new version. No LLM call.
+
+    `question_patches` is index-aligned with proposal_view's own `questions`
+    list (same order the UI rendered): each entry is
+    `{"keep": bool, "heading": str|None, "answers": [{"keep": bool, "text": str|None}]|None}`.
+    Returns `{"valid": False, "errors": [...], "warnings": [...]}` or
+    `{"valid": True, ...proposal_view(...)}`.
+    """
+    row = _owned_proposal(db, auth, proposal_id)
+    if row.consumedAt is not None:
+        raise ConflictError("This proposal has already been saved")
+    _assert_latest(db, row)
+
+    data = json.loads(row.proposalJson)
+    questions: list[dict[str, Any]] = data["questions"]
+    if len(question_patches) != len(questions):
+        raise ConflictError("This proposal was changed after it was shown — reload and try again")
+
+    patched_questions: list[dict[str, Any]] = []
+    for question, patch in zip(questions, question_patches):
+        if not patch.get("keep", True):
+            continue
+        question = {**question}
+        heading = patch.get("heading")
+        if isinstance(heading, str) and heading.strip():
+            question["heading"] = heading.strip()
+
+        answers: list[dict[str, Any]] = question.get("answers") or []
+        answer_patches = patch.get("answers")
+        if not isinstance(answer_patches, list) or len(answer_patches) != len(answers):
+            answer_patches = [{"keep": True} for _ in answers]
+
+        kept_answers: list[dict[str, Any]] = []
+        for answer, answer_patch in zip(answers, answer_patches):
+            if not answer_patch.get("keep", True):
+                continue
+            answer = {**answer}
+            text = answer_patch.get("text")
+            if isinstance(text, str) and text.strip():
+                answer["text"] = text.strip()
+            kept_answers.append(answer)
+        question["answers"] = kept_answers
+        patched_questions.append(question)
+
+    if not patched_questions:
+        return {"valid": False, "errors": [_issue("questions", "TOO_FEW", "At least one question must be kept")], "warnings": []}
+
+    patched = {**data, "questions": patched_questions}
+    checked = await check_proposal(db, auth, patched)
+    if not checked["valid"]:
+        return {"valid": False, "errors": checked["errors"], "warnings": checked["warnings"]}
+
+    new_row = _store_new_version(db, row.conversationId, auth["sub"], checked)
+    return {"valid": True, **proposal_view(new_row, checked["warnings"])}
 
 
 def _owned_proposal(db: Session, auth: dict, proposal_id: str) -> AIFormProposal:

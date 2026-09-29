@@ -114,6 +114,12 @@ RETRIEVAL_TOOLS = [
             },
         },
     ),
+    _fn(
+        "list_open_project_codes",
+        "The real, currently open project codes this user may attach a new campaign to. Always call this before "
+        "asking for or accepting a project code — never state or accept a code this tool did not return.",
+        {"type": "object", "properties": {}},
+    ),
 ]
 
 VALIDATE_FORM_TOOL = _fn(

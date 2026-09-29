@@ -108,7 +108,10 @@ def test_tool_calls_run_in_backend_with_session_identity(db_session, standard_us
     # Every tool offered to Groq is a local function tool the backend executes.
     tools = seen[0]["tools"]
     assert all(t["type"] == "function" for t in tools)
-    assert {t["function"]["name"] for t in tools} == {"search_previous_campaigns", "get_campaign_details", "search_question_library", "validate_form"}
+    assert {t["function"]["name"] for t in tools} == {
+        "search_previous_campaigns", "get_campaign_details", "search_question_library",
+        "list_open_project_codes", "validate_form",
+    }
     # The tool result went back to Groq on the second round.
     tool_msg = seen[1]["messages"][-1]
     assert tool_msg["role"] == "tool" and tool_msg["tool_call_id"] == "c1" and "Hand Raiser TV" in tool_msg["content"]
@@ -184,9 +187,11 @@ def test_standard_user_subsidiary_cannot_be_widened(db_session, standard_user, o
     assert any(w["code"] == "IGNORED" for w in result["warnings"])
 
 
-def test_standard_user_needs_a_project_code(db_session, standard_user, fake_mcp):
-    result, _row = _validate(db_session, standard_user, _proposal())
-    assert {"path": "projectCode", "code": "REQUIRED"}.items() <= next(e for e in result["errors"] if e["path"] == "projectCode").items()
+def test_standard_user_can_leave_the_project_code_blank(db_session, standard_user, fake_mcp):
+    # An admin assigns one later via the ad-hoc submit-for-review/approve flow.
+    result, row = _validate(db_session, standard_user, _proposal())
+    assert result["valid"] is True
+    assert row.subsidiaryId == standard_user.subsidiaryId
 
 
 # --- approval gate -----------------------------------------------------------------

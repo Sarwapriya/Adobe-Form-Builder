@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.form import Form
 from app.models.form_version import FormVersion
+from app.models.project_code import ProjectCode
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
 from app.services import campaign_retrieval
 from tests.form_builder.conftest import unique_name
@@ -141,6 +142,37 @@ def test_question_library_returns_source_ids_in_scope(db_session, standard_user,
     assert (campaigns["own"].id.lower(), "Q1") in sources
     hidden = {campaigns["other"].id.lower(), campaigns["blocked"].id.lower()}
     assert all(form_id not in hidden for form_id, _q in sources)
+
+
+# --- list_open_project_codes ------------------------------------------------------
+
+def test_list_open_project_codes_for_standard_user_excludes_blocked_and_locked(db_session, standard_user, project_code_row):
+    locked = ProjectCode(code=unique_name("Locked"), isOpen=True, isLocked=True)
+    blocked_code = unique_name("Blocked")
+    blocked = ProjectCode(code=blocked_code, isOpen=True, isLocked=False)
+    db_session.add_all([
+        locked, blocked,
+        SubsidiaryProjectBlock(subsidiaryName=standard_user.subsidiaryId, projectCode=blocked_code),
+    ])
+    db_session.commit()
+
+    result = _call(db_session, "list_open_project_codes", {}, _auth(standard_user))
+    codes = set(result["projectCodes"])
+    assert project_code_row.code in codes
+    assert locked.code not in codes
+    assert blocked_code not in codes
+
+
+def test_list_open_project_codes_for_admin_ignores_subsidiary_blocks(db_session, admin_user, standard_user, project_code_row):
+    db_session.add(SubsidiaryProjectBlock(subsidiaryName=standard_user.subsidiaryId, projectCode=project_code_row.code))
+    db_session.commit()
+    result = _call(db_session, "list_open_project_codes", {}, _auth(admin_user))
+    assert project_code_row.code in set(result["projectCodes"])
+
+
+def test_list_open_project_codes_for_standard_user_without_subsidiary_is_empty(db_session, standard_user, project_code_row):
+    auth = {**_auth(standard_user), "subsidiaryId": None}
+    assert _call(db_session, "list_open_project_codes", {}, auth) == {"projectCodes": []}
 
 
 def test_user_without_subsidiary_sees_nothing(db_session, campaigns):

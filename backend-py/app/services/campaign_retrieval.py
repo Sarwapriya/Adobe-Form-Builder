@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.user import is_admin_role
 
-CAMPAIGN_TOOLS = frozenset({"search_previous_campaigns", "get_campaign_details", "search_question_library"})
+CAMPAIGN_TOOLS = frozenset({"search_previous_campaigns", "get_campaign_details", "search_question_library", "list_open_project_codes"})
 
 MAX_SCAN_FORMS = 200
 MAX_RESULTS = 10
@@ -85,6 +85,7 @@ async def call_campaign_tool(db: Session, name: str, arguments: dict[str, Any], 
         "search_previous_campaigns": search_previous_campaigns,
         "get_campaign_details": get_campaign_details,
         "search_question_library": search_question_library,
+        "list_open_project_codes": list_open_project_codes,
     }[name]
     try:
         result = impl(db, auth, **(arguments if isinstance(arguments, dict) else {}))
@@ -395,6 +396,26 @@ def get_campaign_details(db: Session, auth: dict, formId: str) -> dict[str, Any]
         # Identical whether the form doesn't exist or is outside the caller's scope.
         raise ToolError("NOT_FOUND", "campaign not found")
     return project_campaign_details(rows[0])
+
+
+def list_open_project_codes(db: Session, auth: dict) -> dict[str, Any]:
+    """The real, currently open project codes this user could attach a new
+    campaign to — an admin sees every open code; a subsidiary user sees only
+    those not blocked for their own subsidiary. Lets the chatbot offer real
+    options instead of guessing, and correctly say a named code isn't
+    available rather than accepting or inventing one."""
+    from app.services import project_code_service
+
+    if is_admin_role(auth.get("role")):
+        codes = project_code_service.list_open_project_codes(db, exclude_expired=True)
+    else:
+        subsidiary_id = auth.get("subsidiaryId")
+        if not subsidiary_id:
+            return {"projectCodes": []}
+        codes = project_code_service.list_open_project_codes_for_subsidiary(
+            db, subsidiary_id, exclude_locked=True, exclude_expired=True
+        )
+    return {"projectCodes": [pc.code for pc in codes]}
 
 
 def search_question_library(

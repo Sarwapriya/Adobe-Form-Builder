@@ -47,6 +47,9 @@ def test_trim_history_to_budget_always_keeps_the_latest_turn_even_if_it_overflow
 def test_editor_tools_only_offered_with_an_open_campaign():
     closed = {t["function"]["name"] for t in aiAssistantService.chat_tools(False)}
     opened = {t["function"]["name"] for t in aiAssistantService.chat_tools(True)}
-    assert closed == {"search_previous_campaigns", "get_campaign_details", "search_question_library", "validate_form"}
+    assert closed == {
+        "search_previous_campaigns", "get_campaign_details", "search_question_library",
+        "list_open_project_codes", "validate_form",
+    }
     assert opened == closed | aiAssistantService.EDITOR_TOOL_NAMES
     assert all(t["type"] == "function" for t in aiAssistantService.chat_tools(True))

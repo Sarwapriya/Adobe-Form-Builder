@@ -5,6 +5,7 @@ import {
   type AIActionSummary,
   type AIConfirmActionResponse,
   type AIFormProposal,
+  type AIProposalQuestionPatch,
   type AIToolName,
   type AddQuestionArgs,
   type UpdateQuestionArgs,
@@ -67,6 +68,8 @@ interface AiChatState {
   proposal: AIFormProposal | null;
   /** True while an Approve & Save request is in flight. */
   savingProposal: boolean;
+  /** True while an inline proposal edit (ProposalCard "Update proposal") is in flight. */
+  revisingProposal: boolean;
   loading: boolean;
   error: string | null;
 
@@ -92,6 +95,13 @@ interface AiChatState {
    * backend) and saves it as a new draft form. Returns the new draft's editor
    * route, or null if the backend refused (e.g. a newer version exists). */
   approveAndSaveProposal: (proposalId: string) => Promise<{ formId: string; route: string } | null>;
+  /** The user's own inline edit of the shown proposal (ProposalCard's
+   * checkboxes/text fields) — applied directly, no LLM round-trip. On
+   * success replaces `proposal` with the newly stored version; on a
+   * validation failure or request error, leaves the current proposal
+   * displayed and surfaces the reason via `error`. Returns whether it
+   * succeeded, so the card can decide whether to reset its local edit state. */
+  reviseProposal: (proposalId: string, questions: AIProposalQuestionPatch[]) => Promise<boolean>;
   /** Clears every per-user field (conversation/messages/pending actions/
    * error) — called from authStore on logout and after a successful login,
    * so a chat transcript can never survive a user switch in the same browser
@@ -168,6 +178,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
   pendingActions: [],
   proposal: null,
   savingProposal: false,
+  revisingProposal: false,
   loading: false,
   error: null,
 
@@ -260,7 +271,36 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
     }
   },
 
+  async reviseProposal(proposalId, questions) {
+    set({ error: null, revisingProposal: true });
+    try {
+      const result = await aiChatApi.reviseProposal(proposalId, questions);
+      if (!result.valid) {
+        const message = (result.errors ?? []).map((e) => e.message).join(" ") || "Could not apply those changes";
+        set({ revisingProposal: false, error: message });
+        return false;
+      }
+      const updated: AIFormProposal = {
+        id: result.id!,
+        version: result.version!,
+        name: result.name!,
+        subsidiary: result.subsidiary!,
+        projectCode: result.projectCode ?? null,
+        baseFormId: result.baseFormId ?? null,
+        questions: result.questions!,
+        warnings: result.warnings ?? [],
+        saved: result.saved ?? false,
+        savedFormId: result.savedFormId ?? null,
+      };
+      set((s) => ({ proposal: s.proposal?.id === proposalId ? updated : s.proposal, revisingProposal: false }));
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to update the proposal", revisingProposal: false });
+      return false;
+    }
+  },
+
   reset() {
-    set({ formId: null, conversationId: null, messages: [], pendingActions: [], proposal: null, savingProposal: false, loading: false, error: null });
+    set({ formId: null, conversationId: null, messages: [], pendingActions: [], proposal: null, savingProposal: false, revisingProposal: false, loading: false, error: null });
   },
 }));

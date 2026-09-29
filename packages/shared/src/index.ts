@@ -96,6 +96,10 @@ export {
   type AIConfirmActionResponse,
   type AIFormProposal,
   type AIFormProposalQuestion,
+  type AIProposalAnswerPatch,
+  type AIProposalQuestionPatch,
+  type AIProposalRevisionRequest,
+  type AIProposalRevisionResult,
   type AIApproveProposalResponse,
   type AISaveProposalResponse,
 } from "./ai/aiTypes";

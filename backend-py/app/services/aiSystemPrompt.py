@@ -15,7 +15,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-CHATBOT_PROMPT_VERSION = 2
+CHATBOT_PROMPT_VERSION = 3
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 # For the isolated helper calls (question-suggestion / translation generators),

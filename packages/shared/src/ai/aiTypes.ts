@@ -176,6 +176,43 @@ export interface AIChatResponse {
   proposal?: AIFormProposal;
 }
 
+/** One question's edit in a revise-proposal request — index-aligned with the
+ * AIFormProposal.questions the user was shown (same order); dropping the
+ * question (or an answer of it) is `keep: false`, editing text is a
+ * non-empty `heading`/`text` override. */
+export interface AIProposalAnswerPatch {
+  keep: boolean;
+  text?: string;
+}
+
+export interface AIProposalQuestionPatch {
+  keep: boolean;
+  heading?: string;
+  answers?: AIProposalAnswerPatch[];
+}
+
+export interface AIProposalRevisionRequest {
+  questions: AIProposalQuestionPatch[];
+}
+
+/** Result of POST /ai/proposals/:id/revise — either the same validation-error
+ * shape validate_form already returns to the LLM, or the newly stored
+ * proposal version. */
+export interface AIProposalRevisionResult {
+  valid: boolean;
+  errors?: { path: string; code: string; message: string }[];
+  warnings?: string[];
+  id?: string;
+  version?: number;
+  name?: string;
+  subsidiary?: string;
+  projectCode?: string | null;
+  baseFormId?: string | null;
+  questions?: AIFormProposalQuestion[];
+  saved?: boolean;
+  savedFormId?: string | null;
+}
+
 export interface AIApproveProposalResponse {
   approvalToken: string;
   expiresAt: string;

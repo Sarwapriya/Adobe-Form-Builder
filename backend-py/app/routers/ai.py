@@ -114,6 +114,21 @@ class SaveProposalRequest(BaseModel):
     approvalToken: str = Field(min_length=1, max_length=200)
 
 
+class ReviseAnswerPatch(BaseModel):
+    keep: bool = True
+    text: Optional[str] = None
+
+
+class ReviseQuestionPatch(BaseModel):
+    keep: bool = True
+    heading: Optional[str] = None
+    answers: Optional[list[ReviseAnswerPatch]] = None
+
+
+class ReviseProposalBody(BaseModel):
+    questions: list[ReviseQuestionPatch]
+
+
 @router.post("/proposals/{proposal_id}/approve")
 async def approve_proposal(
     proposal_id: str,
@@ -144,6 +159,27 @@ async def save_proposal(
         return await ai_proposal_service.save_draft_form(db, auth, proposal_id, body.approvalToken)
     except ai_proposal_service.ApprovalError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+    except (ConflictError, AppError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+
+
+@router.post("/proposals/{proposal_id}/revise")
+async def revise_proposal(
+    proposal_id: str,
+    body: ReviseProposalBody,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_auth),
+) -> dict:
+    """The user's own inline edit (ProposalCard checkboxes/text fields) —
+    applies directly to the proposal's own stored data and re-validates, no
+    LLM call. Returns `{"valid": false, "errors": [...]}` for a validation
+    failure (still HTTP 200 — same shape the LLM's validate_form tool uses)."""
+    try:
+        return await ai_proposal_service.revise_proposal(
+            db, auth, proposal_id, [q.model_dump() for q in body.questions]
+        )
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
     except (ConflictError, AppError) as exc:

@@ -2,6 +2,8 @@ import type {
   AIApproveProposalResponse,
   AIChatRequest,
   AIChatResponse,
+  AIProposalQuestionPatch,
+  AIProposalRevisionResult,
   AISaveProposalResponse,
   AIConfirmActionResponse,
   AIConversationDetail,
@@ -82,6 +84,13 @@ export function approveProposal(proposalId: string): Promise<AIApproveProposalRe
  * (403/409) without a valid token for this exact, unchanged version. */
 export function saveProposal(proposalId: string, approvalToken: string): Promise<AISaveProposalResponse> {
   return apiClient.post<AISaveProposalResponse>(`/api/v1/ai/proposals/${proposalId}/save`, { approvalToken });
+}
+
+/** POST /api/v1/ai/proposals/:id/revise — the user's own inline edit of the
+ * proposal preview (ProposalCard's checkboxes/text fields), applied directly
+ * without another LLM round-trip. */
+export function reviseProposal(proposalId: string, questions: AIProposalQuestionPatch[]): Promise<AIProposalRevisionResult> {
+  return apiClient.post<AIProposalRevisionResult>(`/api/v1/ai/proposals/${proposalId}/revise`, { questions });
 }
 
 export interface SearchCampaignsParams {
