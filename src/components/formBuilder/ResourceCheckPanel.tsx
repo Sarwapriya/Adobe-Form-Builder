@@ -21,6 +21,7 @@ import FactCheckIcon from "@mui/icons-material/FactCheck";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import { ApiError } from "../../api/apiClient";
 import { getResourceChecks, startResourceCheck, type ResourceCheck } from "../../api/formBuilderApi";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
@@ -132,17 +133,25 @@ function ResultsTable({ check }: { check: ResourceCheck }) {
 }
 
 /**
- * "Adobe server availability" for a published form: after each successful
- * SFTP deploy the backend checks (after a configurable delay, default 20 min)
+ * "Adobe server availability" for a published form — the one place this app
+ * pushes anything to Adobe over SFTP, via its own "Deploy" button (top of
+ * this panel, enabled once the form is published). After each successful
+ * deploy the backend checks (after a configurable delay, default 20 min)
  * that every generated file is served by every Adobe Campaign frontal server
  * (resource_check_service.py). Shows the latest check, its per-file ×
  * per-server results, and a "Check now" button. Polls while a check is
  * scheduled/running, and slowly otherwise so a newly scheduled check shows up
- * after a Publish/Deploy without a reload.
+ * after a Deploy without a reload. Deliberately the first content block on
+ * FormBuilderEditorPage — Deploy is the thing an admin should see and reach
+ * for immediately, not buried in the bottom action bar alongside Publish
+ * (which only makes a draft visible to subsidiary users — see
+ * BuilderActionBar's own doc comment for the full Publish vs. Deploy split).
  */
 export function ResourceCheckPanel({ formId }: { formId: string }) {
   const status = useFormBuilderStore((s) => s.status);
   const publishing = useFormBuilderStore((s) => s.publishing);
+  const deploying = useFormBuilderStore((s) => s.deploying);
+  const deploy = useFormBuilderStore((s) => s.deploy);
   const [checks, setChecks] = useState<ResourceCheck[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -190,6 +199,17 @@ export function ResourceCheckPanel({ formId }: { formId: string }) {
     }
   }
 
+  async function handleDeployNow() {
+    const result = await deploy();
+    if (!result.ok) return;
+    if (result.deployment && !result.deployment.ok) {
+      showToast(`Deploy failed: ${result.deployment.error}`, "error");
+      return;
+    }
+    showToast("Deployed to Adobe.", "success");
+    await refresh();
+  }
+
   const showTable = expanded ?? latestCompleted?.status === "failed";
   const latestInfo = latest ? describe(latest) : null;
   const completedInfo = latestCompleted && latestCompleted !== latest ? describe(latestCompleted) : null;
@@ -200,23 +220,34 @@ export function ResourceCheckPanel({ formId }: { formId: string }) {
         icon={<FactCheckIcon fontSize="small" color="primary" />}
         title="Adobe server availability"
         action={
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            disabled={starting || status !== "published" || pending?.trigger === "manual"}
-            onClick={() => void handleCheckNow()}
-          >
-            {starting ? "Starting…" : "Check now"}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<CloudUploadIcon />}
+              disabled={deploying || status !== "published"}
+              onClick={() => void handleDeployNow()}
+            >
+              {deploying ? "Deploying…" : "Deploy"}
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              disabled={starting || status !== "published" || pending?.trigger === "manual"}
+              onClick={() => void handleCheckNow()}
+            >
+              {starting ? "Starting…" : "Check now"}
+            </Button>
+          </Stack>
         }
       />
 
       {!latest ? (
         <Typography variant="body2" color="text.secondary">
           {enabled
-            ? "No checks yet. After the next successful Publish/Deploy, the files are checked automatically on every Adobe frontal server."
-            : "Automatic checks are turned off (Configuration > Deployment). You can still use Check now."}
+            ? 'No checks yet. Click "Deploy" above to push this campaign to Adobe — the files are then checked automatically on every frontal server.'
+            : 'Automatic checks are turned off (Configuration > Deployment). Click "Deploy" above to push to Adobe, and you can still use Check now.'}
         </Typography>
       ) : (
         <Stack spacing={0.75}>

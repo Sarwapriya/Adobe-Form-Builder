@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Autocomplete, Chip, Stack, TextField, Typography } from "@mui/material";
 import type { FormVariant, TranslationTarget } from "@formbuilder/shared";
-import { CALLING_CODES, resolveCountryName, resolveMobileNumberCountries, subsidiaryCountryCodes } from "@formbuilder/shared";
+import { CALLING_CODES, resolveCountryName, resolveMobileNumberCountries } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { ConsentVisibilityControls } from "./ConsentVisibilityControls";
 import { consentVariants } from "./formBuilderHelpers";
@@ -32,11 +32,14 @@ const FIELD_LABEL: Record<ProfileFieldKey, string> = {
 };
 
 /** Config drawer content for a predefined profile field. Mobile Number gets an
- * extra country picker, restricted to the form's own subsidiary's real country
- * list (see subsidiaryCountryCodes) so a subsidiary/campaign only ever offers
- * the countries it actually serves, falling back to the generic CALLING_CODES
- * list for a subsidiary this repo has no reference country data for — driving
- * both the generated form's calling-code dropdown and its runtime validation
+ * extra country picker: every country (CALLING_CODES) is always selectable —
+ * a campaign copied into a different subsidiary (e.g. a pan-regional FIFA-WC
+ * campaign cloned from SELV into SEEG, whose own real country list is Egypt
+ * only) still needs to add whatever countries that specific campaign serves,
+ * not just the owning subsidiary's own default one. subsidiaryCountryCodes
+ * only drives which countries are pre-selected/suggested by default on a
+ * fresh field, never a hard restriction on what can be added — driving both
+ * the generated form's calling-code dropdown and its runtime validation
  * (see buildDataJs.ts's synthesized "BUILDER" subsidiary table); Privacy Policy
  * has its own shape (consent text + link text + link URL, not a plain label —
  * see PrivacyPolicyMeta in formDefinition.ts); Privacy Policy and Marketing
@@ -386,8 +389,10 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
     });
   }
 
-  const subsidiaryCodes = definition ? subsidiaryCountryCodes(definition.meta.subsidiary) : [];
-  const countryOptions = subsidiaryCodes.length > 0 ? subsidiaryCodes : CALLING_CODES.map((c) => c.countryCode);
+  // Always every known country — never restricted to the owning subsidiary's
+  // own list, since a campaign (e.g. copied from another subsidiary) can
+  // legitimately need countries beyond the subsidiary's own default ones.
+  const countryOptions = CALLING_CODES.map((c) => c.countryCode);
 
   return (
     <Stack spacing={2}>
@@ -442,7 +447,7 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
               placeholder="Add a country"
               helperText={
                 activeLocale === defaultLocale
-                  ? `Shared default for every locale without its own override. Restricted to ${definition.meta.subsidiary}'s own countries when available.`
+                  ? "Shared default for every locale without its own override. Any country can be added."
                   : `Override for ${activeLocale} only — clear it to fall back to the default locale's list.`
               }
             />

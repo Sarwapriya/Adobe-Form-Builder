@@ -102,8 +102,9 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: "block" }}>
         This form was created by a subsidiary user via My Forms
         {submittedForReviewAt ? `, submitted ${new Date(submittedForReviewAt).toLocaleString()}` : ""}. Approving publishes
-        the form immediately under the project code they chose (shown below — you can still change it); rejecting sends
-        it back to them, editable again.
+        the form immediately under the project code they chose (shown below — you can still change it) — it won't be
+        pushed to Adobe until you separately click Deploy, at the top of the page below; rejecting sends it back to
+        them, editable again.
       </Typography>
 
       <Stack direction="row" spacing={1}>

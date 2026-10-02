@@ -114,7 +114,21 @@ def publish_form(id: str, db: Session = Depends(get_db), auth: dict = Depends(re
     if result["outcome"] == "invalid":
         validation: ValidationResult = result["validation"]
         raise HTTPException(status_code=422, detail={"error": "form is not valid", "validation": validation.model_dump()})
-    return {"validation": result["validation"], "deployment": result["deployment"]}
+    return {"validation": result["validation"]}
+
+
+@router.post("/{id}/deploy")
+def deploy_form(id: str, db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> dict:
+    """The separate, explicit "push to Adobe over SFTP" action — requires the
+    form to already be published (see form_builder_service.deploy_form)."""
+    result = form_builder_service.deploy_form(db, id, auth["sub"])
+    if result["outcome"] == "not_found":
+        raise HTTPException(status_code=404, detail="form not found")
+    if result["outcome"] == "not_published":
+        raise HTTPException(status_code=409, detail="form is not currently published")
+    if result["outcome"] == "no_files":
+        raise HTTPException(status_code=409, detail="no generated files to deploy")
+    return {"deployment": result["deployment"]}
 
 
 @router.get("/{id}/resource-checks")

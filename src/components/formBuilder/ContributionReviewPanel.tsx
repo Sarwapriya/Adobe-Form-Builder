@@ -73,18 +73,22 @@ function describeContent(c: ContributionSummary, defaultLocale: string): string 
 /**
  * Admin-facing review queue for a form's subsidiary-submitted contributions
  * (translations + additive questions/consents — see formContributionService.ts's
- * own doc comment). Approve and Deploy are deliberately separate actions:
+ * own doc comment). Approve and Publish are deliberately separate actions:
  * Approve just merges the contribution onto the current draft, so an admin can
- * approve several submissions before going live with all of them in one Deploy —
- * which calls the exact same `publishForm` API BuilderActionBar's own "Publish"
- * button uses (just below this panel), and also stamps every now-live approved
+ * approve several submissions before going live with all of them in one
+ * Publish — which calls the exact same `publishForm` API BuilderActionBar's
+ * own "Publish" button uses (just below this panel; makes the merged draft
+ * visible/downloadable for subsidiary users, never pushes to Adobe by
+ * itself — see that component's own doc comment for the separate "Deploy"
+ * action, at the top of the page), and also stamps every now-live approved
  * contribution's `publishedAt`. Rejecting leaves the form untouched. Lives on
  * FormBuilderEditorPage, below the main editor.
  *
- * This shortcut button is always labeled "Deploy" (never "Publish") — it only
- * ever renders once there's at least one approved-but-not-live contribution
- * (see the `awaitingPublish.length > 0` gate below) AND the admin hasn't made
- * any edits of their own since (`!dirty`); BuilderActionBar's own "Publish"
+ * This shortcut button is always labeled "Publish" (never "Deploy", now that
+ * that word means the separate push-to-Adobe action) — it only ever renders
+ * once there's at least one approved-but-not-live contribution (see the
+ * `awaitingPublish.length > 0` gate below) AND the admin hasn't made any
+ * edits of their own since (`!dirty`); BuilderActionBar's own "Publish"
  * button (just below this panel) is disabled under that same first condition
  * and re-enabled the moment this one hides, so exactly one of the two is ever
  * the active call-to-action — see BuilderActionBar's own doc comment for the
@@ -128,22 +132,16 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
     }
   }
 
-  async function handleDeploy() {
+  async function handlePublish() {
     setBusyId("__publish__");
     try {
-      const result = await apiPublishForm(formId);
-      if (result.deployment && !result.deployment.ok) {
-        showToast(
-          `Deployed. SFTP delivery to the campaign server failed (${result.deployment.error}) — check Configuration > Deployment and that the server is reachable, then retry.`,
-          "warning",
-        );
-      }
+      await apiPublishForm(formId);
       await Promise.all([refresh(), reloadForm(formId)]);
     } catch (err) {
       if (err instanceof FormInvalidError) {
-        showToast("Deploy failed — the current draft has validation errors (see the panel above). Fix them and try again.", "error");
+        showToast("Publish failed — the current draft has validation errors (see the panel above). Fix them and try again.", "error");
       } else {
-        showToast(err instanceof ApiError ? err.message : "Failed to deploy", "error");
+        showToast(err instanceof ApiError ? err.message : "Failed to publish", "error");
       }
     } finally {
       setBusyId(null);
@@ -195,7 +193,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: "block" }}>
         Translations and additions submitted by subsidiary users. Approve merges a submission onto the current draft;
-        nothing goes live until you separately Deploy — approve as many as you like first, then deploy them all at
+        nothing goes live until you separately Publish — approve as many as you like first, then publish them all at
         once.
       </Typography>
 
@@ -210,9 +208,9 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
                 variant="contained"
                 startIcon={<RocketLaunchIcon />}
                 disabled={busyId === "__publish__"}
-                onClick={handleDeploy}
+                onClick={handlePublish}
               >
-                {busyId === "__publish__" ? "Deploying..." : "Deploy"}
+                {busyId === "__publish__" ? "Publishing..." : "Publish"}
               </Button>
             )
           }

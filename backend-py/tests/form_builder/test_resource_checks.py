@@ -266,8 +266,13 @@ def deploy_ok(monkeypatch):
     )
 
 
-def test_publish_schedules_check_and_api_lists_it(client, db_session, admin_headers, subsidiary_row, deploy_ok):
+def test_deploy_schedules_check_and_api_lists_it(client, db_session, admin_headers, subsidiary_row, deploy_ok):
     form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)
+    # Publish alone never deploys — it's a separate, explicit action (see
+    # form_builder_service.deploy_form's own doc comment).
+    deploy_resp = client.post(f"/api/v1/admin/forms/{form_id}/deploy", headers=admin_headers)
+    assert deploy_resp.status_code == 200, deploy_resp.text
+
     resp = client.get(f"/api/v1/admin/forms/{form_id}/resource-checks", headers=admin_headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -279,8 +284,23 @@ def test_publish_schedules_check_and_api_lists_it(client, db_session, admin_head
 
 
 def test_failed_sftp_deploy_schedules_nothing(client, db_session, admin_headers, subsidiary_row):
-    form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)  # SFTP not configured in tests
+    form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)
+    deploy_resp = client.post(f"/api/v1/admin/forms/{form_id}/deploy", headers=admin_headers)  # SFTP not configured in tests
+    assert deploy_resp.status_code == 200 and deploy_resp.json()["deployment"]["ok"] is False
     assert client.get(f"/api/v1/admin/forms/{form_id}/resource-checks", headers=admin_headers).json()["checks"] == []
+
+
+def test_deploy_requires_the_form_to_already_be_published(client, db_session, admin_headers, subsidiary_row):
+    create_resp = client.post(
+        "/api/v1/admin/forms/", json={"name": "Draft only", "subsidiaryId": subsidiary_row.name}, headers=admin_headers
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    form_id = create_resp.json()["id"]
+    assert client.post(f"/api/v1/admin/forms/{form_id}/deploy", headers=admin_headers).status_code == 409
+
+
+def test_deploy_404s_for_an_unknown_form(client, admin_headers):
+    assert client.post(f"/api/v1/admin/forms/{uuid.uuid4()}/deploy", headers=admin_headers).status_code == 404
 
 
 def test_check_now_runs_in_background(client, db_session, admin_headers, subsidiary_row, monkeypatch, fake_http, sent_emails):

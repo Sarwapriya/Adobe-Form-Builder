@@ -40,27 +40,30 @@ const STATUS_COLOR = { draft: "default", published: "success", unpublished: "war
  * an admin approves it via AdHocReviewPanel, which calls publishForm directly).
  * A draft or unpublished form has nothing generated to download.
  *
- * This bar's own button always says "Publish & Deploy" — it's how an admin
- * pushes their *own* edits (made directly in this editor) live for subsidiary
- * users to see AND out to Adobe over SFTP, first time or the hundredth time;
- * it's a real deploy every time, not a subsidiary-preview-only action (admins
- * were reading the plain "Publish" label as the former — see
- * form_builder_service.publish_form, which this and AdHocReviewPanel's
- * "Approve & Publish" both call identically). That's a distinct action from
- * ContributionReviewPanel's own button just above this bar, which only ever
- * appears once there's an *approved subsidiary contribution* waiting to go
- * live and is labeled "Deploy" specifically — admins were confusing the two
- * when both said "Publish" in two places on the same page. See that
- * component's own doc comment for the full reasoning.
+ * This bar's own "Publish" button makes the admin's *own* edits (made
+ * directly in this editor) visible/downloadable for subsidiary users to see
+ * — it never pushes anything to Adobe by itself (form_builder_service.
+ * publish_form). Pushing the published files to Adobe over SFTP is a
+ * separate, explicit "Deploy" action, at the top of this same page
+ * (ResourceCheckPanel's own Deploy button, shown once status is "published")
+ * — admins were reading this bar's old combined Publish-and-deploy behavior
+ * as a subsidiary-preview-only action when it was actually also deploying
+ * every time, so the two are now genuinely separate backend calls
+ * (publish_form vs. deploy_form), not just different labels for one action.
+ * ContributionReviewPanel's own button just above this bar is the same
+ * publish-only call as this one (merging the current draft including any
+ * approved-but-unpublished contributions) — it's deliberately also labeled
+ * "Publish", not "Deploy", for the same reason. See that component's own doc
+ * comment for the full reasoning.
  *
  * While there's an approved-but-not-live contribution and the admin hasn't
  * touched anything else since (`!dirty`), this button is disabled —
- * ContributionReviewPanel's Deploy button is the one correct action at that
- * point, and having both active invited clicking the wrong one. The moment
- * the admin edits anything themselves (`dirty` flips true again), this button
- * re-enables and ContributionReviewPanel hides its own Deploy button (see
+ * ContributionReviewPanel's own Publish button is the one correct action at
+ * that point, and having both active invited clicking the wrong one. The
+ * moment the admin edits anything themselves (`dirty` flips true again), this
+ * button re-enables and ContributionReviewPanel hides its own button (see
  * that component) — from then on there's a real edit of the admin's own on
- * top of the merged contribution, so Publish & Deploy is once again the one
+ * top of the merged contribution, so this bar's Publish is once again the one
  * action that covers everything in the current draft. */
 export function BuilderActionBar() {
   const navigate = useNavigate();
@@ -102,16 +105,7 @@ export function BuilderActionBar() {
 
   async function handlePublish() {
     const result = await publish();
-    if (result.ok) {
-      if (result.deployment && !result.deployment.ok) {
-        showToast(
-          `Published. SFTP delivery to the campaign server failed (${result.deployment.error}) — check Configuration > Deployment and that the server is reachable, then retry.`,
-          "warning",
-        );
-      } else {
-        showToast("Published.", "success");
-      }
-    }
+    if (result.ok) showToast("Published.", "success");
   }
 
   async function handleUnpublish() {
@@ -198,7 +192,7 @@ export function BuilderActionBar() {
           disabled={publishing || validation.errors.length > 0 || (hasAwaitingContribution && !dirty)}
           onClick={handlePublish}
         >
-          {publishing ? "Publishing..." : "Publish & Deploy"}
+          {publishing ? "Publishing..." : "Publish"}
         </Button>
         {status === "published" && (
           <Button size="small" color="warning" startIcon={<UnpublishedIcon />} onClick={handleUnpublish}>

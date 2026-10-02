@@ -148,10 +148,6 @@ export function updateDraft(formId: string, definition: FormDefinition, config: 
 
 export interface PublishResponse {
   validation: ValidationResult;
-  /** Best-effort SFTP push to the Adobe Campaign drop folder — absent on
-   * validation failure (nothing was generated to push). A failed deployment
-   * doesn't mean publish itself failed; see backend's sftpService.ts. */
-  deployment?: { ok: boolean; error?: string };
 }
 
 export class FormInvalidError extends Error {
@@ -164,7 +160,9 @@ export class FormInvalidError extends Error {
 }
 
 /** Throws FormInvalidError (carrying the blocking Issue[]) on a 422 — every other
- * failure surfaces as the usual ApiError from apiClient. */
+ * failure surfaces as the usual ApiError from apiClient. Makes the campaign
+ * visible/downloadable for subsidiary users — does NOT push anything to
+ * Adobe; see deployForm for that, a separate explicit action. */
 export async function publishForm(formId: string): Promise<PublishResponse> {
   try {
     return await apiClient.post<PublishResponse>(`/api/v1/admin/forms/${formId}/publish`);
@@ -175,6 +173,21 @@ export async function publishForm(formId: string): Promise<PublishResponse> {
     }
     throw err;
   }
+}
+
+export interface DeployResponse {
+  /** Best-effort SFTP push to the Adobe Campaign drop folder. A failed
+   * deployment doesn't mean the request itself failed; see backend's
+   * sftp_service.py. */
+  deployment: { ok: boolean; error?: string };
+}
+
+/** POST /api/v1/admin/forms/:id/deploy — pushes the CURRENT PUBLISHED
+ * version's already-generated files to Adobe over SFTP (no regeneration).
+ * Requires the form to already be published (see publishForm); a 409 means
+ * it isn't, or there's nothing generated to push. */
+export function deployForm(formId: string): Promise<DeployResponse> {
+  return apiClient.post<DeployResponse>(`/api/v1/admin/forms/${formId}/deploy`);
 }
 
 /** One post-deployment availability check of a published form's files on the

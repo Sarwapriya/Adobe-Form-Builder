@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { validateFormDefinition, type BuilderConfig, type FormDefinition, type ValidationResult } from "@formbuilder/shared";
 import {
   deleteForm as apiDeleteForm,
+  deployForm as apiDeployForm,
   FormInvalidError,
   getFormDetail,
   listFormContributions,
@@ -56,6 +57,10 @@ interface FormBuilderState {
   loading: boolean;
   saving: boolean;
   publishing: boolean;
+  /** True while a deploy (push to Adobe over SFTP) request is in flight —
+   * separate from `publishing`, since Publish and Deploy are now distinct
+   * actions (see publish()/deploy() below). */
+  deploying: boolean;
   error: string | null;
   /** Every FormContribution submitted against this form (admin mode only —
    * ad-hoc forms have no FormContribution review lifecycle), newest-first.
@@ -72,7 +77,14 @@ interface FormBuilderState {
   updateDefinition: (updater: (definition: FormDefinition) => FormDefinition) => void;
   updateConfig: (patch: Partial<BuilderConfig>) => void;
   saveDraft: () => Promise<boolean>;
-  publish: () => Promise<{ ok: boolean; validation?: ValidationResult; deployment?: { ok: boolean; error?: string } }>;
+  /** Validates/generates the draft and makes it visible/downloadable for
+   * subsidiary users — does NOT push anything to Adobe; see deploy() for
+   * that, a separate explicit action. */
+  publish: () => Promise<{ ok: boolean; validation?: ValidationResult }>;
+  /** Pushes the current published version's already-generated files to Adobe
+   * over SFTP. Only meaningful once the form is published (publish() or an
+   * ad-hoc approval) — a 409 means it isn't yet, or there's nothing to push. */
+  deploy: () => Promise<{ ok: boolean; deployment?: { ok: boolean; error?: string } }>;
   unpublish: () => Promise<boolean>;
   deleteForm: () => Promise<boolean>;
   /** adhoc mode only — saves the draft, then submits it for admin review (see
@@ -125,6 +137,7 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
   loading: false,
   saving: false,
   publishing: false,
+  deploying: false,
   error: null,
   contributions: [],
   contributionsLoading: false,
@@ -205,15 +218,30 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
 
     set({ publishing: true, error: null });
     try {
-      const { validation, deployment } = await apiPublishForm(formId);
+      const { validation } = await apiPublishForm(formId);
       await get().loadForm(formId);
-      return { ok: true, validation, deployment };
+      return { ok: true, validation };
     } catch (err) {
       const validation = err instanceof FormInvalidError ? err.validation : undefined;
       set({ error: err instanceof Error ? err.message : "Failed to publish form", validation: validation ?? get().validation });
       return { ok: false, validation };
     } finally {
       set({ publishing: false });
+    }
+  },
+
+  async deploy() {
+    const { formId } = get();
+    if (!formId) return { ok: false };
+    set({ deploying: true, error: null });
+    try {
+      const { deployment } = await apiDeployForm(formId);
+      return { ok: true, deployment };
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to deploy form" });
+      return { ok: false };
+    } finally {
+      set({ deploying: false });
     }
   },
 
@@ -284,6 +312,7 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
       loading: false,
       saving: false,
       publishing: false,
+      deploying: false,
       error: null,
       contributions: [],
       contributionsLoading: false,

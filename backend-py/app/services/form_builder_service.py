@@ -346,7 +346,11 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     GeneratedFiles, assigns a versionNumber inside a locked transaction, then
     clones the just-published content into a fresh draft row so further
     edits never touch this now-published version's data/on-disk output
-    again."""
+    again. Makes the campaign visible/downloadable for subsidiary users —
+    deliberately does NOT push anything to Adobe over SFTP; see `deploy_form`
+    for that, a separate, explicit action (admins were reading this function's
+    old combined behavior as a subsidiary-only "preview" publish when it was
+    actually also deploying)."""
     form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
     if form is None or not form.currentDraftVersionId:
         return {"outcome": "not_found"}
@@ -432,10 +436,35 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     form.currentDraftVersionId = new_draft.id
     db.commit()
 
-    # Best-effort push to the Adobe Campaign SFTP drop folder — deliberately
-    # never blocks or fails the publish itself.
+    return {"outcome": "ok", "validation": validation}
+
+
+DeployOutcome = Literal["ok", "not_found", "not_published", "no_files"]
+
+
+def deploy_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
+    """The explicit, separate "push to Adobe" action — best-effort SFTP push
+    of the CURRENT PUBLISHED version's already-generated files (no
+    regeneration; re-deploys exactly what publish_form last produced).
+    Requires the form to already be published (via publish_form or
+    approve_adhoc_form) — never blocks or fails on an SFTP error, same
+    best-effort contract sftp_service.deploy_generated_files always had."""
+    form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
+    if form is None:
+        return {"outcome": "not_found"}
+    if form.status != "published" or not form.publishedVersionId:
+        return {"outcome": "not_published"}
+
+    saved = list(
+        db.execute(
+            select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == form.publishedVersionId)
+        ).scalars()
+    )
+    if not saved:
+        return {"outcome": "no_files"}
+
     deployment = deploy_generated_files(
-        db, [SftpDeployFile(absolutePath=absolute_file_path(f.relativePath), remoteFileName=f.fileName) for f in saved]
+        db, [SftpDeployFile(absolutePath=absolute_file_path(f.filePath), remoteFileName=f.fileName) for f in saved]
     )
 
     # Once Adobe has had time to pick the files up, check they're actually
@@ -444,10 +473,10 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
         from app.services import resource_check_service
 
         resource_check_service.schedule_after_deploy(
-            db, form_id, draft_version.id, [f.fileName for f in saved], user_id, deployment.environment
+            db, form_id, form.publishedVersionId, [f.fileName for f in saved], user_id, deployment.environment
         )
 
-    return {"outcome": "ok", "validation": validation, "deployment": deployment}
+    return {"outcome": "ok", "deployment": deployment}
 
 
 UnpublishOutcome = Literal["ok", "not_found", "not_published"]
