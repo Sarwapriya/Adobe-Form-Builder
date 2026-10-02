@@ -40,24 +40,28 @@ const STATUS_COLOR = { draft: "default", published: "success", unpublished: "war
  * an admin approves it via AdHocReviewPanel, which calls publishForm directly).
  * A draft or unpublished form has nothing generated to download.
  *
- * This bar's own "Publish" button always says "Publish" — it's how an admin
+ * This bar's own button always says "Publish & Deploy" — it's how an admin
  * pushes their *own* edits (made directly in this editor) live for subsidiary
- * users to see, first time or the hundredth time. That's a distinct action
- * from ContributionReviewPanel's own button just above this bar, which only
- * ever appears once there's an *approved subsidiary contribution* waiting to
- * go live and is labeled "Deploy" specifically — admins were confusing the
- * two when both said "Publish" in two places on the same page. See that
+ * users to see AND out to Adobe over SFTP, first time or the hundredth time;
+ * it's a real deploy every time, not a subsidiary-preview-only action (admins
+ * were reading the plain "Publish" label as the former — see
+ * form_builder_service.publish_form, which this and AdHocReviewPanel's
+ * "Approve & Publish" both call identically). That's a distinct action from
+ * ContributionReviewPanel's own button just above this bar, which only ever
+ * appears once there's an *approved subsidiary contribution* waiting to go
+ * live and is labeled "Deploy" specifically — admins were confusing the two
+ * when both said "Publish" in two places on the same page. See that
  * component's own doc comment for the full reasoning.
  *
  * While there's an approved-but-not-live contribution and the admin hasn't
- * touched anything else since (`!dirty`), this Publish button is disabled —
+ * touched anything else since (`!dirty`), this button is disabled —
  * ContributionReviewPanel's Deploy button is the one correct action at that
  * point, and having both active invited clicking the wrong one. The moment
- * the admin edits anything themselves (`dirty` flips true again), Publish
+ * the admin edits anything themselves (`dirty` flips true again), this button
  * re-enables and ContributionReviewPanel hides its own Deploy button (see
  * that component) — from then on there's a real edit of the admin's own on
- * top of the merged contribution, so Publish is once again the one action
- * that covers everything in the current draft. */
+ * top of the merged contribution, so Publish & Deploy is once again the one
+ * action that covers everything in the current draft. */
 export function BuilderActionBar() {
   const navigate = useNavigate();
   const formId = useFormBuilderStore((s) => s.formId);
@@ -194,7 +198,7 @@ export function BuilderActionBar() {
           disabled={publishing || validation.errors.length > 0 || (hasAwaitingContribution && !dirty)}
           onClick={handlePublish}
         >
-          {publishing ? "Publishing..." : "Publish"}
+          {publishing ? "Publishing..." : "Publish & Deploy"}
         </Button>
         {status === "published" && (
           <Button size="small" color="warning" startIcon={<UnpublishedIcon />} onClick={handleUnpublish}>

@@ -51,15 +51,17 @@ const STATUS_OPTIONS: Array<{ value: FormStatus | ""; label: string }> = [
  * side), fully separate from the sibling "HR Form Initiator" submenu page
  * (HrFormInitiatorListPage), which only ever covers admin-authored forms.
  *
- * Two ways to create from here, both through the same New Form dialog:
- * - the header "New Form" button starts a brand-new *ad-hoc* campaign
- *   (origin: "adhoc", Full Form only), which then lists here like any other
- *   ad-hoc form. Like every ad-hoc form it is also visible to that
- *   subsidiary's own users under My Forms > Ad-hoc Forms.
+ * Two ways to create from here, both through the same New Form dialog, and
+ * both always origin: "adhoc" (Full Form only) so the result always lists
+ * here and is visible to that subsidiary's own users under My Forms > Ad-hoc
+ * Forms:
+ * - the header "New Form" button starts a brand-new, empty ad-hoc campaign.
  * - each row's Copy action reuses a good ad-hoc submission's
- *   questions/fields/consents as the starting point for a brand new
- *   admin-origin (HR) form — same createForm({ copyFromFormId }) plumbing
- *   HrFormInitiatorListPage's own Copy action uses.
+ *   questions/fields/consents as the starting point for a brand new ad-hoc
+ *   campaign for the subsidiary you pick (often a different one than the
+ *   source's own) — same createForm({ copyFromFormId }) plumbing
+ *   HrFormInitiatorListPage's own Copy action uses, just always forcing
+ *   origin: "adhoc" here instead of leaving it to default to "admin".
  * Reviewing what a subsidiary user submitted (AdHocReviewPanel, on the shared
  * FormBuilderEditorPage) is unchanged.
  */
@@ -138,7 +140,8 @@ export function AdHocFormInitiatorListPage() {
 
   /** Row-level "Copy" action — opens a New Form dialog (Name/Subsidiary/
    * Project Code, same as HR Form Initiator's own) that creates a brand new
-   * admin-origin form pre-filled from this ad-hoc submission's content. */
+   * ad-hoc campaign pre-filled from this ad-hoc submission's content, usually
+   * for a different subsidiary than the source's own. */
   function handleCopy(form: FormListItem) {
     setCopySourceForm(form);
     setNewSubsidiaryId(form.subsidiaryId);
@@ -155,9 +158,10 @@ export function AdHocFormInitiatorListPage() {
         name: newName.trim(),
         subsidiaryId: newSubsidiaryId,
         projectCode: newProjectCode || undefined,
-        // Copying an ad-hoc submission makes an HR (admin-origin) form, as before;
-        // a plain New Form is a brand-new ad-hoc campaign.
-        ...(copySourceForm ? { copyFromFormId: copySourceForm.id } : { origin: "adhoc" as const }),
+        // Always a new ad-hoc campaign from this page — whether starting blank
+        // or copying another ad-hoc submission's content as the starting point.
+        origin: "adhoc",
+        ...(copySourceForm ? { copyFromFormId: copySourceForm.id } : {}),
       });
       closeCreateDialog();
       navigate(`/admin/form-builder/${form.id}`);
@@ -248,7 +252,7 @@ export function AdHocFormInitiatorListPage() {
               {form.pendingReview && <Chip label="Pending review" size="small" color="warning" />}
               <Chip label={form.status} color={STATUS_COLOR[form.status]} size="small" />
               <FormRowIconActions
-                copyTooltip="Copy into a new HR form"
+                copyTooltip="Copy into a new ad-hoc form"
                 onCopy={() => handleCopy(form)}
                 onDelete={() => setConfirmDeleteForm(form)}
                 deleteDisabled={deletingId === form.id}
@@ -276,7 +280,7 @@ export function AdHocFormInitiatorListPage() {
               {copySourceForm ? (
                 <Alert severity="info" sx={{ borderRadius: 2 }}>
                   Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
-                  everything afterward. This creates a new HR form, separate from the ad-hoc submission.
+                  everything afterward. This creates a new ad-hoc campaign, separate from the source submission.
                 </Alert>
               ) : (
                 <Alert severity="info" sx={{ borderRadius: 2 }}>
