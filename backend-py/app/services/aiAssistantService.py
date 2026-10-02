@@ -845,6 +845,7 @@ async def confirm_action(db: Session, auth: dict, action_id: str) -> dict[str, A
             origin="admin" if admin else "adhoc",
             copy_from_form_id=copy_from,
             exclude_locked_project_code=not admin,
+            exclude_hand_raiser_project_code=not admin,
         )
         result = {"formId": form["id"]}
         db.execute(

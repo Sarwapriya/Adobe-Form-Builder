@@ -128,9 +128,16 @@ export function listAllProjectCodes(): Promise<ProjectCode[]> {
 /** `startDate`/`endDate`/`cutoffDate` are "YYYY-MM-DD" strings (an
  * <input type="date">'s own value format) or omitted. `startDate`/`endDate`
  * are purely descriptive; `cutoffDate` isn't enforced here either but is
- * meaningful — see backend ProjectCode entity's own doc comment. */
-export function createProjectCode(code: string, startDate?: string, endDate?: string, cutoffDate?: string): Promise<ProjectCode> {
-  return apiClient.post<ProjectCode>("/api/v1/admin/project-codes", { code, startDate, endDate, cutoffDate });
+ * meaningful — see backend ProjectCode entity's own doc comment. `category`
+ * defaults to "adhoc" server-side when omitted. */
+export function createProjectCode(
+  code: string,
+  startDate?: string,
+  endDate?: string,
+  cutoffDate?: string,
+  category?: "adhoc" | "handRaiser",
+): Promise<ProjectCode> {
+  return apiClient.post<ProjectCode>("/api/v1/admin/project-codes", { code, startDate, endDate, cutoffDate, category });
 }
 
 /** Closing a project code blocks new uploads against it (enforced server-side
@@ -146,6 +153,14 @@ export function setProjectCodeOpen(id: string, isOpen: boolean): Promise<Project
  * freeze from `setProjectCodeOpen` above. Admins stay exempt. */
 export function setProjectCodeLocked(id: string, isLocked: boolean): Promise<ProjectCode> {
   return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { isLocked });
+}
+
+/** Re-categorizes a project code between "adhoc" (open to subsidiary
+ * self-service campaigns) and "handRaiser" (reserved for HR Form Initiator/
+ * admin-authored campaigns — see `ProjectCode.category`'s own doc comment).
+ * Independent of open/closed and locked/unlocked. */
+export function setProjectCodeCategory(id: string, category: "adhoc" | "handRaiser"): Promise<ProjectCode> {
+  return apiClient.patch<ProjectCode>(`/api/v1/admin/project-codes/${id}`, { category });
 }
 
 /** Renames a project code's own text value (server rejects an exact

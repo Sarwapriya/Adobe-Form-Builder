@@ -11,6 +11,7 @@ import { ApiError } from "../../api/apiClient";
 import {
   createProjectCode,
   listAllProjectCodes,
+  setProjectCodeCategory,
   setProjectCodeDateRange,
   setProjectCodeLocked,
   setProjectCodeOpen,
@@ -60,9 +61,11 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
   const [newStartDate, setNewStartDate] = useState("");
   const [newEndDate, setNewEndDate] = useState("");
   const [newCutoffDate, setNewCutoffDate] = useState("");
+  const [newCategory, setNewCategory] = useState<"adhoc" | "handRaiser">("adhoc");
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [togglingLockedId, setTogglingLockedId] = useState<string | null>(null);
+  const [togglingCategoryId, setTogglingCategoryId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
@@ -91,11 +94,12 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
 
     setCreating(true);
     try {
-      await createProjectCode(newCode.trim(), newStartDate || undefined, newEndDate || undefined, newCutoffDate || undefined);
+      await createProjectCode(newCode.trim(), newStartDate || undefined, newEndDate || undefined, newCutoffDate || undefined, newCategory);
       setNewCode("");
       setNewStartDate("");
       setNewEndDate("");
       setNewCutoffDate("");
+      setNewCategory("adhoc");
       await refresh();
       onChange?.();
     } catch (err) {
@@ -128,6 +132,19 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
       showToast(err instanceof ApiError ? err.message : "Failed to update project code", "error");
     } finally {
       setTogglingLockedId(null);
+    }
+  }
+
+  async function handleToggleCategory(code: ProjectCode) {
+    setTogglingCategoryId(code.id);
+    try {
+      await setProjectCodeCategory(code.id, code.category === "handRaiser" ? "adhoc" : "handRaiser");
+      await refresh();
+      onChange?.();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to update project code", "error");
+    } finally {
+      setTogglingCategoryId(null);
     }
   }
 
@@ -194,6 +211,12 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
           onChange={(e) => setNewCutoffDate(e.target.value)}
           InputLabelProps={{ shrink: true }}
         />
+        <Chip
+          label={newCategory === "handRaiser" ? "Hand Raiser" : "Ad-hoc"}
+          color={newCategory === "handRaiser" ? "secondary" : "default"}
+          onClick={() => setNewCategory((c) => (c === "handRaiser" ? "adhoc" : "handRaiser"))}
+          title="Ad-hoc: open to subsidiary self-service campaigns. Hand Raiser: reserved for HR Form Initiator — click to toggle."
+        />
         <Button type="submit" variant="outlined" disabled={!newCode.trim() || creating}>
           {creating ? "Adding..." : "Add"}
         </Button>
@@ -213,10 +236,12 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
               code={code}
               toggling={togglingId === code.id}
               togglingLocked={togglingLockedId === code.id}
+              togglingCategory={togglingCategoryId === code.id}
               saving={savingId === code.id}
               renaming={renamingId === code.id}
               onToggle={() => handleToggle(code)}
               onToggleLock={() => handleToggleLock(code)}
+              onToggleCategory={() => handleToggleCategory(code)}
               onSaveDateRange={(startDate, endDate, cutoffDate) => handleSaveDateRange(code.id, startDate, endDate, cutoffDate)}
               onRename={(newValue) => handleRename(code.id, newValue)}
             />
@@ -231,20 +256,24 @@ function ProjectCodeRow({
   code,
   toggling,
   togglingLocked,
+  togglingCategory,
   saving,
   renaming,
   onToggle,
   onToggleLock,
+  onToggleCategory,
   onSaveDateRange,
   onRename,
 }: {
   code: ProjectCode;
   toggling: boolean;
   togglingLocked: boolean;
+  togglingCategory: boolean;
   saving: boolean;
   renaming: boolean;
   onToggle: () => void;
   onToggleLock: () => void;
+  onToggleCategory: () => void;
   onSaveDateRange: (startDate: string, endDate: string, cutoffDate: string) => void;
   onRename: (code: string) => void;
 }) {
@@ -308,6 +337,19 @@ function ProjectCodeRow({
               : "Unlocked — click to freeze subsidiary uploads/contributions and allow generating a Question Master"
           }
           sx={{ minWidth: 100 }}
+        />
+        <Chip
+          label={code.category === "handRaiser" ? "Hand Raiser" : "Ad-hoc"}
+          color={code.category === "handRaiser" ? "secondary" : "default"}
+          icon={<BadgeIcon />}
+          onClick={onToggleCategory}
+          disabled={togglingCategory}
+          title={
+            code.category === "handRaiser"
+              ? "Reserved for HR Form Initiator — subsidiary users can't attach a new campaign to it, anywhere; click to make it Ad-hoc"
+              : "Open to subsidiary self-service campaigns; click to reserve it for HR Form Initiator only"
+          }
+          sx={{ minWidth: 110 }}
         />
       </Stack>
       <Divider sx={{ my: 1 }} />

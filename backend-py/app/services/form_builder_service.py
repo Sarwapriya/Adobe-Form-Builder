@@ -144,6 +144,7 @@ def create_form(
     copy_from_form_id: Optional[str] = None,
     questions: Optional[list[QuestionDefinition]] = None,
     exclude_locked_project_code: bool = False,
+    exclude_hand_raiser_project_code: bool = False,
 ) -> dict[str, Any]:
     """Creates a new builder form: a draft FormVersion (blank, or cloned from
     an existing form — see `copy_from_form_id`) plus the Form row pointing at
@@ -152,13 +153,16 @@ def create_form(
     # project_code_service.assert_project_code_open's own doc comment. A
     # subsidiary user now picks the project code up front for their own
     # ad-hoc form too (validated the same way as any other project code
-    # attachment, including the lock — see exclude_locked_project_code, which
-    # the subsidiary router passes as True); an admin may still reassign it
-    # at approval time (approve_adhoc_form below) if needed, staying exempt
-    # from the lock as usual.
+    # attachment, including the lock and the Hand-Raiser-only category — see
+    # exclude_locked_project_code/exclude_hand_raiser_project_code, which the
+    # subsidiary router passes as True); an admin may still reassign it at
+    # approval time (approve_adhoc_form below) if needed, staying exempt from
+    # both as usual.
     subsidiary_service.assert_subsidiary_active(db, subsidiary_id)
     if project_code:
-        project_code_service.assert_project_code_open(db, project_code, exclude_locked=exclude_locked_project_code)
+        project_code_service.assert_project_code_open(
+            db, project_code, exclude_locked=exclude_locked_project_code, exclude_hand_raiser=exclude_hand_raiser_project_code
+        )
         subsidiary_project_block_service.assert_not_blocked(db, subsidiary_id, project_code)
 
     copy_source = get_form_detail(db, copy_from_form_id) if copy_from_form_id else None

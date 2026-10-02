@@ -125,14 +125,27 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
     error: { main: "#ef4444", light: "#f87171", dark: "#b91c1c", contrastText: "#ffffff" },
     info: { main: "#3b82f6", light: "#60a5fa", dark: "#1d4ed8", contrastText: "#ffffff" },
     background: {
-      default: isDark ? "#0b0b10" : "#f4f5f9",
-      paper: isDark ? "#15151d" : "#ffffff",
+      // Lifted off near-black (was #0b0b10/#15151d, barely a hair apart) —
+      // GitHub Dark's two-tone (#0d1117/#161b22) gives the same "moody dark"
+      // feel but with real separation between page background and card
+      // surfaces, so a Paper's edge reads without depending on the (also
+      // faint) border/divider color to do all the work.
+      default: isDark ? "#0d1117" : "#f4f5f9",
+      paper: isDark ? "#1c212b" : "#ffffff",
     },
     text: {
       primary: isDark ? "#f1f2f6" : "#14161f",
-      secondary: isDark ? "#9297a8" : "#5b6072",
+      // Raised from #9297a8 (~3.9:1 on the old #15151d paper, under WCAG AA's
+      // 4.5:1 for normal text) to a value that clears AA against both the new
+      // paper and background tones — this is the color every caption/helper/
+      // timestamp string in the app uses, so it needed to hold up at small
+      // sizes, not just for headings.
+      secondary: isDark ? "#aab0c2" : "#5b6072",
     },
-    divider: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(20, 22, 33, 0.08)",
+    // Raised from 0.08 — at that opacity it was invisible often enough that
+    // table rows and card edges relied on nothing else to separate from each
+    // other. Still subtle, just no longer "effectively absent."
+    divider: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(20, 22, 33, 0.08)",
   },
   shape: {
     borderRadius: 12,
@@ -150,8 +163,8 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
       styleOverrides: {
         body: isDark
           ? {
-              backgroundColor: "#0b0b10",
-              backgroundImage: "radial-gradient(circle at top left, #16161f 0%, #0b0b10 45%)",
+              backgroundColor: "#0d1117",
+              backgroundImage: "radial-gradient(circle at top left, #1c212b 0%, #0d1117 45%)",
               backgroundAttachment: "fixed",
             }
           : {
@@ -170,7 +183,7 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
         // centralized so pages that need it don't have to repeat it.
         root: ({ theme }) => ({
           backgroundImage: "none",
-          border: `1px solid ${isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(20, 22, 33, 0.08)"}`,
+          border: `1px solid ${isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(20, 22, 33, 0.08)"}`,
           borderRadius: theme.shape.borderRadius * 3,
         }),
         elevation0: {
@@ -208,7 +221,13 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
             backgroundImage: `linear-gradient(135deg, ${p.light} 0%, ${p.main} 55%, ${p.dark} 100%)`,
             color: p.contrastText,
             border: `1px solid ${p.light}`,
-            boxShadow: `0 0 0 3px ${alpha(p.main, 0.18)}, 0 2px 10px ${alpha(p.main, 0.35)}`,
+            // Dialed back for dark mode specifically — against the near-black
+            // background the previous glow (0.18/0.35 alpha) read as a bright
+            // neon halo that pulled focus away from surrounding text; same
+            // treatment, just toned down rather than removed.
+            boxShadow: isDark
+              ? `0 0 0 2px ${alpha(p.main, 0.12)}, 0 2px 8px ${alpha(p.main, 0.22)}`
+              : `0 0 0 3px ${alpha(p.main, 0.18)}, 0 2px 10px ${alpha(p.main, 0.35)}`,
           };
         },
       })),
@@ -226,7 +245,7 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
         root: {
           "& .MuiTableCell-head": {
             fontWeight: 700,
-            color: isDark ? "#9297a8" : "#5b6072",
+            color: isDark ? "#aab0c2" : "#5b6072",
             backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(20, 22, 33, 0.04)",
             fontSize: 12,
             textTransform: "uppercase",

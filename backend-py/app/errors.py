@@ -54,6 +54,11 @@ class ProjectCodeLockedError(AppError):
         super().__init__(message)
 
 
+class ProjectCodeHandRaiserOnlyError(AppError):
+    def __init__(self, message: str = "This project code is reserved for HR Form Initiator campaigns") -> None:
+        super().__init__(message)
+
+
 class SubsidiaryInactiveError(AppError):
     def __init__(self, message: str = "This subsidiary is disabled") -> None:
         super().__init__(message)
@@ -99,6 +104,7 @@ CONFLICT_ERRORS = (
     ConflictError,
     ProjectCodeClosedError,
     ProjectCodeLockedError,
+    ProjectCodeHandRaiserOnlyError,
     SubsidiaryInactiveError,
     SubsidiaryProjectBlockedError,
 )

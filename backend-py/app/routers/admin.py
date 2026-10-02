@@ -87,6 +87,7 @@ def _serialize_project_code(pc) -> dict:
         "code": pc.code,
         "isOpen": pc.isOpen,
         "isLocked": pc.isLocked,
+        "category": pc.category,
         "startDate": pc.startDate.isoformat() if pc.startDate else None,
         "endDate": pc.endDate.isoformat() if pc.endDate else None,
         "cutoffDate": pc.cutoffDate.isoformat() if pc.cutoffDate else None,
@@ -191,6 +192,7 @@ class CreateProjectCodeBody(BaseModel):
     startDate: Optional[str] = None
     endDate: Optional[str] = None
     cutoffDate: Optional[str] = None
+    category: Optional[str] = None
 
     _validate_dates = field_validator("startDate", "endDate", "cutoffDate")(_validate_date_string)
 
@@ -204,11 +206,19 @@ class CreateProjectCodeBody(BaseModel):
             raise ValueError('Project code can only contain letters, numbers, "-", "_", and "/" — no spaces or other punctuation')
         return v
 
+    @field_validator("category")
+    @classmethod
+    def _validate_category(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in project_code_service.PROJECT_CODE_CATEGORIES:
+            raise ValueError(f'category must be one of {", ".join(project_code_service.PROJECT_CODE_CATEGORIES)}')
+        return v
+
 
 @router.post("/project-codes", status_code=status.HTTP_201_CREATED)
 def create_project_code(body: CreateProjectCodeBody, db: Session = Depends(get_db)) -> dict:
     created = project_code_service.create_project_code(
-        db, body.code, start_date=body.startDate, end_date=body.endDate, cutoff_date=body.cutoffDate
+        db, body.code, start_date=body.startDate, end_date=body.endDate, cutoff_date=body.cutoffDate,
+        category=body.category or "adhoc",
     )
     return _serialize_project_code(created)
 
@@ -217,6 +227,7 @@ class UpdateProjectCodeBody(BaseModel):
     code: Optional[str] = None
     isOpen: Optional[bool] = None
     isLocked: Optional[bool] = None
+    category: Optional[str] = None
     startDate: Optional[str] = None
     endDate: Optional[str] = None
     cutoffDate: Optional[str] = None
@@ -235,11 +246,19 @@ class UpdateProjectCodeBody(BaseModel):
             raise ValueError('Project code can only contain letters, numbers, "-", "_", and "/" — no spaces or other punctuation')
         return v
 
+    @field_validator("category")
+    @classmethod
+    def _validate_category(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in project_code_service.PROJECT_CODE_CATEGORIES:
+            raise ValueError(f'category must be one of {", ".join(project_code_service.PROJECT_CODE_CATEGORIES)}')
+        return v
+
 
 # Closing a project code blocks new uploads/forms against it; locking it is a
-# separate, more permanent freeze that only blocks non-admin activity — see
-# `project_code_service`'s own doc comments. Every field here is applied
-# independently — any of them can be sent alone or together.
+# separate, more permanent freeze that only blocks non-admin activity; category
+# ("adhoc"/"handRaiser") gates which non-admin creation paths may attach a new
+# campaign to it at all — see `project_code_service`'s own doc comments. Every
+# field here is applied independently — any of them can be sent alone or together.
 @router.patch("/project-codes/{id}")
 def update_project_code(id: str, body: UpdateProjectCodeBody, db: Session = Depends(get_db)) -> dict:
     data = body.model_dump(exclude_unset=True)
@@ -251,6 +270,8 @@ def update_project_code(id: str, body: UpdateProjectCodeBody, db: Session = Depe
         updated = project_code_service.set_project_code_open(db, id, data["isOpen"])
     if "isLocked" in data:
         updated = project_code_service.set_project_code_locked(db, id, data["isLocked"])
+    if "category" in data:
+        updated = project_code_service.set_project_code_category(db, id, data["category"])
     date_range_keys = {"startDate", "endDate", "cutoffDate"}
     if date_range_keys & data.keys():
         updated = project_code_service.set_project_code_date_range(

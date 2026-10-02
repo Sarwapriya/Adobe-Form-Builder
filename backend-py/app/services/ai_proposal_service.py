@@ -237,7 +237,9 @@ async def check_proposal(db: Session, auth: dict, raw: Any) -> dict[str, Any]:
     # assign the code at that point if it's still missing.
     if proposal.projectCode:
         try:
-            project_code_service.assert_project_code_open(db, proposal.projectCode, exclude_locked=not admin)
+            project_code_service.assert_project_code_open(
+                db, proposal.projectCode, exclude_locked=not admin, exclude_hand_raiser=not admin
+            )
             if subsidiary_id:
                 subsidiary_project_block_service.assert_not_blocked(db, subsidiary_id, proposal.projectCode)
         except AppError as exc:
@@ -541,6 +543,7 @@ async def save_draft_form(db: Session, auth: dict, proposal_id: str, approval_to
             origin="admin" if admin else "adhoc",
             copy_from_form_id=proposal.baseFormId,
             exclude_locked_project_code=not admin,
+            exclude_hand_raiser_project_code=not admin,
         )
         detail = form_builder_service.get_form_detail(db, created["id"])
         draft = detail["draft"]

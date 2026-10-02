@@ -105,3 +105,26 @@ def test_another_user_cannot_revise(db_session, standard_user, other_standard_us
     _result, row = _validate(db_session, standard_user, _proposal())
     with pytest.raises(NotFoundError):
         _revise(db_session, other_standard_user, row.id, [_keep(), _keep()])
+
+
+def test_standard_user_cannot_use_a_hand_raiser_project_code(db_session, standard_user):
+    from app.models.project_code import ProjectCode
+
+    code = ProjectCode(code=f"PYTEST-HR-{uuid.uuid4().hex[:8]}", isOpen=True, isLocked=False, category="handRaiser")
+    db_session.add(code)
+    db_session.commit()
+
+    result, row = _validate(db_session, standard_user, _proposal(projectCode=code.code))
+    assert result["valid"] is False and row is None
+    assert any(e["path"] == "projectCode" for e in result["errors"])
+
+
+def test_admin_can_use_a_hand_raiser_project_code(db_session, admin_user, subsidiary_row):
+    from app.models.project_code import ProjectCode
+
+    code = ProjectCode(code=f"PYTEST-HR-{uuid.uuid4().hex[:8]}", isOpen=True, isLocked=False, category="handRaiser")
+    db_session.add(code)
+    db_session.commit()
+
+    result, row = _validate(db_session, admin_user, _proposal(subsidiary=subsidiary_row.name, projectCode=code.code))
+    assert result["valid"] is True and row is not None

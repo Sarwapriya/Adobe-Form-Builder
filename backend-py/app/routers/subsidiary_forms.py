@@ -80,6 +80,7 @@ def create_adhoc_form(body: CreateAdHocFormBody, db: Session = Depends(get_db), 
         project_code=body.projectCode,
         copy_from_form_id=body.copyFromFormId,
         exclude_locked_project_code=True,
+        exclude_hand_raiser_project_code=True,
     )
 
 

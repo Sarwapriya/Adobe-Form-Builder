@@ -53,6 +53,15 @@ class TestCreateRequiresProjectCode:
         )
         assert resp.status_code == 409
 
+    def test_hand_raiser_project_code_is_rejected(
+        self, client: TestClient, admin_headers: dict, standard_headers: dict, project_code_row: ProjectCode
+    ):
+        client.patch(f"/api/v1/admin/project-codes/{project_code_row.id}", json={"category": "handRaiser"}, headers=admin_headers)
+        resp = client.post(
+            "/api/v1/forms/adhoc", json={"name": unique_name("Adhoc"), "projectCode": project_code_row.code}, headers=standard_headers
+        )
+        assert resp.status_code == 409
+
     def test_valid_open_project_code_is_accepted_and_attached(
         self, client: TestClient, standard_headers: dict, project_code_row: ProjectCode
     ):

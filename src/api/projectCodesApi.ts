@@ -10,6 +10,11 @@ export interface ProjectCode {
    * Question Master (see backend ProjectCode entity's own doc comment). Admins stay
    * exempt. */
   isLocked: boolean;
+  /** "adhoc" (default — open to subsidiary self-service campaigns) or
+   * "handRaiser" (reserved for HR Form Initiator/admin-authored campaigns —
+   * a non-admin can't attach a new campaign to one, anywhere, including the
+   * AI chatbot/guided flow). Set by an admin (ProjectCodeManager.tsx). */
+  category: "adhoc" | "handRaiser";
   /** Purely descriptive campaign date range ("YYYY-MM-DD"), never enforced
    * against uploads — see backend ProjectCode entity's own doc comment. */
   startDate: string | null;

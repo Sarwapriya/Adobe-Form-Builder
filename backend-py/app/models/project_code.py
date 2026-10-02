@@ -17,6 +17,12 @@ class ProjectCode(Base):
     code: Mapped[str] = nvarchar(100, unique=True)
     isOpen: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     isLocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # "adhoc" (default — open to subsidiary self-service campaigns, same
+    # behavior every project code had before this column existed) or
+    # "handRaiser" (reserved for HR Form Initiator/admin-authored campaigns —
+    # a non-admin can't attach a new campaign to one, see
+    # project_code_service.assert_project_code_open's exclude_hand_raiser).
+    category: Mapped[str] = nvarchar(20, default="adhoc")
     startDate: Mapped[Optional[object]] = mapped_column(Date, nullable=True, default=None)
     endDate: Mapped[Optional[object]] = mapped_column(Date, nullable=True, default=None)
     cutoffDate: Mapped[Optional[object]] = mapped_column(Date, nullable=True, default=None)

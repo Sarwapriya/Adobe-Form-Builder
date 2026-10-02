@@ -9,7 +9,16 @@ from typing import Any, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.errors import ConflictError, NotFoundError, ProjectCodeClosedError, ProjectCodeLockedError, ValidationError
+from app.errors import (
+    ConflictError,
+    NotFoundError,
+    ProjectCodeClosedError,
+    ProjectCodeHandRaiserOnlyError,
+    ProjectCodeLockedError,
+    ValidationError,
+)
+
+PROJECT_CODE_CATEGORIES = ("adhoc", "handRaiser")
 from app.models.form import Form
 from app.models.project_code import ProjectCode
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
@@ -43,15 +52,21 @@ def list_project_codes(db: Session) -> list[ProjectCode]:
     return list(db.execute(select(ProjectCode).order_by(ProjectCode.createdAt.desc())).scalars().all())
 
 
-def list_open_project_codes(db: Session, exclude_locked: bool = False, exclude_expired: bool = False) -> list[ProjectCode]:
+def list_open_project_codes(
+    db: Session, exclude_locked: bool = False, exclude_expired: bool = False, exclude_hand_raiser: bool = False
+) -> list[ProjectCode]:
     """Only the open ones, code ascending — what the upload form's dropdown
     offers to any authenticated user. `exclude_locked` additionally drops
     locked codes for non-admin callers; admins stay exempt from the lock.
     `exclude_expired` drops codes whose endDate has already passed — an
-    expired code can never be used for a new form, admins included."""
+    expired code can never be used for a new form, admins included.
+    `exclude_hand_raiser` additionally drops "handRaiser"-categorized codes
+    for non-admin callers — admins stay exempt, same shape as `exclude_locked`."""
     stmt = select(ProjectCode).where(ProjectCode.isOpen == True)  # noqa: E712
     if exclude_locked:
         stmt = stmt.where(ProjectCode.isLocked == False)  # noqa: E712
+    if exclude_hand_raiser:
+        stmt = stmt.where(ProjectCode.category != "handRaiser")
     stmt = stmt.order_by(ProjectCode.code.asc())
     codes = list(db.execute(stmt).scalars().all())
     if exclude_expired:
@@ -60,11 +75,15 @@ def list_open_project_codes(db: Session, exclude_locked: bool = False, exclude_e
 
 
 def list_open_project_codes_for_subsidiary(
-    db: Session, subsidiary_name: str, exclude_locked: bool = False, exclude_expired: bool = False
+    db: Session,
+    subsidiary_name: str,
+    exclude_locked: bool = False,
+    exclude_expired: bool = False,
+    exclude_hand_raiser: bool = False,
 ) -> list[ProjectCode]:
     """Only the open ones, minus any an admin has specifically blocked for
     this subsidiary."""
-    open_codes = list_open_project_codes(db, exclude_locked, exclude_expired)
+    open_codes = list_open_project_codes(db, exclude_locked, exclude_expired, exclude_hand_raiser)
     blocks = db.execute(
         select(SubsidiaryProjectBlock).where(SubsidiaryProjectBlock.subsidiaryName == subsidiary_name)
     ).scalars().all()
@@ -78,11 +97,17 @@ def create_project_code(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     cutoff_date: Optional[str] = None,
+    category: str = "adhoc",
 ) -> ProjectCode:
     """Creates a new project code, open by default. Rejects an
-    exact-duplicate code (case-insensitive) with a `ConflictError`."""
+    exact-duplicate code (case-insensitive) with a `ConflictError`.
+    `category` defaults to "adhoc" (open to subsidiary self-service
+    campaigns) — pass "handRaiser" to reserve it for HR Form Initiator/
+    admin-authored campaigns instead."""
     trimmed = code.strip()
     validate_project_code_format(trimmed)
+    if category not in PROJECT_CODE_CATEGORIES:
+        raise ValidationError(f'category must be one of {", ".join(PROJECT_CODE_CATEGORIES)}')
 
     existing = db.execute(
         select(ProjectCode).where(func.lower(ProjectCode.code) == trimmed.lower())
@@ -96,6 +121,7 @@ def create_project_code(
         startDate=_parse_date(start_date),
         endDate=_parse_date(end_date),
         cutoffDate=_parse_date(cutoff_date),
+        category=category,
     )
     db.add(created)
     db.commit()
@@ -175,6 +201,22 @@ def set_project_code_locked(db: Session, id: str, is_locked: bool) -> Optional[P
     return existing
 
 
+def set_project_code_category(db: Session, id: str, category: str) -> Optional[ProjectCode]:
+    """Re-categorizes a project code between "adhoc" and "handRaiser" (see
+    this module's own `PROJECT_CODE_CATEGORIES`). Returns `None` if the id
+    doesn't exist — callers map that to a 404."""
+    if category not in PROJECT_CODE_CATEGORIES:
+        raise ValidationError(f'category must be one of {", ".join(PROJECT_CODE_CATEGORIES)}')
+    existing = db.get(ProjectCode, id)
+    if existing is None:
+        return None
+    existing.category = category
+    db.add(existing)
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
 def set_project_code_date_range(db: Session, id: str, date_range: dict[str, Any]) -> Optional[ProjectCode]:
     """Updates a project code's campaign date range. Each field is applied
     only if present as a key in `date_range` (an explicit `None` clears that
@@ -196,19 +238,28 @@ def set_project_code_date_range(db: Session, id: str, date_range: dict[str, Any]
     return existing
 
 
-def assert_project_code_open(db: Session, code: str, *, exclude_locked: bool = False) -> None:
+def assert_project_code_open(
+    db: Session, code: str, *, exclude_locked: bool = False, exclude_hand_raiser: bool = False
+) -> None:
     """Raises `NotFoundError` if no project code matches, or
-    `ProjectCodeClosedError`/`ProjectCodeLockedError` if it can't be used
-    right now. A no-op if it's open, current, and (when checked) unlocked.
+    `ProjectCodeClosedError`/`ProjectCodeLockedError`/
+    `ProjectCodeHandRaiserOnlyError` if it can't be used right now. A no-op
+    if it's open, current, and (when checked) unlocked and not
+    Hand-Raiser-restricted.
 
     Closed and expired apply to every caller, admins included. `exclude_locked`
     additionally rejects a locked code — pass this only for a subsidiary
     user's own action (matches `list_open_project_codes`'s same-named param);
     admins stay exempt from the lock everywhere else in this app, so callers
     on an admin-only path (creating/approving a form as an admin) leave this
-    at its default `False`. Called from `create_form`/`approve_adhoc_form` so
-    an expired, closed, or (for a subsidiary user) locked code can never be
-    attached to a new or newly-approved form."""
+    at its default `False`. `exclude_hand_raiser` is the same shape, for a
+    project code categorized "handRaiser" (reserved for HR Form Initiator/
+    admin-authored campaigns) — independent of the lock, pass it alongside
+    `exclude_locked` wherever that's already `True` for a subsidiary user's
+    own action. Called from `create_form`/`approve_adhoc_form`/
+    `ai_proposal_service.check_proposal` so an expired, closed, or (for a
+    subsidiary user) locked or Hand-Raiser-only code can never be attached to
+    a new or newly-approved form."""
     project_code = db.execute(select(ProjectCode).where(ProjectCode.code == code)).scalar_one_or_none()
     if project_code is None:
         raise NotFoundError(f'Unknown project code "{code}"')
@@ -218,3 +269,5 @@ def assert_project_code_open(db: Session, code: str, *, exclude_locked: bool = F
         raise ProjectCodeClosedError(f'Project code "{code}" has expired')
     if exclude_locked and project_code.isLocked:
         raise ProjectCodeLockedError(f'Project code "{code}" is locked')
+    if exclude_hand_raiser and project_code.category == "handRaiser":
+        raise ProjectCodeHandRaiserOnlyError(f'Project code "{code}" is reserved for HR Form Initiator campaigns')

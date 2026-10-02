@@ -26,6 +26,7 @@ def _serialize_project_code(pc) -> dict:
         "code": pc.code,
         "isOpen": pc.isOpen,
         "isLocked": pc.isLocked,
+        "category": pc.category,
         "startDate": pc.startDate.isoformat() if pc.startDate else None,
         "endDate": pc.endDate.isoformat() if pc.endDate else None,
         "cutoffDate": pc.cutoffDate.isoformat() if pc.cutoffDate else None,
@@ -36,18 +37,26 @@ def _serialize_project_code(pc) -> dict:
 # Every authenticated user (not just admins) needs this to populate the
 # upload form's/ad-hoc-form-creation "Project Code" dropdown. With
 # ?subsidiary=NAME, also excludes any code an admin has specifically blocked
-# for that subsidiary. A locked code is additionally excluded for non-admin
-# callers (admins stay exempt from the lock); an expired code (past its own
-# endDate) is excluded for everyone — expiry isn't a lock an admin can bypass.
+# for that subsidiary. A locked code, and a "handRaiser"-categorized code
+# (reserved for HR Form Initiator/admin-authored campaigns), are additionally
+# excluded for non-admin callers (admins stay exempt from both); an expired
+# code (past its own endDate) is excluded for everyone — expiry isn't
+# something an admin can bypass.
 @router.get("")
 def list_open_project_codes(
     subsidiary: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     auth: dict = Depends(require_auth),
 ) -> list[dict]:
-    exclude_locked = not is_admin_role(auth.get("role", ""))
+    is_admin = is_admin_role(auth.get("role", ""))
+    exclude_locked = not is_admin
+    exclude_hand_raiser = not is_admin
     if subsidiary:
-        codes = project_code_service.list_open_project_codes_for_subsidiary(db, subsidiary, exclude_locked, exclude_expired=True)
+        codes = project_code_service.list_open_project_codes_for_subsidiary(
+            db, subsidiary, exclude_locked, exclude_expired=True, exclude_hand_raiser=exclude_hand_raiser
+        )
     else:
-        codes = project_code_service.list_open_project_codes(db, exclude_locked, exclude_expired=True)
+        codes = project_code_service.list_open_project_codes(
+            db, exclude_locked, exclude_expired=True, exclude_hand_raiser=exclude_hand_raiser
+        )
     return [_serialize_project_code(c) for c in codes]

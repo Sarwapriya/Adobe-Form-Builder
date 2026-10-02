@@ -27,10 +27,30 @@ class TestAdminProjectCodeCrud:
         assert body["code"] == code
         assert body["isOpen"] is True
         assert body["isLocked"] is False
+        assert body["category"] == "adhoc"
 
         list_resp = client.get("/api/v1/admin/project-codes", headers=admin_headers)
         assert list_resp.status_code == 200
         assert any(c["id"] == body["id"] for c in list_resp.json())
+
+    def test_create_with_hand_raiser_category(self, client: TestClient, admin_headers: dict):
+        resp = client.post(
+            "/api/v1/admin/project-codes", json={"code": _unique_code(), "category": "handRaiser"}, headers=admin_headers
+        )
+        assert resp.status_code == 201
+        assert resp.json()["category"] == "handRaiser"
+
+    def test_create_rejects_invalid_category(self, client: TestClient, admin_headers: dict):
+        resp = client.post(
+            "/api/v1/admin/project-codes", json={"code": _unique_code(), "category": "nonsense"}, headers=admin_headers
+        )
+        assert resp.status_code == 400
+
+    def test_patch_toggle_category(self, client: TestClient, admin_headers: dict):
+        created = client.post("/api/v1/admin/project-codes", json={"code": _unique_code()}, headers=admin_headers).json()
+        resp = client.patch(f"/api/v1/admin/project-codes/{created['id']}", json={"category": "handRaiser"}, headers=admin_headers)
+        assert resp.status_code == 200
+        assert resp.json()["category"] == "handRaiser"
 
     def test_create_duplicate_code_case_insensitive_conflicts(self, client: TestClient, admin_headers: dict):
         code = _unique_code()
@@ -135,6 +155,19 @@ class TestPublicProjectCodeListing:
         code = _unique_code()
         created = client.post("/api/v1/admin/project-codes", json={"code": code}, headers=admin_headers).json()
         client.patch(f"/api/v1/admin/project-codes/{created['id']}", json={"isLocked": True}, headers=admin_headers)
+
+        standard_resp = client.get("/api/v1/project-codes/", headers=standard_headers)
+        assert code not in {c["code"] for c in standard_resp.json()}
+
+        admin_resp = client.get("/api/v1/project-codes/", headers=admin_headers)
+        assert code in {c["code"] for c in admin_resp.json()}
+
+    def test_hand_raiser_code_excluded_for_standard_but_visible_to_admin(
+        self, client: TestClient, admin_headers: dict, standard_headers: dict
+    ):
+        code = _unique_code()
+        created = client.post("/api/v1/admin/project-codes", json={"code": code}, headers=admin_headers).json()
+        client.patch(f"/api/v1/admin/project-codes/{created['id']}", json={"category": "handRaiser"}, headers=admin_headers)
 
         standard_resp = client.get("/api/v1/project-codes/", headers=standard_headers)
         assert code not in {c["code"] for c in standard_resp.json()}

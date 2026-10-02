@@ -413,7 +413,7 @@ def list_open_project_codes(db: Session, auth: dict) -> dict[str, Any]:
         if not subsidiary_id:
             return {"projectCodes": []}
         codes = project_code_service.list_open_project_codes_for_subsidiary(
-            db, subsidiary_id, exclude_locked=True, exclude_expired=True
+            db, subsidiary_id, exclude_locked=True, exclude_expired=True, exclude_hand_raiser=True
         )
     return {"projectCodes": [pc.code for pc in codes]}
 
