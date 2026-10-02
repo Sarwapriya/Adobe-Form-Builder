@@ -2,11 +2,13 @@ import { useEffect, useRef } from "react";
 import { Box, Button, Divider, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import RemoveIcon from "@mui/icons-material/Remove";
 import { useAiChatStore } from "../../store/aiChatStore";
+import { useGuidedCampaignStore } from "../../store/guidedCampaignStore";
 import { AIChatMessage } from "./AIChatMessage";
 import { AIChatInput } from "./AIChatInput";
 import { AIActionCard } from "./AIActionCard";
 import { QuestionSuggestionCard } from "./QuestionSuggestionCard";
 import { ProposalCard } from "./ProposalCard";
+import { GuidedCampaignFlow } from "./GuidedCampaignFlow";
 import { AiBotAvatar } from "./AiBotAvatar";
 import { AIThinkingIndicator } from "./AIThinkingIndicator";
 
@@ -35,11 +37,24 @@ export function AIChatPanel() {
   const formId = useAiChatStore((s) => s.formId);
   const toggleOpen = useAiChatStore((s) => s.toggleOpen);
   const confirmAction = useAiChatStore((s) => s.confirmAction);
+  const guidedActive = useGuidedCampaignStore((s) => s.active);
+  const startGuided = useGuidedCampaignStore((s) => s.start);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, pendingActions, proposal, loading]);
+  }, [messages, pendingActions, proposal, loading, guidedActive]);
+
+  // Nothing to initiate on the user's side: as soon as the panel has no
+  // conversation going and isn't scoped to an already-open campaign, the
+  // assistant starts the guided "create a new campaign" flow itself (see
+  // guidedCampaignStore.ts) instead of waiting for the user to type
+  // something first. Typing a real message instead cancels it (sendMessage).
+  useEffect(() => {
+    if (!formId && messages.length === 0 && pendingActions.length === 0 && !proposal && !guidedActive) {
+      startGuided();
+    }
+  }, [formId, messages.length, pendingActions.length, proposal, guidedActive, startGuided]);
 
   const addQuestionActions = pendingActions.filter((a) => a.actionType === "ADD_QUESTION");
   const suggestionGroup = addQuestionActions.length > 1 ? addQuestionActions : [];
@@ -68,11 +83,13 @@ export function AIChatPanel() {
       <Divider />
 
       <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: "auto", px: 2, py: 1.5 }}>
-        {messages.length === 0 && pendingActions.length === 0 && (
+        {guidedActive && <GuidedCampaignFlow />}
+
+        {!guidedActive && messages.length === 0 && pendingActions.length === 0 && (
           <Typography variant="body2" color="text.secondary">
             {formId
               ? "Ask about past campaigns, request question suggestions, translations, or edits to this form."
-              : "Ask about past campaigns, or describe a new campaign and I'll draft a form from existing ones for you to approve."}
+              : "Ask about past campaigns, or type anything to chat normally instead of the guided campaign setup."}
           </Typography>
         )}
 

@@ -14,6 +14,7 @@ import {
 } from "@formbuilder/shared";
 import * as aiChatApi from "../api/aiChatApi";
 import { useFormBuilderStore } from "./formBuilderStore";
+import { useGuidedCampaignStore } from "./guidedCampaignStore";
 import { renumberQuestions } from "../components/formBuilder/formBuilderHelpers";
 
 /** Mirrors AppLayout.tsx's sidebarCollapsed convention exactly: the
@@ -192,12 +193,17 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
 
   setFormId(formId) {
     if (get().formId === formId) return;
+    if (formId && useGuidedCampaignStore.getState().active) useGuidedCampaignStore.getState().cancel();
     set({ formId, conversationId: null, messages: [], pendingActions: [], proposal: null, error: null });
   },
 
   async sendMessage(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
+
+    // A real typed message always means "forget the guided prompts, just
+    // chat normally" — see guidedCampaignStore.ts's own doc comment.
+    if (useGuidedCampaignStore.getState().active) useGuidedCampaignStore.getState().cancel();
 
     const { formId, conversationId } = get();
     const userMessage: AiChatMessage = { id: generateMessageId(), role: "user", text: trimmed };
@@ -301,6 +307,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
   },
 
   reset() {
+    useGuidedCampaignStore.getState().cancel();
     set({ formId: null, conversationId: null, messages: [], pendingActions: [], proposal: null, savingProposal: false, revisingProposal: false, loading: false, error: null });
   },
 }));

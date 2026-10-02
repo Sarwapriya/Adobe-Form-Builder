@@ -23,13 +23,10 @@ import { ApiError } from "../api/apiClient";
 import { createForm, deleteForm, listForms, type FormListItem, type FormStatus } from "../api/formBuilderApi";
 import { listSubsidiaries, type Subsidiary } from "../api/subsidiariesApi";
 import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
 import { ProjectCodeFormGroups } from "../components/formBuilder/ProjectCodeFormGroups";
-import { CampaignWizardDialog } from "../components/formBuilder/CampaignWizardDialog";
-import { useCampaignWizardStore } from "../store/campaignWizardStore";
 import { showToast } from "../store/toastStore";
 import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
@@ -76,7 +73,6 @@ export function HrFormInitiatorListPage() {
   const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
   const [creating, setCreating] = useState(false);
   const [confirmDeleteForm, setConfirmDeleteForm] = useState<FormListItem | null>(null);
-  const openWizard = useCampaignWizardStore((s) => s.openWizard);
 
   async function refresh() {
     setLoading(true);
@@ -182,17 +178,11 @@ export function HrFormInitiatorListPage() {
         title="HR Form Initiator"
         subtitle="Visually build, preview, and publish web forms — no Excel workbook required."
         action={
-          <Stack direction="row" spacing={1}>
-            <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={openWizard}>
-              New Form (Guided)
-            </Button>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-              New Form
-            </Button>
-          </Stack>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            New Form
+          </Button>
         }
       />
-      <CampaignWizardDialog />
 
       <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
         <TextField

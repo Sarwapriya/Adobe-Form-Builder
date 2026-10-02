@@ -42,7 +42,17 @@ function toPatch(edits: QuestionEdit[]): AIProposalQuestionPatch[] {
  * Nothing is saved to a real campaign until "Approve & Save", which approves
  * exactly the version shown and saves it (aiChatStore.approveAndSaveProposal).
  */
-export function ProposalCard({ proposal, onApproved }: { proposal: AIFormProposal; onApproved?: () => void }) {
+export function ProposalCard({
+  proposal,
+  onApproved,
+}: {
+  proposal: AIFormProposal;
+  /** Called with the newly saved draft's formId right after a successful
+   * Approve & Save, awaited before navigating — lets a caller (the guided
+   * campaign flow) apply follow-up changes the builder should already show
+   * when it opens. */
+  onApproved?: (formId: string) => void | Promise<void>;
+}) {
   const navigate = useNavigate();
   const approveAndSave = useAiChatStore((s) => s.approveAndSaveProposal);
   const reviseProposal = useAiChatStore((s) => s.reviseProposal);
@@ -64,7 +74,7 @@ export function ProposalCard({ proposal, onApproved }: { proposal: AIFormProposa
   async function handleApprove() {
     const result = await approveAndSave(proposal.id);
     if (result) {
-      onApproved?.();
+      await onApproved?.(result.formId);
       navigate(result.route);
     }
   }
