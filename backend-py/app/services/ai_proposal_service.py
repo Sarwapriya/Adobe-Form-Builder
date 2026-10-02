@@ -26,6 +26,7 @@ import hashlib
 import hmac
 import json
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -36,6 +37,7 @@ from sqlalchemy.orm import Session
 
 from app.errors import AppError, ConflictError, NotFoundError
 from app.form_pipeline import AnswerDefinition, QuestionDefinition, validate_form_definition
+from app.models.ai_conversation import AIConversation
 from app.models.ai_form_proposal import AIFormProposal
 from app.models.user import is_admin_role
 
@@ -371,6 +373,32 @@ async def validate_form(db: Session, auth: dict, conversation_id: str, raw: Any)
         "warnings": checked["warnings"],
         "note": "Shown to the user as a preview with an Approve & Save button. You cannot save it yourself.",
     }, row
+
+
+async def create_proposal_from_wizard(db: Session, auth: dict, raw: Any) -> dict[str, Any]:
+    """The guided campaign wizard's non-chat equivalent of the validate_form
+    tool: the wizard never talks to the LLM for sequencing (every step is a
+    plain REST lookup or click), so there's no existing AIConversation to
+    attach a proposal to — this creates a minimal one just for that, then
+    runs the exact same check_proposal + _store_new_version path validate_form
+    uses. Returns the same `{"valid": False, "errors", "warnings"}` or
+    `{"valid": True, ...proposal_view}` shape either way, so the wizard's
+    final review step can hand the result straight to ProposalCard/approve/
+    save/revise unchanged."""
+    checked = await check_proposal(db, auth, raw)
+    if not checked["valid"]:
+        return {"valid": False, "errors": checked["errors"], "warnings": checked["warnings"]}
+
+    name = raw.get("name") if isinstance(raw, dict) else None
+    conversation = AIConversation(
+        id=str(uuid.uuid4()), userId=auth["sub"], formId=None,
+        title=(name or "New campaign")[:200], status="active",
+    )
+    db.add(conversation)
+    db.commit()
+
+    row = _store_new_version(db, conversation.id, auth["sub"], checked)
+    return {"valid": True, **proposal_view(row, checked["warnings"])}
 
 
 async def revise_proposal(db: Session, auth: dict, proposal_id: str, question_patches: list[dict[str, Any]]) -> dict[str, Any]:

@@ -2,6 +2,7 @@ import type {
   AIApproveProposalResponse,
   AIChatRequest,
   AIChatResponse,
+  AIFormProposalQuestion,
   AIProposalQuestionPatch,
   AIProposalRevisionResult,
   AISaveProposalResponse,
@@ -91,6 +92,93 @@ export function saveProposal(proposalId: string, approvalToken: string): Promise
  * without another LLM round-trip. */
 export function reviseProposal(proposalId: string, questions: AIProposalQuestionPatch[]): Promise<AIProposalRevisionResult> {
   return apiClient.post<AIProposalRevisionResult>(`/api/v1/ai/proposals/${proposalId}/revise`, { questions });
+}
+
+// --- Guided campaign wizard: non-chat endpoints (no LLM call except draftQuestion) ---
+
+export interface WizardProposalAnswer {
+  id: null;
+  sourceAnswerId: string | null;
+  text: string;
+}
+
+export interface WizardProposalQuestion {
+  id: null;
+  sourceFormId: string | null;
+  sourceQuestionId: string | null;
+  controlType: string;
+  required: boolean;
+  heading: string;
+  subheading: string | null;
+  answers: WizardProposalAnswer[];
+}
+
+export interface WizardProposalInput {
+  name: string;
+  projectCode?: string | null;
+  subsidiary?: string | null;
+  baseFormId?: string | null;
+  questions: WizardProposalQuestion[];
+}
+
+/** POST /api/v1/ai/wizard/proposals — the guided wizard's non-chat equivalent
+ * of the chatbot's validate_form tool; same request shape, same response
+ * shape as reviseProposal (AIProposalRevisionResult), so the wizard's final
+ * review step hands the result straight to ProposalCard unchanged. */
+export function createWizardProposal(proposal: WizardProposalInput): Promise<AIProposalRevisionResult> {
+  return apiClient.post<AIProposalRevisionResult>("/api/v1/ai/wizard/proposals", proposal);
+}
+
+export interface QuestionSearchResult {
+  sourceFormId: string;
+  formName: string;
+  subsidiary: string | null;
+  sourceQuestionId: string;
+  heading: string;
+  subheading: string | null;
+  controlType: "radio" | "checkbox" | "dropdown" | "text" | "shortText" | null;
+  required: boolean;
+  answers: { id: string; order: number | null; text: string }[];
+}
+
+export interface SearchQuestionsResponse {
+  questions: QuestionSearchResult[];
+  totalMatched: number;
+}
+
+export interface SearchQuestionsParams {
+  text: string;
+  controlType?: string;
+  subsidiary?: string;
+  limit?: number;
+}
+
+/** GET /api/v1/ai/questions/search — a direct, non-chat convenience endpoint
+ * wrapping the same search_question_library tool the chat flow uses. No LLM
+ * call — the guided wizard's Questions step searches with this on every
+ * keystroke (debounced) instead of asking the model. */
+export function searchQuestions(params: SearchQuestionsParams): Promise<SearchQuestionsResponse> {
+  const query = buildQuery({
+    text: params.text,
+    controlType: params.controlType,
+    subsidiary: params.subsidiary,
+    limit: params.limit !== undefined ? String(params.limit) : undefined,
+  });
+  return apiClient.get<SearchQuestionsResponse>(`/api/v1/ai/questions/search${query}`);
+}
+
+export interface DraftQuestionRequest {
+  topic: string;
+  locale: string;
+  defaultLocale: string;
+}
+
+/** POST /api/v1/ai/questions/draft — the guided wizard's one LLM-touching
+ * call: drafts exactly one new question when nothing in searchQuestions
+ * fits. Returns a question already shaped like AIFormProposalQuestion so it
+ * can be shown/edited with the same UI as a search result. */
+export function draftQuestion(request: DraftQuestionRequest): Promise<AIFormProposalQuestion> {
+  return apiClient.post<AIFormProposalQuestion>("/api/v1/ai/questions/draft", request);
 }
 
 export interface SearchCampaignsParams {

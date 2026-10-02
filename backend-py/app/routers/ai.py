@@ -186,6 +186,70 @@ async def revise_proposal(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
 
 
+class WizardDraftQuestionRequest(BaseModel):
+    topic: str = Field(min_length=1, max_length=500)
+    locale: str = Field(min_length=1, max_length=20)
+    defaultLocale: str = Field(min_length=1, max_length=20)
+
+
+@router.post("/wizard/proposals")
+async def create_wizard_proposal(
+    body: dict,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_auth),
+) -> dict:
+    """The guided campaign wizard's non-chat equivalent of the validate_form
+    tool — `body` is the same FormProposal-shaped payload validate_form takes
+    (see ai_proposal_service.FORM_PROPOSAL_JSON_SCHEMA). Never raises on an
+    invalid proposal (returns `{"valid": false, "errors": [...]}`, HTTP 200),
+    matching validate_form's own contract."""
+    return await ai_proposal_service.create_proposal_from_wizard(db, auth, body)
+
+
+@router.get("/questions/search")
+async def search_questions(
+    text: str = Query(..., min_length=1),
+    control_type: Optional[str] = Query(None, alias="controlType"),
+    subsidiary: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None, ge=1, le=20),
+    auth: dict = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Non-chat convenience endpoint over the search_question_library
+    retrieval tool — the guided wizard's Questions step (no LLM call, same as
+    search_campaigns below)."""
+    args = {k: v for k, v in {"text": text, "controlType": control_type, "subsidiary": subsidiary, "limit": limit}.items() if v}
+    return await campaign_retrieval.call_campaign_tool(db, "search_question_library", args, auth)
+
+
+@router.post("/questions/draft")
+async def draft_question(
+    body: WizardDraftQuestionRequest,
+    auth: dict = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Drafts exactly one new question via a single tool-less LLM call — the
+    guided wizard's "nothing in the library fits" escape hatch. Bypasses the
+    full chat/tool loop entirely; _generate_suggested_questions is the same
+    helper the in-chat suggest_questions tool already uses."""
+    questions = await aiAssistantService._generate_suggested_questions(
+        db, auth["role"], {"topic": body.topic, "count": 1, "locale": body.locale}, body.defaultLocale
+    )
+    if not questions:
+        raise HTTPException(status_code=502, detail="Could not draft a question right now")
+    q = questions[0]
+    return {
+        "heading": q.headingByLocale.get(body.locale) or q.headingByLocale.get(body.defaultLocale, ""),
+        "subheading": None,
+        "controlType": q.controlType,
+        "required": q.required,
+        "answers": [a.textByLocale.get(body.locale) or a.textByLocale.get(body.defaultLocale, "") for a in q.answers],
+        "reused": False,
+        "sourceFormId": None,
+        "sourceQuestionId": None,
+    }
+
+
 @router.get("/campaigns/search")
 async def search_campaigns(
     search_text: Optional[str] = Query(None, alias="searchText"),

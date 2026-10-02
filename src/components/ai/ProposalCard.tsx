@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Box, Button, Checkbox, Chip, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Paper, Stack, Typography } from "@mui/material";
 import type { AIFormProposal, AIProposalQuestionPatch } from "@formbuilder/shared";
 import { CONTROL_TYPE_LABEL } from "../formBuilder/formBuilderHelpers";
 import { useAiChatStore } from "../../store/aiChatStore";
+import { EditableQuestionRow } from "./EditableQuestionRow";
 
 interface AnswerEdit {
   keep: boolean;
@@ -41,7 +42,7 @@ function toPatch(edits: QuestionEdit[]): AIProposalQuestionPatch[] {
  * Nothing is saved to a real campaign until "Approve & Save", which approves
  * exactly the version shown and saves it (aiChatStore.approveAndSaveProposal).
  */
-export function ProposalCard({ proposal }: { proposal: AIFormProposal }) {
+export function ProposalCard({ proposal, onApproved }: { proposal: AIFormProposal; onApproved?: () => void }) {
   const navigate = useNavigate();
   const approveAndSave = useAiChatStore((s) => s.approveAndSaveProposal);
   const reviseProposal = useAiChatStore((s) => s.reviseProposal);
@@ -62,7 +63,10 @@ export function ProposalCard({ proposal }: { proposal: AIFormProposal }) {
 
   async function handleApprove() {
     const result = await approveAndSave(proposal.id);
-    if (result) navigate(result.route);
+    if (result) {
+      onApproved?.();
+      navigate(result.route);
+    }
   }
 
   async function handleUpdate() {
@@ -139,54 +143,19 @@ export function ProposalCard({ proposal }: { proposal: AIFormProposal }) {
               const edit = edits[qIndex];
               if (!edit) return null;
               return (
-                <Box key={`${proposal.id}-${qIndex}`} sx={{ opacity: edit.keep ? 1 : 0.5 }}>
-                  <Stack direction="row" spacing={0.5} alignItems="flex-start">
-                    <Checkbox
-                      size="small"
-                      checked={edit.keep}
-                      onChange={() => toggleQuestion(qIndex)}
-                      sx={{ p: 0.5, mt: 0.5 }}
-                      inputProps={{ "aria-label": `Keep question: ${q.heading}` }}
-                    />
-                    <Stack spacing={0.5} sx={{ flexGrow: 1 }}>
-                      <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
-                        <Chip label={CONTROL_TYPE_LABEL[q.controlType]} size="small" variant="outlined" />
-                        {q.required && <Chip label="Required" size="small" variant="outlined" />}
-                        {q.reused && <Chip label="Reused" size="small" color="info" variant="outlined" />}
-                      </Stack>
-                      <TextField
-                        size="small"
-                        fullWidth
-                        value={edit.heading}
-                        disabled={!edit.keep}
-                        onChange={(e) => setHeading(qIndex, e.target.value)}
-                      />
-                      {edit.answers.length > 0 && (
-                        <Stack spacing={0.5} sx={{ pl: 1 }}>
-                          {edit.answers.map((answer, aIndex) => (
-                            <Stack key={aIndex} direction="row" spacing={0.5} alignItems="center">
-                              <Checkbox
-                                size="small"
-                                checked={answer.keep}
-                                disabled={!edit.keep}
-                                onChange={() => toggleAnswer(qIndex, aIndex)}
-                                sx={{ p: 0.5 }}
-                                inputProps={{ "aria-label": `Keep answer: ${answer.text}` }}
-                              />
-                              <TextField
-                                size="small"
-                                fullWidth
-                                value={answer.text}
-                                disabled={!edit.keep || !answer.keep}
-                                onChange={(e) => setAnswerText(qIndex, aIndex, e.target.value)}
-                              />
-                            </Stack>
-                          ))}
-                        </Stack>
-                      )}
-                    </Stack>
-                  </Stack>
-                </Box>
+                <EditableQuestionRow
+                  key={`${proposal.id}-${qIndex}`}
+                  heading={edit.heading}
+                  controlType={q.controlType}
+                  required={q.required}
+                  reused={q.reused}
+                  keep={edit.keep}
+                  answers={edit.answers}
+                  onToggleKeep={() => toggleQuestion(qIndex)}
+                  onHeadingChange={(value) => setHeading(qIndex, value)}
+                  onToggleAnswer={(aIndex) => toggleAnswer(qIndex, aIndex)}
+                  onAnswerTextChange={(aIndex, value) => setAnswerText(qIndex, aIndex, value)}
+                />
               );
             })}
           </Stack>
