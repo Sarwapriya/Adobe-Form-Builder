@@ -87,12 +87,19 @@ function CategoryStep() {
   const category = useGuidedCampaignStore((s) => s.category);
   const setName = useGuidedCampaignStore((s) => s.setName);
   const setCategory = useGuidedCampaignStore((s) => s.setCategory);
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = isAdminRole(user?.role);
+  // "Hand Raiser" is reserved for HR Form Initiator (see project code
+  // categories, Configuration > Project Codes) — a subsidiary user never
+  // sees it as a category suggestion, same reasoning as the project-code
+  // picker itself excluding "handRaiser"-categorized codes for them.
+  const suggestions = isAdmin ? CATEGORY_SUGGESTIONS : CATEGORY_SUGGESTIONS.filter((c) => c !== "Hand Raiser");
 
   return (
     <Stack spacing={1.5}>
       <TextField label="Campaign name" size="small" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        {CATEGORY_SUGGESTIONS.map((c) => (
+        {suggestions.map((c) => (
           <Chip key={c} label={c} color={category === c ? "primary" : "default"} onClick={() => setCategory(c)} />
         ))}
       </Stack>
