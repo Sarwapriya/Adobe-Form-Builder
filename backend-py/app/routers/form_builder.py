@@ -20,6 +20,7 @@ from app.schemas.form_builder import (
     CreateFormWithQuestionsBody,
     DraftUpdateBody,
     ReviewNoteBody,
+    UpdateGeneratedFileBody,
 )
 from app.security.deps import require_admin
 from app.services import form_builder_service, form_contribution_service, resource_check_service
@@ -129,6 +130,30 @@ def deploy_form(id: str, db: Session = Depends(get_db), auth: dict = Depends(req
     if result["outcome"] == "no_files":
         raise HTTPException(status_code=409, detail="no generated files to deploy")
     return {"deployment": result["deployment"]}
+
+
+@router.get("/{id}/files")
+def list_generated_files(id: str, db: Session = Depends(get_db)) -> list[dict]:
+    """Edit Files window's file list — every file belonging to the form's
+    published version, any type."""
+    return form_builder_service.list_generated_files(db, id)
+
+
+@router.get("/{id}/files/{fileId}")
+def get_generated_file(id: str, fileId: str, db: Session = Depends(get_db)) -> dict:
+    """One file's current on-disk content, for the Edit Files window's
+    editor to load."""
+    return form_builder_service.get_generated_file_content(db, id, fileId)
+
+
+@router.put("/{id}/files/{fileId}")
+def update_generated_file(
+    id: str, fileId: str, body: UpdateGeneratedFileBody, db: Session = Depends(get_db), auth: dict = Depends(require_admin)
+) -> dict:
+    """Edit Files window's Save — overwrites the file in place; Preview,
+    Download and Deploy all pick up the change on their next read, with no
+    further wiring (see form_builder_service.update_generated_file_content)."""
+    return form_builder_service.update_generated_file_content(db, id, fileId, body.content, auth["sub"])
 
 
 @router.get("/{id}/resource-checks")

@@ -341,6 +341,41 @@ export function downloadFormZip(formId: string): Promise<Blob> {
   return apiClient.getBlob(`/api/v1/admin/forms/${formId}/download`);
 }
 
+export type GeneratedFileType = "html" | "js" | "css" | "data-js";
+
+/** One file belonging to a form's *published* version — the Edit Files
+ * window's list (see FormFilesEditorPage.tsx). `editedAt`/`editedByUserId`
+ * are null until an admin saves a hand-edit here. */
+export interface GeneratedFileSummary {
+  id: string;
+  fileName: string;
+  fileType: GeneratedFileType;
+  editedAt: string | null;
+  editedByUserId: string | null;
+}
+
+export interface GeneratedFileContent extends GeneratedFileSummary {
+  content: string;
+}
+
+/** GET /api/v1/admin/forms/:id/files — every generated file for the
+ * published version, any type (html/js/css/data-js). 400 if the form has
+ * never been published. */
+export function listGeneratedFiles(formId: string): Promise<GeneratedFileSummary[]> {
+  return apiClient.get<GeneratedFileSummary[]>(`/api/v1/admin/forms/${formId}/files`);
+}
+
+export function getGeneratedFileContent(formId: string, fileId: string): Promise<GeneratedFileContent> {
+  return apiClient.get<GeneratedFileContent>(`/api/v1/admin/forms/${formId}/files/${fileId}`);
+}
+
+/** Overwrites the file in place. Preview, Download and Deploy all read this
+ * same on-disk file already — no further action needed for the change to
+ * reach them. */
+export function updateGeneratedFileContent(formId: string, fileId: string, content: string): Promise<GeneratedFileContent> {
+  return apiClient.put<GeneratedFileContent>(`/api/v1/admin/forms/${formId}/files/${fileId}`, { content });
+}
+
 // Subsidiary-user contribution review — see subsidiaryFormsApi.ts's own
 // ContributionSummary for the submitting side; re-exported here so both sides share
 // one shape rather than two independently-drifting copies.

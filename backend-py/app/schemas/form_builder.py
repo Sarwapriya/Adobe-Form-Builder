@@ -115,6 +115,13 @@ class ReviewNoteBody(BaseModel):
     _v_review_note = field_validator("reviewNote")(classmethod(lambda cls, v: v.strip() if v is not None else v))
 
 
+class UpdateGeneratedFileBody(BaseModel):
+    """Edit Files window's Save — the new content for one generated file,
+    overwritten in place (form_builder_service.update_generated_file_content)."""
+
+    content: str
+
+
 class ContributionBody(BaseModel):
     """Shared shape for submit-contribution / save-contribution-draft — both
     `{ content: ContributionContent, note?: string (trimmed, <=2000) }`."""

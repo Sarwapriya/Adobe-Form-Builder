@@ -8,6 +8,7 @@ import PublishIcon from "@mui/icons-material/Publish";
 import UnpublishedIcon from "@mui/icons-material/Unpublished";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
+import CodeIcon from "@mui/icons-material/Code";
 import { downloadFormZip } from "../../api/formBuilderApi";
 import { ApiError } from "../../api/apiClient";
 import { downloadBlob } from "../../utils/download";
@@ -175,6 +176,16 @@ export function BuilderActionBar() {
         <Button size="small" variant="outlined" startIcon={<VisibilityIcon />} onClick={() => setPreviewOpen(true)}>
           Preview
         </Button>
+        {status === "published" && (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<CodeIcon />}
+            onClick={() => window.open(`${import.meta.env.BASE_URL}admin/form-builder/${formId}/files`, "_blank", "noopener")}
+          >
+            Edit Files
+          </Button>
+        )}
         <Button
           size="small"
           variant="outlined"

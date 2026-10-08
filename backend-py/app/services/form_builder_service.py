@@ -35,6 +35,7 @@ from app.form_pipeline import (
     validate_form_definition,
 )
 from app.form_pipeline.codegen.file_names import FileNames
+from app.errors import NotFoundError, ValidationError
 from app.models.form import Form, FormOrigin, FormStatus
 from app.models.form_contribution import FormContribution
 from app.models.form_version import FormVersion, FormVersionStatus
@@ -481,6 +482,125 @@ def deploy_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
         )
 
     return {"outcome": "ok", "deployment": deployment}
+
+
+def _serialize_generated_file(f: GeneratedFileEntity) -> dict[str, Any]:
+    return {
+        "id": f.id,
+        "fileName": f.fileName,
+        "fileType": f.fileType,
+        "editedAt": f.editedAt,
+        "editedByUserId": f.editedByUserId,
+    }
+
+
+def _get_published_generated_file(db: Session, form_id: str, file_id: str) -> GeneratedFileEntity:
+    """A form must be currently published and the file must belong to its
+    published version — same scope every other reader (preview/download/
+    deploy) already uses. Raises `NotFoundError` rather than returning an
+    outcome string, since this is the Edit Files window's one access path
+    and has no other caller to thread an outcome through."""
+    form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
+    if form is None or form.status != "published" or not form.publishedVersionId:
+        raise NotFoundError("form not found or not published")
+    file = db.execute(
+        select(GeneratedFileEntity).where(
+            GeneratedFileEntity.id == file_id, GeneratedFileEntity.formVersionId == form.publishedVersionId
+        )
+    ).scalar_one_or_none()
+    if file is None:
+        raise NotFoundError("generated file not found")
+    return file
+
+
+def list_generated_files(db: Session, form_id: str) -> list[dict[str, Any]]:
+    """Every file belonging to a form's published version, for the Edit
+    Files window's file list — any file type (html/js/css/data-js)."""
+    form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
+    if form is None:
+        raise NotFoundError("form not found")
+    if form.status != "published" or not form.publishedVersionId:
+        raise ValidationError("form has no published files to edit")
+
+    files = list(
+        db.execute(
+            select(GeneratedFileEntity)
+            .where(GeneratedFileEntity.formVersionId == form.publishedVersionId)
+            .order_by(GeneratedFileEntity.fileType, GeneratedFileEntity.fileName)
+        ).scalars()
+    )
+    return [_serialize_generated_file(f) for f in files]
+
+
+def get_generated_file_content(db: Session, form_id: str, file_id: str) -> dict[str, Any]:
+    """Reads one generated file's current on-disk content, for the Edit
+    Files window to load into its editor — the exact bytes Preview,
+    Download and Deploy already read."""
+    file = _get_published_generated_file(db, form_id, file_id)
+    with open(absolute_file_path(file.filePath), "r", encoding="utf-8", newline="") as f:
+        content = f.read()
+    return {**_serialize_generated_file(file), "content": content}
+
+
+_BRACKETS = {")": "(", "]": "[", "}": "{"}
+
+
+def _check_js_balance(content: str) -> Optional[str]:
+    """A cheap, dependency-free guard against the most common hand-edit
+    mistake (an unclosed brace/paren/bracket) — not a real parser, just a
+    bracket-matching scan that skips string/template literals and comments
+    so a `}` inside a quoted string doesn't trip it. Returns an error
+    message, or `None` if balanced."""
+    stack: list[str] = []
+    i, n = 0, len(content)
+    while i < n:
+        ch = content[i]
+        if ch in "\"'`":
+            quote = ch
+            i += 1
+            while i < n and content[i] != quote:
+                i += 2 if content[i] == "\\" else 1
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and content[i + 1] == "/":
+            i = content.find("\n", i)
+            i = n if i == -1 else i
+            continue
+        if ch == "/" and i + 1 < n and content[i + 1] == "*":
+            end = content.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            continue
+        if ch in "([{":
+            stack.append(ch)
+        elif ch in ")]}":
+            if not stack or stack.pop() != _BRACKETS[ch]:
+                return f"Unbalanced '{ch}' — check the edit didn't drop a matching bracket"
+        i += 1
+    if stack:
+        return f"Unclosed '{stack[-1]}' — check the edit closes every bracket it opens"
+    return None
+
+
+def update_generated_file_content(db: Session, form_id: str, file_id: str, content: str, user_id: str) -> dict[str, Any]:
+    """Overwrites one generated file's on-disk content in place and stamps
+    who edited it and when. No change needed anywhere else: preview_service,
+    build_form_zip and deploy_form all read this same file path already, so
+    the next Preview/Download/Deploy picks up the edit automatically."""
+    file = _get_published_generated_file(db, form_id, file_id)
+    if not content.strip():
+        raise ValidationError("content must not be empty")
+    if file.fileType in ("js", "data-js"):
+        error = _check_js_balance(content)
+        if error:
+            raise ValidationError(error)
+
+    with open(absolute_file_path(file.filePath), "w", encoding="utf-8", newline="") as f:
+        f.write(content)
+
+    file.editedAt = _now()
+    file.editedByUserId = user_id
+    db.commit()
+    return {**_serialize_generated_file(file), "content": content}
 
 
 UnpublishOutcome = Literal["ok", "not_found", "not_published"]

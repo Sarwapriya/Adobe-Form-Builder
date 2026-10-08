@@ -18,6 +18,7 @@ import { LoginPage } from "./pages/LoginPage.tsx";
 import { HrFormInitiatorListPage } from "./pages/HrFormInitiatorListPage.tsx";
 import { AdHocFormInitiatorListPage } from "./pages/AdHocFormInitiatorListPage.tsx";
 import { FormBuilderEditorPage } from "./pages/FormBuilderEditorPage.tsx";
+import { FormFilesEditorPage } from "./pages/FormFilesEditorPage.tsx";
 import { MyAdHocFormsListPage } from "./pages/MyAdHocFormsListPage.tsx";
 import { MyHrFormsListPage } from "./pages/MyHrFormsListPage.tsx";
 import { MyFormTranslatePage } from "./pages/MyFormTranslatePage.tsx";
@@ -92,6 +93,7 @@ export default function App() {
                   <Route path="admin/form-builder/hr" element={<HrFormInitiatorListPage />} />
                   <Route path="admin/form-builder/adhoc" element={<AdHocFormInitiatorListPage />} />
                   <Route path="admin/form-builder/:id" element={<FormBuilderEditorPage />} />
+                  <Route path="admin/form-builder/:id/files" element={<FormFilesEditorPage />} />
                   <Route path="admin/question-master" element={<QuestionMasterPage />} />
                 </Route>
               </Route>

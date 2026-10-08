@@ -180,6 +180,7 @@ export const apiClient = {
   get: <T>(path: string): Promise<T> => request<T>(path, { method: "GET" }),
   post: <T>(path: string, body?: unknown): Promise<T> => request<T>(path, { method: "POST", body }),
   patch: <T>(path: string, body?: unknown): Promise<T> => request<T>(path, { method: "PATCH", body }),
+  put: <T>(path: string, body?: unknown): Promise<T> => request<T>(path, { method: "PUT", body }),
   postForm: <T>(path: string, formData: FormData): Promise<T> =>
     request<T>(path, { method: "POST", body: formData, isFormData: true }),
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: "DELETE" }),
