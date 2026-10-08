@@ -5,9 +5,9 @@ connection settings, but no SQL client tools).
 
     python scripts/run_sql_file.py scripts/soft_delete_and_ai_providers_migration.sql
 
-Must run from the backend root (so `app` is importable) with the same
-environment variables as the backend itself. Prints any rows a batch returns
-(e.g. the migration's verification SELECT). Stops at the first failing batch.
+Runs with the same environment variables as the backend itself. Prints any
+rows a batch returns (e.g. the migration's verification SELECT). Stops at
+the first failing batch.
 """
 
 from __future__ import annotations
@@ -15,6 +15,16 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+
+# Plain `python scripts/run_sql_file.py` puts the SCRIPT's own directory
+# (.../scripts) on sys.path[0] — never the backend root — regardless of the
+# current working directory it's invoked from. Locally this is masked by the
+# dev venv's editable `pip install -e .` already making `app` importable
+# from anywhere; the Docker image has no such editable install (the app
+# package only ever exists on disk under /app/app), so this same invocation
+# fails there with "No module named 'app'" every time. Inserting the backend
+# root (this file's parent's parent) explicitly fixes it everywhere.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import text
 
