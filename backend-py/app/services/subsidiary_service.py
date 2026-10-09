@@ -128,6 +128,21 @@ def set_subsidiary_notification_emails(db: Session, id: str, emails: dict[str, A
     return existing
 
 
+def set_subsidiary_report_suite_id(db: Session, id: str, report_suite_id: Optional[str]) -> Optional[Subsidiary]:
+    """Sets (or clears, with `None`/blank) the Adobe Analytics Report Suite
+    ID injected into this subsidiary's published forms — see
+    `form_builder_service.publish_form`. Returns `None` if the id doesn't
+    exist."""
+    existing = db.get(Subsidiary, id)
+    if existing is None or existing.isDeleted:
+        return None
+    existing.reportSuiteId = report_suite_id.strip() if report_suite_id else None
+    db.add(existing)
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
 def delete_subsidiary(db: Session, id: str) -> bool:
     """Soft-deletes a subsidiary: flags it `isDeleted` and inactive (so it
     drops out of every list and every "is this subsidiary active" check), and

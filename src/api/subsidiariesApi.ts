@@ -9,6 +9,11 @@ export interface Subsidiary {
    * notification — see backend Subsidiary entity's own doc comment. */
   notificationEmail1: string | null;
   notificationEmail2: string | null;
+  /** Adobe Analytics Report Suite ID for this subsidiary's traffic (e.g.
+   * "sssamsung4ae" for UAE) — injected into every published form's data
+   * file (`param.analytics.reportSuiteID`) at publish time. Null until an
+   * admin sets it. */
+  reportSuiteId: string | null;
   createdAt: string;
 }
 

@@ -22,6 +22,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.form_pipeline import (
+    AnalyticsConfig,
     BuilderConfig,
     FormDefinition,
     GeneratedFile,
@@ -35,12 +36,13 @@ from app.form_pipeline import (
     validate_form_definition,
 )
 from app.form_pipeline.codegen.file_names import FileNames
+from app.form_pipeline.codegen.types import ChannelConfig
 from app.errors import NotFoundError, ValidationError
 from app.models.form import Form, FormOrigin, FormStatus
 from app.models.form_contribution import FormContribution
 from app.models.form_version import FormVersion, FormVersionStatus
 from app.models.generated_file import GeneratedFile as GeneratedFileEntity
-from app.services import email_service, project_code_service, subsidiary_project_block_service, subsidiary_service
+from app.services import email_service, project_code_service, sftp_settings_service, subsidiary_project_block_service, subsidiary_service
 from app.services.file_service import absolute_file_path, save_form_version_generated_files
 from app.utils.background import run_in_background
 from app.services.generation_service import classify_file_type
@@ -52,6 +54,57 @@ from app.utils.query_parsing import resolve_paging
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# Adobe Campaign ingest endpoint, by SFTP deployment environment (Configuration
+# > Deployment's activeEnvironment — see sftp_settings_service.py). Baked into
+# the published data file's `param.apiEndpoint` at publish time (not deploy
+# time): generated files are static, written once, and deploy_form never
+# regenerates them — so a publish made while "staging" is active, later
+# deployed after switching to "production", would carry a stale endpoint
+# until the form is re-published. Accepted tradeoff (matches this product's
+# existing publish-then-deploy workflow) rather than rewriting file content
+# at deploy time.
+_STAGING_API_ENDPOINT = "https://samsung-mena-mid-stage5-all-res.adobe-campaign.com/ingest"
+_PRODUCTION_API_ENDPOINT = "https://res6.mena2p.crm.samsung.com/ingest"
+
+# Fixed Adobe Campaign tracking constants, the same for every subsidiary/
+# form — only `apiEndpoint` (environment) and `analytics.reportSuiteID`
+# (subsidiary) actually vary; `project` varies per form.
+_ANALYTICS_IMS_ORG_ID = "3D4865E655DF7BD27F000101@AdobeOrg"
+_ANALYTICS_DATASTREAM_ID = "fc12b34c-0f82-454d-a76e-4b923ba4a679"
+
+
+def _resolve_analytics_param_updates(db: Session, form: Form) -> dict[str, Any]:
+    """The `BuilderConfig` fields that flow into the published data file's
+    `param`/`param.analytics` objects (see buildDataJs.ts/build_data_js.py)
+    — resolved fresh at every publish from real data (the form's own project
+    code, its subsidiary's Adobe Analytics Report Suite ID, and the
+    currently-active SFTP deployment environment) rather than left as the
+    generic tool's blank defaults. Applied the same way `projectCode`
+    already is in `publish_form` — an override on top of whatever the
+    stored draft config has, so a re-publish of an old form (created before
+    this existed) still gets fully correct values."""
+    environment = sftp_settings_service.get_sftp_deployment_settings(db).activeEnvironment
+    api_endpoint = _PRODUCTION_API_ENDPOINT if environment == "production" else _STAGING_API_ENDPOINT
+
+    subsidiary = subsidiary_service.find_subsidiary_by_name(db, form.subsidiaryId)
+    report_suite_id = subsidiary.reportSuiteId if subsidiary else None
+
+    return {
+        "apiEndpoint": api_endpoint,
+        "project": form.projectCode or "",
+        "channel": ChannelConfig(fullForm="COM", oneClick="EMAIL"),
+        "channelDetail": ChannelConfig(fullForm="COM", oneClick="EMAIL"),
+        "source": ChannelConfig(fullForm="full_form", oneClick="one_click"),
+        "voucherRequired": "N",
+        "analytics": AnalyticsConfig(
+            enabled=True,
+            reportSuiteID=report_suite_id,
+            imsOrgID=_ANALYTICS_IMS_ORG_ID,
+            datastreamID=_ANALYTICS_DATASTREAM_ID,
+        ),
+    }
 
 
 def _generate_from_form_definition(
@@ -372,7 +425,9 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     # ad-hoc approval). The published version below records the config it was
     # actually generated with (code included) so its preview can recompute the
     # exact names; the fresh draft further down keeps the code-free `config`.
-    generation_config = config.model_copy(update={"projectCode": form.projectCode})
+    generation_config = config.model_copy(
+        update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form)}
+    )
     generation = _generate_from_form_definition(definition, generation_config)
     validation: ValidationResult = generation["validation"]
     if len(validation.errors) > 0:

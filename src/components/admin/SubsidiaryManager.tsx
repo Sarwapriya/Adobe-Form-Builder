@@ -13,6 +13,7 @@ import {
   listAllSubsidiaries,
   setSubsidiaryActive,
   setSubsidiaryNotificationEmails,
+  setSubsidiaryReportSuiteId,
   type Subsidiary,
 } from "../../api/adminApi";
 import { SectionHeader } from "../common/SectionHeader";
@@ -42,6 +43,7 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [savingEmailsId, setSavingEmailsId] = useState<string | null>(null);
+  const [savingReportSuiteId, setSavingReportSuiteId] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -130,6 +132,18 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
       showToast(err instanceof ApiError ? err.message : "Failed to update notification emails", "error");
     } finally {
       setSavingEmailsId(null);
+    }
+  }
+
+  async function handleSaveReportSuiteId(id: string, reportSuiteId: string) {
+    setSavingReportSuiteId(id);
+    try {
+      await setSubsidiaryReportSuiteId(id, reportSuiteId || null);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to update report suite ID", "error");
+    } finally {
+      setSavingReportSuiteId(null);
     }
   }
 
@@ -270,6 +284,25 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
                   />
                 ))}
               </Stack>
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                Adobe Analytics Report Suite ID
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                Injected into every published form's data file for this subsidiary (param.analytics.reportSuiteID) —
+                leave blank to publish without one.
+              </Typography>
+              <Stack spacing={1}>
+                {subsidiaries.map((s) => (
+                  <SubsidiaryReportSuiteRow
+                    key={s.id}
+                    subsidiary={s}
+                    saving={savingReportSuiteId === s.id}
+                    onSave={(reportSuiteId) => handleSaveReportSuiteId(s.id, reportSuiteId)}
+                  />
+                ))}
+              </Stack>
             </>
           )}
         </>
@@ -331,5 +364,47 @@ function SubsidiaryNotificationRow({
       }
       containerSx={(t) => ({ px: 1.5, py: 1, borderRadius: 2, bgcolor: alpha(t.palette.text.primary, 0.03) })}
     />
+  );
+}
+
+function SubsidiaryReportSuiteRow({
+  subsidiary,
+  saving,
+  onSave,
+}: {
+  subsidiary: Subsidiary;
+  saving: boolean;
+  onSave: (reportSuiteId: string) => void;
+}) {
+  const [value, setValue] = useState(subsidiary.reportSuiteId ?? "");
+
+  useEffect(() => {
+    setValue(subsidiary.reportSuiteId ?? "");
+  }, [subsidiary.reportSuiteId]);
+
+  const isDirty = value.trim() !== (subsidiary.reportSuiteId ?? "");
+
+  return (
+    <Stack
+      direction="row"
+      spacing={1.5}
+      alignItems="center"
+      flexWrap="wrap"
+      sx={(t) => ({ px: 1.5, py: 1, borderRadius: 2, bgcolor: alpha(t.palette.text.primary, 0.03) })}
+    >
+      <Typography variant="body2" fontWeight={600} sx={{ minWidth: 140 }}>
+        {subsidiary.name}
+      </Typography>
+      <TextField
+        size="small"
+        label="Report Suite ID"
+        placeholder="Not set"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <Button size="small" disabled={!isDirty || saving} onClick={() => onSave(value.trim())}>
+        {saving ? "Saving..." : "Save"}
+      </Button>
+    </Stack>
   );
 }

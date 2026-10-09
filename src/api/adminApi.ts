@@ -216,6 +216,12 @@ export function setSubsidiaryNotificationEmails(
   return apiClient.patch<Subsidiary>(`/api/v1/admin/subsidiaries/${id}`, { notificationEmail1, notificationEmail2 });
 }
 
+/** Sets (or clears, with `null`) this subsidiary's Adobe Analytics Report
+ * Suite ID — see Subsidiary.reportSuiteId's own doc comment. */
+export function setSubsidiaryReportSuiteId(id: string, reportSuiteId: string | null): Promise<Subsidiary> {
+  return apiClient.patch<Subsidiary>(`/api/v1/admin/subsidiaries/${id}`, { reportSuiteId });
+}
+
 /** Permanently removes a subsidiary (and any subsidiary-project blocks
  * naming it). Uploads/users already scoped to it keep their own
  * (denormalized) subsidiary value regardless — see backend

@@ -102,6 +102,7 @@ def _serialize_subsidiary(s) -> dict:
         "isActive": s.isActive,
         "notificationEmail1": s.notificationEmail1,
         "notificationEmail2": s.notificationEmail2,
+        "reportSuiteId": s.reportSuiteId,
         "createdAt": s.createdAt,
     }
 
@@ -312,6 +313,7 @@ class UpdateSubsidiaryBody(BaseModel):
     isActive: Optional[bool] = None
     notificationEmail1: OptionalEmail = None
     notificationEmail2: OptionalEmail = None
+    reportSuiteId: Optional[str] = None
 
 
 @router.patch("/subsidiaries/{id}")
@@ -326,6 +328,8 @@ def update_subsidiary(id: str, body: UpdateSubsidiaryBody, db: Session = Depends
         updated = subsidiary_service.set_subsidiary_notification_emails(
             db, id, {k: data[k] for k in email_keys if k in data}
         )
+    if "reportSuiteId" in data:
+        updated = subsidiary_service.set_subsidiary_report_suite_id(db, id, data["reportSuiteId"])
     if updated is None:
         raise HTTPException(status_code=404, detail="subsidiary not found")
     return _serialize_subsidiary(updated)
