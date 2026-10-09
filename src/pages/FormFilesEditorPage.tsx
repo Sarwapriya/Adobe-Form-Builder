@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Box,
@@ -11,7 +11,6 @@ import {
   ListItemText,
   Paper,
   Stack,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -20,6 +19,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import UndoIcon from "@mui/icons-material/Undo";
 import RedoIcon from "@mui/icons-material/Redo";
 import { PageHeader } from "../components/common/PageHeader";
+import { CodeEditor, type CodeEditorHandle } from "../components/formBuilder/CodeEditor";
 import { useFormFilesStore } from "../store/formFilesStore";
 import { getFormDetail, type FormDetail, type GeneratedFileSummary } from "../api/formBuilderApi";
 import { showToast } from "../store/toastStore";
@@ -52,8 +52,6 @@ export function FormFilesEditorPage() {
   const selectedFileId = useFormFilesStore((s) => s.selectedFileId);
   const content = useFormFilesStore((s) => s.content);
   const originalContent = useFormFilesStore((s) => s.originalContent);
-  const canUndo = useFormFilesStore((s) => s.history.length > 0);
-  const canRedo = useFormFilesStore((s) => s.future.length > 0);
   const loading = useFormFilesStore((s) => s.loading);
   const loadingContent = useFormFilesStore((s) => s.loadingContent);
   const saving = useFormFilesStore((s) => s.saving);
@@ -61,14 +59,22 @@ export function FormFilesEditorPage() {
   const load = useFormFilesStore((s) => s.load);
   const selectFile = useFormFilesStore((s) => s.selectFile);
   const setContent = useFormFilesStore((s) => s.setContent);
-  const undo = useFormFilesStore((s) => s.undo);
-  const redo = useFormFilesStore((s) => s.redo);
   const save = useFormFilesStore((s) => s.save);
   const discard = useFormFilesStore((s) => s.discard);
   const reset = useFormFilesStore((s) => s.reset);
 
   const { confirm, confirmDialog } = useConfirm();
   const dirty = content !== originalContent;
+
+  // CodeMirror owns undo/redo history itself (see CodeEditor.tsx) — these
+  // just mirror its current depth so the toolbar buttons know when to
+  // enable, and `editorKey` forces a fresh editor instance (fresh history)
+  // on every file switch or Discard, so "Undo" can never reach back into a
+  // previous file's content or past a just-discarded edit.
+  const editorRef = useRef<CodeEditorHandle>(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [editorInstance, setEditorInstance] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -95,7 +101,16 @@ export function FormFilesEditorPage() {
       });
       if (!confirmed) return;
     }
+    setCanUndo(false);
+    setCanRedo(false);
     void selectFile(fileId);
+  }
+
+  function handleDiscard() {
+    discard();
+    setEditorInstance((n) => n + 1);
+    setCanUndo(false);
+    setCanRedo(false);
   }
 
   async function handleSave() {
@@ -182,64 +197,55 @@ export function FormFilesEditorPage() {
             <Box sx={{ flexGrow: 1 }} />
             <Tooltip title="Undo (Ctrl+Z)">
               <span>
-                <IconButton size="small" disabled={!canUndo} onClick={undo}>
+                <IconButton size="small" disabled={!canUndo} onClick={() => editorRef.current?.undo()}>
                   <UndoIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
             <Tooltip title="Redo (Ctrl+Y)">
               <span>
-                <IconButton size="small" disabled={!canRedo} onClick={redo}>
+                <IconButton size="small" disabled={!canRedo} onClick={() => editorRef.current?.redo()}>
                   <RedoIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
           </Stack>
 
-          <Box sx={{ flex: 1, p: 2, display: "flex", minHeight: 0 }}>
+          <Box
+            sx={{
+              flex: 1,
+              m: 2,
+              display: "flex",
+              minHeight: 0,
+              border: 1,
+              borderColor: "divider",
+              borderRadius: 1.5,
+              overflow: "hidden",
+            }}
+          >
             {loadingContent ? (
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
                 <CircularProgress size={28} />
               </Box>
             ) : (
-              <TextField
-                multiline
-                fullWidth
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onKeyDown={(e) => {
-                  // Intercept rather than let the browser's own native undo
-                  // act on this controlled textarea — a native undo can set
-                  // the DOM value directly without going through onChange,
-                  // desyncing it from this component's (and the store's) own
-                  // state. Routing both shortcuts through the same history
-                  // stack the buttons use keeps one consistent behavior.
-                  const mod = e.ctrlKey || e.metaKey;
-                  if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
-                    e.preventDefault();
-                    undo();
-                  } else if ((mod && e.key.toLowerCase() === "y") || (mod && e.shiftKey && e.key.toLowerCase() === "z")) {
-                    e.preventDefault();
-                    redo();
-                  }
-                }}
-                spellCheck={false}
-                InputProps={{
-                  sx: {
-                    fontFamily: '"Roboto Mono", monospace',
-                    fontSize: "0.82rem",
-                    alignItems: "flex-start",
-                    height: "100%",
-                    "& textarea": { height: "100% !important", overflowY: "auto !important" },
-                  },
-                }}
-                sx={{ flex: 1, "& .MuiInputBase-root": { height: "100%" } }}
-              />
+              selectedFile && (
+                <CodeEditor
+                  key={`${selectedFileId}-${editorInstance}`}
+                  ref={editorRef}
+                  value={content}
+                  fileType={selectedFile.fileType}
+                  onChange={setContent}
+                  onHistoryChange={(u, r) => {
+                    setCanUndo(u);
+                    setCanRedo(r);
+                  }}
+                />
+              )
             )}
           </Box>
 
           <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ px: 2, py: 1.5, borderTop: 1, borderColor: "divider" }}>
-            <Button size="small" disabled={!dirty || saving} onClick={discard}>
+            <Button size="small" disabled={!dirty || saving} onClick={handleDiscard}>
               Discard
             </Button>
             <Button size="small" variant="contained" startIcon={<SaveIcon />} disabled={!dirty || saving} onClick={() => void handleSave()}>
