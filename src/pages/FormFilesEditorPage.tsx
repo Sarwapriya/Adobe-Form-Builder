@@ -1,8 +1,24 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Box, Button, Chip, CircularProgress, List, ListItemButton, ListItemText, Paper, Stack, TextField, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemText,
+  Paper,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import CodeIcon from "@mui/icons-material/Code";
 import SaveIcon from "@mui/icons-material/Save";
+import UndoIcon from "@mui/icons-material/Undo";
+import RedoIcon from "@mui/icons-material/Redo";
 import { PageHeader } from "../components/common/PageHeader";
 import { useFormFilesStore } from "../store/formFilesStore";
 import { getFormDetail, type FormDetail, type GeneratedFileSummary } from "../api/formBuilderApi";
@@ -36,6 +52,8 @@ export function FormFilesEditorPage() {
   const selectedFileId = useFormFilesStore((s) => s.selectedFileId);
   const content = useFormFilesStore((s) => s.content);
   const originalContent = useFormFilesStore((s) => s.originalContent);
+  const canUndo = useFormFilesStore((s) => s.history.length > 0);
+  const canRedo = useFormFilesStore((s) => s.future.length > 0);
   const loading = useFormFilesStore((s) => s.loading);
   const loadingContent = useFormFilesStore((s) => s.loadingContent);
   const saving = useFormFilesStore((s) => s.saving);
@@ -43,6 +61,8 @@ export function FormFilesEditorPage() {
   const load = useFormFilesStore((s) => s.load);
   const selectFile = useFormFilesStore((s) => s.selectFile);
   const setContent = useFormFilesStore((s) => s.setContent);
+  const undo = useFormFilesStore((s) => s.undo);
+  const redo = useFormFilesStore((s) => s.redo);
   const save = useFormFilesStore((s) => s.save);
   const discard = useFormFilesStore((s) => s.discard);
   const reset = useFormFilesStore((s) => s.reset);
@@ -159,6 +179,21 @@ export function FormFilesEditorPage() {
               <Chip size="small" variant="outlined" label={`edited ${new Date(selectedFile.editedAt).toLocaleString()}`} />
             )}
             {dirty && <Chip size="small" label="Unsaved changes" />}
+            <Box sx={{ flexGrow: 1 }} />
+            <Tooltip title="Undo (Ctrl+Z)">
+              <span>
+                <IconButton size="small" disabled={!canUndo} onClick={undo}>
+                  <UndoIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Redo (Ctrl+Y)">
+              <span>
+                <IconButton size="small" disabled={!canRedo} onClick={redo}>
+                  <RedoIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
           </Stack>
 
           <Box sx={{ flex: 1, p: 2, display: "flex", minHeight: 0 }}>
@@ -172,6 +207,22 @@ export function FormFilesEditorPage() {
                 fullWidth
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
+                onKeyDown={(e) => {
+                  // Intercept rather than let the browser's own native undo
+                  // act on this controlled textarea — a native undo can set
+                  // the DOM value directly without going through onChange,
+                  // desyncing it from this component's (and the store's) own
+                  // state. Routing both shortcuts through the same history
+                  // stack the buttons use keeps one consistent behavior.
+                  const mod = e.ctrlKey || e.metaKey;
+                  if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
+                    e.preventDefault();
+                    undo();
+                  } else if ((mod && e.key.toLowerCase() === "y") || (mod && e.shiftKey && e.key.toLowerCase() === "z")) {
+                    e.preventDefault();
+                    redo();
+                  }
+                }}
                 spellCheck={false}
                 InputProps={{
                   sx: {

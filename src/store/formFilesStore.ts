@@ -13,12 +13,26 @@ import { formatGeneratedFileContent } from "./formatGeneratedFile";
  * one at a time. Deliberately its own small store rather than folding into
  * the already-large formBuilderStore: this page is a separate browser tab
  * with its own lifecycle, never mounted alongside the builder. */
+/** Rapid keystrokes within this window collapse into one undo step (matches
+ * how most code editors group typing) — a history entry is only pushed once
+ * this long has passed since the previous one, rather than on every
+ * keystroke. */
+const UNDO_COALESCE_MS = 600;
+
 interface FormFilesState {
   formId: string | null;
   files: GeneratedFileSummary[];
   selectedFileId: string | null;
   content: string;
   originalContent: string;
+  /** Past states, oldest first — `undo()` pops the last one. Cleared on
+   * every file switch (not on save, so undo/redo still works right after
+   * saving). */
+  history: string[];
+  /** States undone past, most-recently-undone last — `redo()` pops the
+   * last one; cleared by any new edit (standard undo-stack behavior). */
+  future: string[];
+  lastEditAt: number;
   loading: boolean;
   loadingContent: boolean;
   saving: boolean;
@@ -27,6 +41,8 @@ interface FormFilesState {
   load: (formId: string) => Promise<void>;
   selectFile: (fileId: string) => Promise<void>;
   setContent: (value: string) => void;
+  undo: () => void;
+  redo: () => void;
   save: () => Promise<boolean>;
   discard: () => void;
   reset: () => void;
@@ -38,6 +54,9 @@ const initialState = {
   selectedFileId: null,
   content: "",
   originalContent: "",
+  history: [],
+  future: [],
+  lastEditAt: 0,
   loading: false,
   loadingContent: false,
   saving: false,
@@ -67,14 +86,46 @@ export const useFormFilesStore = create<FormFilesState>((set, get) => ({
       // Stale response from a since-abandoned selection — ignore it.
       if (get().selectedFileId !== fileId) return;
       const formatted = formatGeneratedFileContent(file.content, file.fileType);
-      set({ content: formatted, originalContent: formatted, loadingContent: false });
+      set({ content: formatted, originalContent: formatted, history: [], future: [], loadingContent: false });
     } catch (err) {
       set({ loadingContent: false, error: err instanceof ApiError ? err.message : "Failed to load file content" });
     }
   },
 
   setContent(value) {
-    set({ content: value });
+    const { content, history, lastEditAt } = get();
+    const now = Date.now();
+    const coalescing = now - lastEditAt < UNDO_COALESCE_MS;
+    set({
+      content: value,
+      history: coalescing ? history : [...history, content],
+      future: [],
+      lastEditAt: now,
+    });
+  },
+
+  undo() {
+    const { content, history, future } = get();
+    if (history.length === 0) return;
+    const previous = history[history.length - 1];
+    set({
+      content: previous,
+      history: history.slice(0, -1),
+      future: [...future, content],
+      lastEditAt: 0, // next keystroke always starts a fresh history entry, never coalesces into the undone edit
+    });
+  },
+
+  redo() {
+    const { content, history, future } = get();
+    if (future.length === 0) return;
+    const next = future[future.length - 1];
+    set({
+      content: next,
+      history: [...history, content],
+      future: future.slice(0, -1),
+      lastEditAt: 0,
+    });
   },
 
   async save() {
@@ -96,7 +147,7 @@ export const useFormFilesStore = create<FormFilesState>((set, get) => ({
   },
 
   discard() {
-    set((s) => ({ content: s.originalContent }));
+    set((s) => ({ content: s.originalContent, history: [], future: [] }));
   },
 
   reset() {
