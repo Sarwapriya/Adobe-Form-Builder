@@ -26,12 +26,14 @@
     "@mui/icons-material": "^6.4.0",
     "@mui/material": "^6.4.0",
     "@mui/x-data-grid": "^7.23.0",
+    "js-beautify": "^2.0.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^6.28.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@types/js-beautify": "^1.14.3",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

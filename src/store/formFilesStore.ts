@@ -6,6 +6,7 @@ import {
   type GeneratedFileSummary,
 } from "../api/formBuilderApi";
 import { ApiError } from "../api/apiClient";
+import { formatGeneratedFileContent } from "./formatGeneratedFile";
 
 /** Backs the Edit Files window (FormFilesEditorPage.tsx) — a form's
  * published generated files (html/js/css/data-js), viewed and hand-edited
@@ -65,7 +66,8 @@ export const useFormFilesStore = create<FormFilesState>((set, get) => ({
       const file = await getGeneratedFileContent(formId, fileId);
       // Stale response from a since-abandoned selection — ignore it.
       if (get().selectedFileId !== fileId) return;
-      set({ content: file.content, originalContent: file.content, loadingContent: false });
+      const formatted = formatGeneratedFileContent(file.content, file.fileType);
+      set({ content: formatted, originalContent: formatted, loadingContent: false });
     } catch (err) {
       set({ loadingContent: false, error: err instanceof ApiError ? err.message : "Failed to load file content" });
     }
