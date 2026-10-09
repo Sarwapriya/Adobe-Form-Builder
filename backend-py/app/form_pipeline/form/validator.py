@@ -31,7 +31,7 @@ def validate_form_definition(form: FormDefinition) -> ValidationResult:
     warnings: list[Issue] = []
 
     if len(form.questions) == 0:
-        errors.append(_err("Add at least one question before publishing."))
+        warnings.append(_warn("This form has no questions — confirm that's intentional (e.g. a profile-fields-only registration form)."))
 
     if len(form.locales) == 0:
         errors.append(_err("The form has no locales configured."))

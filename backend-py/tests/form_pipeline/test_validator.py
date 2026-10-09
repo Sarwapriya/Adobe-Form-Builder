@@ -37,9 +37,10 @@ def test_passes_a_well_formed_form_with_no_errors():
     assert result.errors == []
 
 
-def test_errors_when_there_are_no_questions():
+def test_warns_but_does_not_block_when_there_are_no_questions():
     result = validate_form_definition(_base_form(questions=[]))
-    assert any("at least one question" in e.message for e in result.errors)
+    assert result.errors == []
+    assert any("no questions" in w.message for w in result.warnings)
 
 
 def test_errors_on_duplicate_question_ids():

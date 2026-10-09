@@ -17,7 +17,7 @@ export function validateFormDefinition(form: FormDefinition): ValidationResult {
   const warnings: Issue[] = [];
 
   if (form.questions.length === 0) {
-    errors.push(err("Add at least one question before publishing."));
+    warnings.push(warn("This form has no questions — confirm that's intentional (e.g. a profile-fields-only registration form)."));
   }
 
   if (form.locales.length === 0) {

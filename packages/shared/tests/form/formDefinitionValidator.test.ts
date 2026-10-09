@@ -32,9 +32,10 @@ describe("validateFormDefinition", () => {
     expect(result.errors).toEqual([]);
   });
 
-  it("errors when there are no questions", () => {
+  it("warns (but does not block) when there are no questions", () => {
     const result = validateFormDefinition(baseForm({ questions: [] }));
-    expect(result.errors.some((e) => /at least one question/.test(e.message))).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.some((w) => /no questions/.test(w.message))).toBe(true);
   });
 
   it("errors on duplicate question ids", () => {
