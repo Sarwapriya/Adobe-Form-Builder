@@ -18,8 +18,11 @@ import CodeIcon from "@mui/icons-material/Code";
 import SaveIcon from "@mui/icons-material/Save";
 import UndoIcon from "@mui/icons-material/Undo";
 import RedoIcon from "@mui/icons-material/Redo";
+import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
 import { PageHeader } from "../components/common/PageHeader";
 import { CodeEditor, type CodeEditorHandle } from "../components/formBuilder/CodeEditor";
+import { QaRunDialog } from "../components/admin/QaRunDialog";
+import type { QaRunVariant } from "../api/qaApi";
 import { useFormFilesStore } from "../store/formFilesStore";
 import { getFormDetail, type FormDetail, type GeneratedFileSummary } from "../api/formBuilderApi";
 import { showToast } from "../store/toastStore";
@@ -41,7 +44,11 @@ const TYPE_LABEL: Record<string, string> = {
  * Preview, Download and Deploy already read that same file directly
  * (preview_service.py / form_builder_service.py), so nothing else needs to
  * change for the edit to take effect; never opening this page, or opening
- * it without saving, leaves the form exactly as it was.
+ * it without saving, leaves the form exactly as it was. "Run QA" (top
+ * right) runs the real Playwright QA suite against the actual saved files
+ * (reusing the same in-place preview the Preview button renders) — the one
+ * QA path that reflects a hand-edit, since every other QA entry point in
+ * the app regenerates from the FormDefinition and never sees one.
  */
 export function FormFilesEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -65,6 +72,8 @@ export function FormFilesEditorPage() {
 
   const { confirm, confirmDialog } = useConfirm();
   const dirty = content !== originalContent;
+  const [qaDialogOpen, setQaDialogOpen] = useState(false);
+  const availableVariants: QaRunVariant[] = form?.published?.config.variants ?? [];
 
   // CodeMirror owns undo/redo history itself (see CodeEditor.tsx) — these
   // just mirror its current depth so the toolbar buttons know when to
@@ -155,6 +164,20 @@ export function FormFilesEditorPage() {
           </>
         }
         titleNoWrap
+        action={
+          <Tooltip title={dirty ? "Tests the last saved version — save your edits first to include them" : ""}>
+            <span>
+              <Button
+                variant="outlined"
+                startIcon={<PlayCircleOutlineIcon />}
+                disabled={availableVariants.length === 0}
+                onClick={() => setQaDialogOpen(true)}
+              >
+                Run QA
+              </Button>
+            </span>
+          </Tooltip>
+        }
       />
 
       <Paper sx={{ display: "flex", minHeight: 480, overflow: "hidden" }}>
@@ -255,6 +278,14 @@ export function FormFilesEditorPage() {
         </Box>
       </Paper>
       {confirmDialog}
+      {id && (
+        <QaRunDialog
+          subject={{ kind: "published", formId: id }}
+          availableVariants={availableVariants}
+          open={qaDialogOpen}
+          onClose={() => setQaDialogOpen(false)}
+        />
+      )}
     </Box>
   );
 }

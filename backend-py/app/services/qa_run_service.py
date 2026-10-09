@@ -28,7 +28,7 @@ from app.models.form_version import FormVersion
 from app.models.qa_run import QaRun, QaRunVariant
 from app.models.qa_test_case_result import QaTestCaseResult
 from app.services.file_service import absolute_file_path, form_qa_storage_dir
-from app.services.preview_service import inline_generated_files
+from app.services.preview_service import build_form_version_preview, inline_generated_files
 from app.services.qa.qa_test_runner import run_qa_suite
 from app.services.qa.types import QaCategory, QaCheckResult
 from app.utils.background import run_in_background
@@ -140,6 +140,36 @@ def create_adhoc_review_qa_run(db: Session, form_id: str, variant: QaRunVariant,
     return CreateQaRunResult(outcome="ok", qaRun=qa_run)
 
 
+def create_published_files_qa_run(db: Session, form_id: str, variant: QaRunVariant, triggered_by_user_id: str) -> CreateQaRunResult:
+    """Kicks off a QA run against a *published* form's actual on-disk
+    generated files for `variant` — unlike every other QA run above, this
+    does NOT call `generate_solution`. It reuses `build_form_version_preview`
+    (the exact same inlining the Preview button uses), which reads whatever
+    is currently on disk for the published version, so this is the one QA
+    path that reflects a hand-edit made via the Edit Files window — the
+    other three paths only ever test a fresh in-memory generation, which a
+    saved edit never touches (see form_builder_service.update_generated_file_content's
+    own doc comment)."""
+    form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
+    if form is None or form.status != "published":
+        return CreateQaRunResult(outcome="not_found")
+
+    preview = build_form_version_preview(db, form_id, variant, strict=True)
+    if preview["outcome"] == "not_found":
+        return CreateQaRunResult(outcome="not_found")
+    if preview["outcome"] == "no_files":
+        return CreateQaRunResult(outcome="no_files")
+
+    qa_run = QaRun(uploadId=None, formId=form.id, contributionId=None, variant=variant, status="pending", triggeredByUserId=triggered_by_user_id)
+    db.add(qa_run)
+    db.commit()
+    db.refresh(qa_run)
+
+    run_qa_job(qa_run.id, preview["html"])
+
+    return CreateQaRunResult(outcome="ok", qaRun=qa_run)
+
+
 def run_qa_job(qa_run_id: str, html: str) -> None:
     """The actual background execution: launches Chromium (via
     `qa_test_runner.run_qa_suite`), persists every individual
@@ -219,11 +249,12 @@ def _resolve_qa_run_subject(db: Session, qa_run: QaRun) -> tuple[str, str]:
     needing to update it."""
     form = db.get(Form, qa_run.formId)
     assert form is not None
-    subject_label = (
-        f'Form "{form.name}" · pending contribution {qa_run.contributionId}'
-        if qa_run.contributionId
-        else f'Ad-hoc form "{form.name}" · awaiting review'
-    )
+    if qa_run.contributionId:
+        subject_label = f'Form "{form.name}" · pending contribution {qa_run.contributionId}'
+    elif form.status == "published":
+        subject_label = f'Form "{form.name}" · published files (as currently saved, including any manual edits)'
+    else:
+        subject_label = f'Ad-hoc form "{form.name}" · awaiting review'
     return form.subsidiaryId, subject_label
 
 

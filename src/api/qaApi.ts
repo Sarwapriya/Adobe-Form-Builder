@@ -5,10 +5,16 @@ export type QaRunStatus = "pending" | "running" | "passed" | "failed" | "error";
 export type QaTestCaseStatus = "passed" | "failed";
 
 /** Identifies what a QA run targets — a pending Translate & Extend
- * contribution merged onto its form's draft, or an ad-hoc form's own draft
- * while it awaits admin review. Exactly one shape maps to exactly one of
- * createQaRun's/listQaRuns' request shapes. */
-export type QaRunSubject = { kind: "contribution"; contributionId: string; formId: string } | { kind: "adhoc"; formId: string };
+ * contribution merged onto its form's draft, an ad-hoc form's own draft
+ * while it awaits admin review, or a published form's actual on-disk
+ * generated files (the one target that reflects a hand-edit made via the
+ * Edit Files window, since it skips regeneration — see backend
+ * qa_run_service.create_published_files_qa_run). Exactly one shape maps to
+ * exactly one of createQaRun's/listQaRuns' request shapes. */
+export type QaRunSubject =
+  | { kind: "contribution"; contributionId: string; formId: string }
+  | { kind: "adhoc"; formId: string }
+  | { kind: "published"; formId: string };
 
 export interface QaRun {
   id: string;
@@ -51,7 +57,9 @@ export interface QaRunDetail {
  * getQaRun/getQaRunDetail until status leaves "pending"/"running". */
 export function createQaRun(subject: QaRunSubject, variant: QaRunVariant): Promise<QaRun> {
   const body =
-    subject.kind === "contribution" ? { contributionId: subject.contributionId, variant } : { formId: subject.formId, variant };
+    subject.kind === "contribution"
+      ? { contributionId: subject.contributionId, variant }
+      : { formId: subject.formId, variant, source: subject.kind === "published" ? "published" : "adhoc_review" };
   return apiClient.post<QaRun>("/api/v1/admin/qa-runs", body);
 }
 

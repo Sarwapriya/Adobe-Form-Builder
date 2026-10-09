@@ -1016,6 +1016,14 @@ class CreateQaRunBody(BaseModel):
     contributionId: Optional[str] = Field(default=None, min_length=1)
     formId: Optional[str] = Field(default=None, min_length=1)
     variant: Literal["ff", "oc"]
+    # Only meaningful with formId (never contributionId): "adhoc_review" (the
+    # default, existing behavior) tests the draft an ad-hoc form's own
+    # subsidiary user submitted, in memory, before it's approved/published.
+    # "published" instead tests the published version's actual on-disk
+    # files — the one path that reflects a hand-edit made via the Edit
+    # Files window, since it skips regeneration entirely. See
+    # qa_run_service.create_published_files_qa_run.
+    source: Literal["adhoc_review", "published"] = "adhoc_review"
 
     @model_validator(mode="after")
     def _exactly_one_owner(self) -> "CreateQaRunBody":
@@ -1027,11 +1035,12 @@ class CreateQaRunBody(BaseModel):
 @router.post("/qa-runs", status_code=status.HTTP_201_CREATED)
 def create_qa_run(body: CreateQaRunBody, db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> dict:
     variant: QaRunVariant = body.variant
-    result = (
-        qa_run_service.create_contribution_qa_run(db, body.contributionId, variant, auth["sub"])
-        if body.contributionId
-        else qa_run_service.create_adhoc_review_qa_run(db, body.formId, variant, auth["sub"])
-    )
+    if body.contributionId:
+        result = qa_run_service.create_contribution_qa_run(db, body.contributionId, variant, auth["sub"])
+    elif body.source == "published":
+        result = qa_run_service.create_published_files_qa_run(db, body.formId, variant, auth["sub"])
+    else:
+        result = qa_run_service.create_adhoc_review_qa_run(db, body.formId, variant, auth["sub"])
 
     if result.outcome == "not_found":
         raise HTTPException(status_code=404, detail="form or pending contribution not found")

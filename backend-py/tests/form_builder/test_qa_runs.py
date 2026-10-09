@@ -124,6 +124,49 @@ class TestCreateQaRun:
         assert body["variant"] == "oc"
         assert body["status"] in ("pending", "running")
 
+    def test_published_files_qa_run_starts_pending(
+        self, client: TestClient, admin_headers: dict, subsidiary_row, project_code_row
+    ):
+        """source: "published" tests the actual on-disk generated files of a
+        published form (what Edit Files hand-edits), not a fresh in-memory
+        generation — see qa_run_service.create_published_files_qa_run."""
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code, variants=["ff", "oc"])
+
+        resp = client.post(
+            "/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "ff", "source": "published"}, headers=admin_headers
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["formId"] == form_id
+        assert body["contributionId"] is None
+        assert body["variant"] == "ff"
+        assert body["status"] in ("pending", "running")
+
+        list_resp = client.get(f"/api/v1/admin/qa-runs?formId={form_id}", headers=admin_headers)
+        assert any(r["id"] == body["id"] for r in list_resp.json())
+
+    def test_published_files_qa_run_with_unavailable_variant_is_409(
+        self, client: TestClient, admin_headers: dict, subsidiary_row, project_code_row
+    ):
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code, variants=["ff"])
+        resp = client.post(
+            "/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "oc", "source": "published"}, headers=admin_headers
+        )
+        assert resp.status_code == 409
+
+    def test_published_files_qa_run_against_a_draft_form_404(
+        self, client: TestClient, admin_headers: dict, subsidiary_row
+    ):
+        create_resp = client.post(
+            "/api/v1/admin/forms/", json={"name": "Never Published", "subsidiaryId": subsidiary_row.name}, headers=admin_headers
+        )
+        form_id = create_resp.json()["id"]
+
+        resp = client.post(
+            "/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "ff", "source": "published"}, headers=admin_headers
+        )
+        assert resp.status_code == 404
+
     def test_qa_run_against_non_pending_contribution_404(
         self, client: TestClient, admin_headers: dict, standard_headers: dict, subsidiary_row
     ):
