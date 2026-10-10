@@ -180,7 +180,23 @@ export function FormFilesEditorPage() {
         }
       />
 
-      <Paper sx={{ display: "flex", minHeight: 480, overflow: "hidden" }}>
+      <Paper
+        sx={{
+          display: "flex",
+          // Bounded to the viewport (roughly "below the page header, above
+          // the page's own bottom padding") so a long file scrolls inside
+          // the editor itself — the Paper's own fixed height, not the whole
+          // page growing to fit every line — which is also what keeps the
+          // Save/Discard bar at a stable position instead of being pushed
+          // far down the page past the floating AI Assistant button.
+          height: "calc(100vh - 230px)",
+          minHeight: 420,
+          overflow: "hidden",
+          // Same reservation as BuilderActionBar.tsx — the floating AI
+          // Assistant launcher is fixed to every page's bottom-right corner.
+          mr: { xs: 0, sm: "220px" },
+        }}
+      >
         <Box sx={{ width: 260, flexShrink: 0, borderRight: 1, borderColor: "divider", overflowY: "auto" }}>
           {Object.entries(grouped).map(([type, group]) => (
             <Box key={type}>

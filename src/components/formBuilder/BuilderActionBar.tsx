@@ -168,6 +168,10 @@ export function BuilderActionBar() {
         // rather than blending into the page behind it — a real drop shadow
         // (via the `elevation` prop above) plus an accent-tinted border.
         border: `1px solid ${alpha(t.palette.primary.main, 0.4)}`,
+        // The floating AI Assistant launcher (AIChatButton.tsx) is fixed to
+        // every page's bottom-right corner — without this, this bar's own
+        // right edge runs underneath it instead of stopping short.
+        mr: { xs: 0, sm: "220px" },
       })}
     >
       <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
