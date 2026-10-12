@@ -62,6 +62,7 @@ function SftpTargetPanel({
         username: form.username,
         privateKeyPath: form.privateKeyPath,
         remotePath: form.remotePath,
+        apiEndpoint: form.apiEndpoint,
       });
       onSaved(settings);
       showToast("Saved.", "success");
@@ -132,8 +133,22 @@ function SftpTargetPanel({
             required
             placeholder="/incoming/ACC/Operations/HRForms/ToProcess"
           />
+          <TextField
+            label="API Endpoint"
+            size="small"
+            value={form.apiEndpoint}
+            onChange={(e) => setForm((f) => ({ ...f, apiEndpoint: e.target.value }))}
+            required
+            placeholder="https://res6.mena2p.crm.samsung.com/ingest"
+            helperText="Baked into every form's master data JS file (param.apiEndpoint) the next time it's published while this environment is active"
+          />
         </Stack>
-        <Button type="submit" size="small" variant="contained" disabled={!form.host.trim() || !form.username.trim() || !form.privateKeyPath.trim() || saving}>
+        <Button
+          type="submit"
+          size="small"
+          variant="contained"
+          disabled={!form.host.trim() || !form.username.trim() || !form.privateKeyPath.trim() || !form.apiEndpoint.trim() || saving}
+        >
           {saving ? "Saving..." : `Save ${label}`}
         </Button>
       </Box>

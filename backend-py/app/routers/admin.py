@@ -174,6 +174,7 @@ def _serialize_sftp_settings(s: sftp_settings_service.SftpDeploymentSettings) ->
             "privateKeyPath": t.privateKeyPath,
             "privateKeyFound": bool(t.privateKeyPath) and os.path.isfile(t.privateKeyPath),
             "remotePath": t.remotePath,
+            "apiEndpoint": t.apiEndpoint,
         }
 
     return {"activeEnvironment": s.activeEnvironment, "staging": target(s.staging), "production": target(s.production)}
@@ -929,8 +930,9 @@ class SftpTargetBody(BaseModel):
     username: str = Field(min_length=1)
     privateKeyPath: str = Field(min_length=1)
     remotePath: str = Field(min_length=1)
+    apiEndpoint: str = Field(min_length=1)
 
-    @field_validator("host", "username", "privateKeyPath", "remotePath")
+    @field_validator("host", "username", "privateKeyPath", "remotePath", "apiEndpoint")
     @classmethod
     def _trim(cls, v: str) -> str:
         v = v.strip()
@@ -957,6 +959,7 @@ def patch_deployment_settings(environment: str, body: SftpTargetBody, db: Sessio
             username=body.username,
             privateKeyPath=body.privateKeyPath,
             remotePath=body.remotePath,
+            apiEndpoint=body.apiEndpoint,
         ),
     )
     return _serialize_sftp_settings(sftp_settings_service.get_sftp_deployment_settings(db))

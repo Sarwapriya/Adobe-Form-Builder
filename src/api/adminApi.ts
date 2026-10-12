@@ -485,6 +485,10 @@ export interface SftpTargetConfig {
   username: string;
   privateKeyPath: string;
   remotePath: string;
+  /** Adobe Campaign ingest endpoint baked into the published form's master
+   * data JS file (`param.apiEndpoint`) at publish time for this environment —
+   * see backend form_builder_service._resolve_analytics_param_updates. */
+  apiEndpoint: string;
 }
 
 export interface SftpTargetView extends SftpTargetConfig {

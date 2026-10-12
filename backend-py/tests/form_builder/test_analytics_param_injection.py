@@ -95,7 +95,20 @@ class TestAnalyticsParamInjection:
         db_session.commit()
         staging_form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
         staging_param = _read_data_js_param(db_session, staging_form_id)
-        assert staging_param["apiEndpoint"] == "https://samsung-mena-mid-stage5-all-res.adobe-campaign.com/ingest"
+        assert staging_param["apiEndpoint"] == "https://res5.africa2s.crm.samsung.com/ingest"
+
+    def test_apiendpoint_is_admin_configurable_per_environment(
+        self, client: TestClient, admin_headers: dict, db_session: Session, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        """apiEndpoint is no longer hardcoded — Configuration > Deployment
+        stores a per-environment override (sftp_settings_service)."""
+        set_admin_setting(db_session, "sftpActiveEnvironment", "staging")
+        set_admin_setting(db_session, "sftpStagingApiEndpoint", "https://custom-staging.example.com/ingest")
+        db_session.commit()
+
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        param = _read_data_js_param(db_session, form_id)
+        assert param["apiEndpoint"] == "https://custom-staging.example.com/ingest"
 
     def test_fallback_language_is_still_the_forms_own_default_locale(
         self, client: TestClient, admin_headers: dict, db_session: Session, subsidiary_row: Subsidiary, project_code_row: ProjectCode

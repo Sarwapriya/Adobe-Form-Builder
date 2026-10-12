@@ -24,6 +24,16 @@ SftpEnvironment = Literal["staging", "production"]
 DEFAULT_PORT = 22
 DEFAULT_REMOTE_PATH = "/incoming/ACC/Operations/HRForms/ToProcess"
 
+# Adobe Campaign ingest endpoint baked into the published data file's
+# `param.apiEndpoint` (see form_builder_service._resolve_analytics_param_updates)
+# — admin-editable (Configuration > Deployment) rather than hardcoded, since
+# these have already changed once in production use. Defaults match what was
+# previously hardcoded, so an unconfigured install behaves exactly as before.
+_DEFAULT_API_ENDPOINT = {
+    "staging": "https://res5.africa2s.crm.samsung.com/ingest",
+    "production": "https://res6.mena2p.crm.samsung.com/ingest",
+}
+
 
 @dataclass
 class SftpTargetConfig:
@@ -32,6 +42,7 @@ class SftpTargetConfig:
     username: str
     privateKeyPath: str
     remotePath: str
+    apiEndpoint: str
 
 
 @dataclass
@@ -52,6 +63,7 @@ def _get_target(db: Session, environment: SftpEnvironment) -> SftpTargetConfig:
     username = get_admin_setting(db, f"{prefix}Username")
     private_key_path = get_admin_setting(db, f"{prefix}PrivateKeyPath")
     remote_path = get_admin_setting(db, f"{prefix}RemotePath")
+    api_endpoint = get_admin_setting(db, f"{prefix}ApiEndpoint")
     try:
         port_num = int(port) if port else DEFAULT_PORT
     except ValueError:
@@ -62,6 +74,7 @@ def _get_target(db: Session, environment: SftpEnvironment) -> SftpTargetConfig:
         username=username or "",
         privateKeyPath=private_key_path or "",
         remotePath=remote_path or DEFAULT_REMOTE_PATH,
+        apiEndpoint=api_endpoint or _DEFAULT_API_ENDPOINT[environment],
     )
 
 
@@ -80,6 +93,7 @@ def save_sftp_target(db: Session, environment: SftpEnvironment, input: SftpTarge
     set_admin_setting(db, f"{prefix}Username", input.username)
     set_admin_setting(db, f"{prefix}PrivateKeyPath", input.privateKeyPath)
     set_admin_setting(db, f"{prefix}RemotePath", input.remotePath or DEFAULT_REMOTE_PATH)
+    set_admin_setting(db, f"{prefix}ApiEndpoint", input.apiEndpoint or _DEFAULT_API_ENDPOINT[environment])
 
 
 def set_active_sftp_environment(db: Session, environment: SftpEnvironment) -> None:

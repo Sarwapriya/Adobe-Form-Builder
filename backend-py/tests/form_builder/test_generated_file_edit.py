@@ -153,3 +153,56 @@ class TestUpdateGeneratedFileContent:
         form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
         with pytest.raises(NotFoundError):
             form_builder_service.get_generated_file_content(db_session, form_id, "00000000-0000-0000-0000-000000000000")
+
+
+class TestHandEditSurvivesRepublish:
+    """A hand-edit lives only on the published version's on-disk file —
+    re-publishing used to fully regenerate every file from the
+    FormDefinition and silently discard it. publish_form now carries a
+    hand-edited file's content (and who/when edited it) forward by file
+    name onto the freshly generated file replacing it."""
+
+    def test_republishing_keeps_the_hand_edited_content(
+        self, client: TestClient, admin_headers: dict, admin_user, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        js_file = next(f for f in files if f["fileType"] == "js")
+        original = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
+        edited_content = original + "\n// hand-added by an admin\n"
+
+        resp = client.put(
+            f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": edited_content}, headers=admin_headers
+        )
+        assert resp.status_code == 200, resp.text
+
+        # Re-publish the same form (e.g. after an unrelated draft change) —
+        # this clones a brand new FormVersion/GeneratedFiles and used to
+        # regenerate every file from scratch, wiping the edit above out.
+        publish_resp = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert publish_resp.status_code == 200, publish_resp.text
+
+        republished_files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        # Several "js" files can exist per form (FF/OC variants x languages) —
+        # match on the exact file name the edit was made against, not just
+        # "the first js file", since list ordering isn't guaranteed.
+        republished_js = next(f for f in republished_files if f["fileName"] == js_file["fileName"])
+        assert republished_js["id"] != js_file["id"], "publish must have produced a new GeneratedFile row"
+        assert republished_js["editedAt"] is not None
+        assert republished_js["editedByUserId"] == admin_user.id
+
+        republished_content = client.get(
+            f"/api/v1/admin/forms/{form_id}/files/{republished_js['id']}", headers=admin_headers
+        ).json()["content"]
+        assert republished_content == edited_content
+
+    def test_republishing_a_never_edited_file_stays_freshly_generated(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+
+        publish_resp = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert publish_resp.status_code == 200, publish_resp.text
+
+        republished_files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        assert all(f["editedAt"] is None and f["editedByUserId"] is None for f in republished_files)

@@ -56,18 +56,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# Adobe Campaign ingest endpoint, by SFTP deployment environment (Configuration
-# > Deployment's activeEnvironment — see sftp_settings_service.py). Baked into
-# the published data file's `param.apiEndpoint` at publish time (not deploy
-# time): generated files are static, written once, and deploy_form never
-# regenerates them — so a publish made while "staging" is active, later
-# deployed after switching to "production", would carry a stale endpoint
-# until the form is re-published. Accepted tradeoff (matches this product's
-# existing publish-then-deploy workflow) rather than rewriting file content
-# at deploy time.
-_STAGING_API_ENDPOINT = "https://samsung-mena-mid-stage5-all-res.adobe-campaign.com/ingest"
-_PRODUCTION_API_ENDPOINT = "https://res6.mena2p.crm.samsung.com/ingest"
-
 # Fixed Adobe Campaign tracking constants, the same for every subsidiary/
 # form — only `apiEndpoint` (environment) and `analytics.reportSuiteID`
 # (subsidiary) actually vary; `project` varies per form.
@@ -84,9 +72,21 @@ def _resolve_analytics_param_updates(db: Session, form: Form) -> dict[str, Any]:
     generic tool's blank defaults. Applied the same way `projectCode`
     already is in `publish_form` — an override on top of whatever the
     stored draft config has, so a re-publish of an old form (created before
-    this existed) still gets fully correct values."""
-    environment = sftp_settings_service.get_sftp_deployment_settings(db).activeEnvironment
-    api_endpoint = _PRODUCTION_API_ENDPOINT if environment == "production" else _STAGING_API_ENDPOINT
+    this existed) still gets fully correct values.
+
+    `apiEndpoint` itself is admin-editable per environment (Configuration >
+    Deployment, see sftp_settings_service.SftpTargetConfig.apiEndpoint) —
+    these URLs have already changed once in production use, so they aren't
+    hardcoded here any more. A publish made while "staging" is active, later
+    deployed after switching to "production" (or after an admin edits the
+    endpoint URL), carries whatever endpoint was active at publish time —
+    same accepted tradeoff as `project`/`reportSuiteID` below: generated
+    files are static and deploy_form never regenerates them, so a changed
+    setting only takes effect on the next publish."""
+    deployment_settings = sftp_settings_service.get_sftp_deployment_settings(db)
+    environment = deployment_settings.activeEnvironment
+    target = deployment_settings.production if environment == "production" else deployment_settings.staging
+    api_endpoint = target.apiEndpoint
 
     subsidiary = subsidiary_service.find_subsidiary_by_name(db, form.subsidiaryId)
     report_suite_id = subsidiary.reportSuiteId if subsidiary else None
@@ -433,16 +433,48 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     if len(validation.errors) > 0:
         return {"outcome": "invalid", "validation": validation}
 
+    # A hand-edit made via the Edit Files window (update_generated_file_content)
+    # lives only on the currently-published version's on-disk file — this
+    # publish is about to replace that version with a freshly regenerated
+    # one, which would otherwise silently discard the edit. Carry the edited
+    # content (and who/when edited it) forward by file name onto the newly
+    # generated file of the same name, so a hand-edit survives every
+    # subsequent publish instead of reverting to the plain generated output.
+    # Accepted tradeoff: if the underlying form definition changes in a way
+    # that would also need that specific file's content to change, the
+    # carried-forward edit can go stale — the admin re-edits it in that case,
+    # same as any other hand-edit.
+    edited_by_filename: dict[str, tuple[str, datetime, Optional[str]]] = {}
+    if form.publishedVersionId:
+        previously_edited = db.execute(
+            select(GeneratedFileEntity).where(
+                GeneratedFileEntity.formVersionId == form.publishedVersionId,
+                GeneratedFileEntity.editedAt.isnot(None),
+            )
+        ).scalars()
+        for f in previously_edited:
+            try:
+                with open(absolute_file_path(f.filePath), "r", encoding="utf-8", newline="") as fh:
+                    edited_by_filename[f.fileName] = (fh.read(), f.editedAt, f.editedByUserId)
+            except OSError:
+                continue
+
     files: list[GeneratedFile] = generation["files"]
     file_names: FileNames = generation["fileNames"]
     saved = save_form_version_generated_files(form.subsidiaryId, draft_version.id, files)
     for f in saved:
+        edited = edited_by_filename.get(f.fileName)
+        if edited is not None:
+            with open(absolute_file_path(f.relativePath), "w", encoding="utf-8", newline="") as fh:
+                fh.write(edited[0])
         db.add(
             GeneratedFileEntity(
                 formVersionId=draft_version.id,
                 fileName=f.fileName,
                 filePath=f.relativePath,
                 fileType=classify_file_type(f.fileName, file_names),
+                editedAt=edited[1] if edited is not None else None,
+                editedByUserId=edited[2] if edited is not None else None,
             )
         )
     db.flush()
