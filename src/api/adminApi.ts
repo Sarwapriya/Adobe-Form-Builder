@@ -310,6 +310,47 @@ export function deleteSubsidiaryPrivacyLink(id: string): Promise<void> {
   return apiClient.delete(`/api/v1/admin/subsidiary-privacy-links/${id}`);
 }
 
+/** Admin management of the locale -> default "page error" copy reference
+ * table (Configuration > Access & Locales) — automatically written into
+ * every published form's master data JS file (`page_error[locale].hrErr`)
+ * for each locale that form has, instead of being hand-edited in after every
+ * publish. Purely locale-keyed (not per-subsidiary) — see backend
+ * form_builder_service._resolve_page_error_updates. Row presence is the
+ * whole record — no soft delete, same as the privacy-link table above. */
+export interface PageErrorLocaleDefault {
+  id: string;
+  localeCode: string;
+  heading: string;
+  subHeading: string;
+  subHeadingUrl: string;
+  subHeadingUrlText: string;
+  createdAt: string;
+}
+
+export function listPageErrorDefaults(): Promise<PageErrorLocaleDefault[]> {
+  return apiClient.get<PageErrorLocaleDefault[]>("/api/v1/admin/page-error-defaults");
+}
+
+export function upsertPageErrorDefault(
+  localeCode: string,
+  heading: string,
+  subHeading: string,
+  subHeadingUrl: string,
+  subHeadingUrlText: string,
+): Promise<PageErrorLocaleDefault> {
+  return apiClient.post<PageErrorLocaleDefault>("/api/v1/admin/page-error-defaults", {
+    localeCode,
+    heading,
+    subHeading,
+    subHeadingUrl,
+    subHeadingUrlText,
+  });
+}
+
+export function deletePageErrorDefault(id: string): Promise<void> {
+  return apiClient.delete(`/api/v1/admin/page-error-defaults/${id}`);
+}
+
 /** DB-stored SMTP connection settings for outgoing notification email (see
  * backend's smtpSettingsService.ts) — `hasPassword` reflects whether one is
  * currently saved; the real password is never sent to the browser. */

@@ -16,6 +16,7 @@ from app.models.subsidiary import Subsidiary
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
 from app.models.subsidiary_locale import SubsidiaryLocale
 from app.models.subsidiary_privacy_link import SubsidiaryPrivacyLink
+from app.models.page_error_locale_default import PageErrorLocaleDefault
 from app.models.qa_run import QaRun
 from app.models.qa_test_case_result import QaTestCaseResult
 from app.models.form import Form
@@ -44,6 +45,7 @@ __all__ = [
     "SubsidiaryProjectBlock",
     "SubsidiaryLocale",
     "SubsidiaryPrivacyLink",
+    "PageErrorLocaleDefault",
     "QaRun",
     "QaTestCaseResult",
     "Form",

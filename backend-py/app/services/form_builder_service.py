@@ -27,6 +27,7 @@ from app.form_pipeline import (
     FormDefinition,
     GeneratedFile,
     LocaleInfo,
+    PageCopy,
     QuestionDefinition,
     ValidationResult,
     default_builder_config,
@@ -42,7 +43,14 @@ from app.models.form import Form, FormOrigin, FormStatus
 from app.models.form_contribution import FormContribution
 from app.models.form_version import FormVersion, FormVersionStatus
 from app.models.generated_file import GeneratedFile as GeneratedFileEntity
-from app.services import email_service, project_code_service, sftp_settings_service, subsidiary_project_block_service, subsidiary_service
+from app.services import (
+    email_service,
+    page_error_locale_default_service,
+    project_code_service,
+    sftp_settings_service,
+    subsidiary_project_block_service,
+    subsidiary_service,
+)
 from app.services.file_service import absolute_file_path, save_form_version_generated_files
 from app.utils.background import run_in_background
 from app.services.generation_service import classify_file_type
@@ -105,6 +113,30 @@ def _resolve_analytics_param_updates(db: Session, form: Form) -> dict[str, Any]:
             datastreamID=_ANALYTICS_DATASTREAM_ID,
         ),
     }
+
+
+def _resolve_page_error_updates(db: Session, definition: FormDefinition) -> dict[str, PageCopy]:
+    """`FormDefinition.pageError` overrides for every locale the form
+    actually has, from the admin-managed, locale-keyed default table
+    (Configuration > Access & Locales — page_error_locale_default_service).
+    No builder UI ever lets an admin type this per form, so it was always
+    blank until hand-edited into the generated file after every publish;
+    this makes it correct automatically instead. Only overrides a locale
+    that has a configured default — a locale with no row keeps whatever the
+    stored draft already has (build_data_js's own locale/defaultLocale
+    fallback still applies on top of that, same as before)."""
+    defaults = page_error_locale_default_service.get_page_error_locale_defaults_map(db)
+    merged = dict(definition.pageError)
+    for locale in definition.locales:
+        default = defaults.get(locale.code)
+        if default is not None:
+            merged[locale.code] = PageCopy(
+                heading=default.heading,
+                subHeading=default.subHeading,
+                subHeadingUrl=default.subHeadingUrl,
+                subHeadingUrlText=default.subHeadingUrlText,
+            )
+    return merged
 
 
 def _generate_from_form_definition(
@@ -418,6 +450,10 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
         return {"outcome": "not_found"}
 
     definition = FormDefinition.model_validate_json(draft_version.definition)
+    # Same publish-time-override treatment as projectCode/apiEndpoint/
+    # reportSuiteID below, just on the FormDefinition itself rather than
+    # BuilderConfig — see _resolve_page_error_updates.
+    definition = definition.model_copy(update={"pageError": _resolve_page_error_updates(db, definition)})
     config = _enforce_variants_for_origin(form.origin, BuilderConfig.model_validate_json(draft_version.config))
     # The form's project code goes into every generated file name (see
     # file_names.py). It's read from the Form row *now* — never from the stored

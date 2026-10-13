@@ -41,6 +41,7 @@ from app.services import (
     email_service,
     fabrix_models_service,
     fabrix_settings_service,
+    page_error_locale_default_service,
     project_code_service,
     qa_run_service,
     question_master_service,
@@ -496,6 +497,71 @@ def delete_subsidiary_privacy_link(id: str, db: Session = Depends(get_db)) -> No
     deleted = subsidiary_privacy_link_service.delete_privacy_link(db, id)
     if not deleted:
         raise HTTPException(status_code=404, detail="privacy link not found")
+
+
+# --- Page error locale defaults -----------------------------------------------------
+
+
+def _serialize_page_error_default(row) -> dict:
+    return {
+        "id": row.id,
+        "localeCode": row.localeCode,
+        "heading": row.heading,
+        "subHeading": row.subHeading,
+        "subHeadingUrl": row.subHeadingUrl,
+        "subHeadingUrlText": row.subHeadingUrlText,
+        "createdAt": row.createdAt,
+    }
+
+
+@router.get("/page-error-defaults")
+def list_page_error_defaults(db: Session = Depends(get_db)) -> list[dict]:
+    return [_serialize_page_error_default(r) for r in page_error_locale_default_service.list_page_error_locale_defaults(db)]
+
+
+class UpsertPageErrorDefaultBody(BaseModel):
+    localeCode: str = Field(min_length=1)
+    heading: str = Field(min_length=1, max_length=500)
+    subHeading: str = Field(min_length=1, max_length=1000)
+    subHeadingUrl: str = Field(min_length=1, max_length=1000)
+    subHeadingUrlText: str = Field(min_length=1, max_length=200)
+
+    @field_validator("localeCode", "heading", "subHeading", "subHeadingUrl", "subHeadingUrlText")
+    @classmethod
+    def _trim(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must not be empty")
+        return v
+
+    @field_validator("localeCode")
+    @classmethod
+    def _validate_locale_code(cls, v: str) -> str:
+        if not LOCALE_CODE_RE.match(v):
+            raise ValueError('Use the format "<lang>_<COUNTRY>", e.g. "ar_AE"')
+        return v
+
+    @field_validator("subHeadingUrl")
+    @classmethod
+    def _validate_url(cls, v: str) -> str:
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("Must be an http(s) URL")
+        return v
+
+
+@router.post("/page-error-defaults", status_code=status.HTTP_201_CREATED)
+def upsert_page_error_default(body: UpsertPageErrorDefaultBody, db: Session = Depends(get_db)) -> dict:
+    row = page_error_locale_default_service.upsert_page_error_locale_default(
+        db, body.localeCode, body.heading, body.subHeading, body.subHeadingUrl, body.subHeadingUrlText
+    )
+    return _serialize_page_error_default(row)
+
+
+@router.delete("/page-error-defaults/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_page_error_default(id: str, db: Session = Depends(get_db)) -> None:
+    deleted = page_error_locale_default_service.delete_page_error_locale_default(db, id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="page error default not found")
 
 
 # --- Users ---------------------------------------------------------------------
