@@ -50,6 +50,13 @@ RUN python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend-py/app ./app
+# One-off hand-run SQL/maintenance scripts (scripts/run_sql_file.py and the
+# migration .sql files it runs) — not imported by the app itself, but this
+# image is the only place `docker exec`-ing a migration can actually run
+# them, since there is no Alembic/migration framework wired up (see
+# CLAUDE.md's "Backend service" section) and the deployed container has no
+# bind-mounted source tree.
+COPY backend-py/scripts ./scripts
 
 ENV UPLOAD_DIR=/app/uploads
 VOLUME ["/app/uploads"]
