@@ -28,8 +28,17 @@ export function buildCodeEditorExtensions(theme: Theme): Extension[] {
       "&": {
         color: fg,
         backgroundColor: bg,
-        height: "100%",
-        width: "100%",
+        // Pinned to the fill the positioned wrapper (see CodeEditor.tsx's
+        // `position: "relative"` style) rather than sized via height/width:
+        // 100% of normal document flow — in a flex layout, a content-sized
+        // ancestor can otherwise creep wider to fit a long unwrapped line
+        // (e.g. a URL), dragging .cm-scroller's own vertical scrollbar
+        // along with it instead of leaving it fixed at the panel's right
+        // edge and handling the long line with its own horizontal
+        // scrollbar. `inset: 0` makes this box's size purely a function of
+        // its positioned ancestor, never of its own content.
+        position: "absolute",
+        inset: 0,
         fontSize: "0.82rem",
       },
       ".cm-content": {

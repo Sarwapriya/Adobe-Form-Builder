@@ -84,8 +84,13 @@ export const CodeEditor = forwardRef<
       // long unwrapped line, e.g. a URL, would make it narrower than its
       // container) rather than stretching to fill — see the comment on the
       // wrapping Box in FormFilesEditorPage.tsx for the matching half of
-      // this fix.
-      style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
+      // this fix. `position: "relative"` gives codeEditorTheme.ts's
+      // `position: absolute; inset: 0` on `.cm-editor` something to fill,
+      // so the editor's own box size can never grow to fit a long line —
+      // the fixed box clips it and .cm-scroller's own horizontal scrollbar
+      // (not the panel resizing, and not the vertical scrollbar drifting)
+      // handles the overflow instead.
+      style={{ height: "100%", width: "100%", flex: 1, minWidth: 0, position: "relative" }}
     />
   );
 });
