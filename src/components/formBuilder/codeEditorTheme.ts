@@ -29,6 +29,7 @@ export function buildCodeEditorExtensions(theme: Theme): Extension[] {
         color: fg,
         backgroundColor: bg,
         height: "100%",
+        width: "100%",
         fontSize: "0.82rem",
       },
       ".cm-content": {

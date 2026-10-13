@@ -79,7 +79,13 @@ export const CodeEditor = forwardRef<
       extensions={[languageExtension(fileType), ...buildCodeEditorExtensions(theme), ...codeSyntaxLinter()]}
       theme="none"
       height="100%"
-      style={{ height: "100%" }}
+      width="100%"
+      // A flex item otherwise sizes to its content's intrinsic width (a
+      // long unwrapped line, e.g. a URL, would make it narrower than its
+      // container) rather than stretching to fill — see the comment on the
+      // wrapping Box in FormFilesEditorPage.tsx for the matching half of
+      // this fix.
+      style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
     />
   );
 });

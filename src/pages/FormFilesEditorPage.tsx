@@ -256,6 +256,12 @@ export function FormFilesEditorPage() {
               m: 2,
               display: "flex",
               minHeight: 0,
+              // Without this, CodeEditor (a row-flex child with no explicit
+              // flex-grow of its own) sizes to its content's intrinsic width
+              // instead of stretching to fill — a long unwrapped line (e.g.
+              // a URL) then leaves it narrower than this Box, stranding its
+              // vertical scrollbar short of the actual panel edge.
+              minWidth: 0,
               border: 1,
               borderColor: "divider",
               borderRadius: 1.5,
