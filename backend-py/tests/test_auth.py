@@ -8,10 +8,15 @@ config at all — just with everything reported as skipped.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import User
+from app.models.refresh_token import RefreshToken
+from app.services.auth_service import hash_token
 
 
 def _csrf_headers(client: TestClient) -> dict:
@@ -96,7 +101,11 @@ class TestRefresh:
         assert new_refresh_cookie is not None
         assert new_refresh_cookie != old_refresh_cookie
 
-    def test_refresh_reusing_rotated_token_fails(self, client: TestClient, active_user: User):
+    def test_refresh_reusing_a_just_rotated_token_succeeds_within_grace_window(self, client: TestClient, active_user: User):
+        """Two browser tabs of the same session racing to redeem the same
+        refresh cookie (e.g. opening the Edit Files window — see
+        auth_service.REFRESH_REUSE_GRACE_SECONDS) — the loser must still get
+        a valid session instead of being logged out."""
         login_resp = client.post(
             "/api/v1/auth/login", json={"username": active_user.username, "password": "correct horse battery staple"}
         )
@@ -106,15 +115,64 @@ class TestRefresh:
         assert first.status_code == 200
         # The client's cookie jar now holds the newly-rotated token AND a
         # freshly re-issued csrfToken (refresh re-issues both) — put only the
-        # old (already-used) refresh token back to prove it's rejected as a
-        # replay, while using the *current* CSRF token so this second call
-        # fails for the reason under test, not a stale-CSRF false negative.
+        # old (already-rotated) refresh token back to simulate a second tab
+        # that read the cookie before the first tab's rotation landed, while
+        # using the *current* CSRF token so this second call only exercises
+        # the behavior under test, not a stale-CSRF false negative.
         client.cookies.set("refreshToken", old_refresh_token)
 
         second = client.post("/api/v1/auth/refresh", headers=_csrf_headers(client))
 
+        assert second.status_code == 200, second.text
+        assert second.json()["accessToken"]
+        assert second.cookies.get("refreshToken") is not None
+
+    def test_refresh_reusing_a_rotated_token_fails_once_the_grace_window_has_passed(
+        self, client: TestClient, db_session: Session, active_user: User
+    ):
+        login_resp = client.post(
+            "/api/v1/auth/login", json={"username": active_user.username, "password": "correct horse battery staple"}
+        )
+        old_refresh_token = login_resp.cookies.get("refreshToken")
+
+        first = client.post("/api/v1/auth/refresh", headers=_csrf_headers(client))
+        assert first.status_code == 200
+
+        # Simulate time passing well past the grace window, directly on the
+        # now-rotated row (rather than sleeping the test).
+        rotated_record = db_session.execute(
+            select(RefreshToken).where(RefreshToken.tokenHash == hash_token(old_refresh_token))
+        ).scalar_one()
+        rotated_record.revokedAt = datetime.now(timezone.utc) - timedelta(minutes=5)
+        db_session.commit()
+
+        client.cookies.set("refreshToken", old_refresh_token)
+        second = client.post("/api/v1/auth/refresh", headers=_csrf_headers(client))
+
         assert second.status_code == 401
         assert second.json() == {"error": "invalid or expired refresh token"}
+
+    def test_refresh_never_revives_a_token_killed_by_logout(self, client: TestClient, active_user: User):
+        """A token revoked by logout (as opposed to rotation) must never be
+        redeemable again, even immediately — the grace window only applies
+        to rotation (see RefreshToken.replacedByTokenHash)."""
+        login_resp = client.post(
+            "/api/v1/auth/login", json={"username": active_user.username, "password": "correct horse battery staple"}
+        )
+        access_token = login_resp.json()["accessToken"]
+        refresh_token = login_resp.cookies.get("refreshToken")
+
+        logout_resp = client.post(
+            "/api/v1/auth/logout",
+            headers={**_csrf_headers(client), "Authorization": f"Bearer {access_token}"},
+        )
+        assert logout_resp.status_code == 204
+
+        client.cookies.set("refreshToken", refresh_token)
+        resp = client.post("/api/v1/auth/refresh", headers=_csrf_headers(client))
+
+        assert resp.status_code == 401
+        assert resp.json() == {"error": "invalid or expired refresh token"}
 
     def test_refresh_bad_csrf_token_returns_403(self, client: TestClient, active_user: User):
         client.post("/api/v1/auth/login", json={"username": active_user.username, "password": "correct horse battery staple"})

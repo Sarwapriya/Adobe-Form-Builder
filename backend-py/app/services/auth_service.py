@@ -41,6 +41,20 @@ def hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
+# How long a just-rotated-away refresh token is still accepted once more —
+# covers two browser tabs of the same session racing to redeem the same
+# cookie value (e.g. opening the Edit Files window, which loads in a new
+# tab with no access token of its own and must refresh immediately — see
+# App.tsx's silentRefresh). Only a token revoked BY A ROTATION is eligible
+# (see RefreshToken.replacedByTokenHash); kept short so a genuinely reused/
+# stolen old token is still rejected quickly.
+REFRESH_REUSE_GRACE_SECONDS = 10
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 def validate_credentials(db: Session, username: str, password: str) -> Optional[User]:
     """Looks up a user by username and verifies the given plaintext password
     against their stored bcrypt hash. Returns `None` on any failure (unknown
@@ -103,25 +117,25 @@ def issue_refresh_token(db: Session, user: User, ip: Optional[str] = None) -> st
 def rotate_refresh_token(db: Session, raw_token: str, ip: Optional[str] = None) -> Optional[dict]:
     """Validates a presented refresh token and, if valid, rotates it: the old
     token is revoked (single-use) and a brand-new access/refresh pair is
-    issued. Returns `None` if the token is missing, unknown, already
-    revoked, expired, or its owning user has since been deactivated."""
-    record = db.execute(
-        select(RefreshToken).where(
-            RefreshToken.tokenHash == hash_token(raw_token), RefreshToken.revokedAt.is_(None)
-        )
-    ).scalar_one_or_none()
+    issued. Returns `None` if the token is missing, unknown, expired, its
+    owning user has since been deactivated, or it was already revoked
+    outside the grace window (see REFRESH_REUSE_GRACE_SECONDS) — a token
+    revoked by logout/deactivation (replacedByTokenHash never set) is never
+    eligible for the grace window and always returns `None` here regardless
+    of timing."""
+    record = db.execute(select(RefreshToken).where(RefreshToken.tokenHash == hash_token(raw_token))).scalar_one_or_none()
     if record is None:
         return None
 
-    expires_at = record.expiresAt
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
+    if _as_utc(record.expiresAt) < datetime.now(timezone.utc):
         return None
 
-    record.revokedAt = datetime.now(timezone.utc)
-    db.add(record)
-    db.commit()
+    if record.revokedAt is None:
+        record.revokedAt = datetime.now(timezone.utc)
+    elif record.replacedByTokenHash is None or _as_utc(record.revokedAt) + timedelta(
+        seconds=REFRESH_REUSE_GRACE_SECONDS
+    ) < datetime.now(timezone.utc):
+        return None
 
     user = db.execute(
         select(User).where(User.id == record.userId, User.isActive == True)  # noqa: E712
@@ -129,9 +143,15 @@ def rotate_refresh_token(db: Session, raw_token: str, ip: Optional[str] = None) 
     if user is None:
         return None
 
+    new_raw_refresh_token = issue_refresh_token(db, user, ip)
+    if record.replacedByTokenHash is None:
+        record.replacedByTokenHash = hash_token(new_raw_refresh_token)
+    db.add(record)
+    db.commit()
+
     return {
         "accessToken": issue_access_token(user),
-        "refreshToken": issue_refresh_token(db, user, ip),
+        "refreshToken": new_raw_refresh_token,
     }
 
 

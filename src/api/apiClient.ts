@@ -33,6 +33,21 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
+let onTokenRefreshed: ((token: string) => void) | null = null;
+
+/**
+ * Lets `authStore.ts` learn about every access token this module obtains on
+ * its own (the mid-session 401-retry path below), not just the ones from
+ * `login`/`silentRefresh` that authStore already drives directly — so it can
+ * decode the refreshed user and broadcast the new session to other open tabs
+ * (see authStore.ts's BroadcastChannel usage). Deliberately a plug-in hook
+ * rather than importing authStore here, to avoid a circular import (authStore
+ * already imports this module).
+ */
+export function setOnTokenRefreshed(callback: ((token: string) => void) | null): void {
+  onTokenRefreshed = callback;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   /** The full parsed JSON error body, when the response had one beyond a plain
@@ -127,6 +142,7 @@ function refreshAccessToken(): Promise<string | null> {
       }
       const data = (await response.json()) as { accessToken: string };
       setAccessToken(data.accessToken);
+      onTokenRefreshed?.(data.accessToken);
       return data.accessToken;
     } finally {
       refreshPromise = null;

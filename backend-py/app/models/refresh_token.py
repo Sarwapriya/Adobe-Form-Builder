@@ -27,3 +27,11 @@ class RefreshToken(Base):
     revokedAt: Mapped[Optional[object]] = datetimeoffset_nullable()
     createdByIp: Mapped[Optional[str]] = nvarchar(45, nullable=True)
     createdAt = datetimeoffset_now()
+    # Set only when this row was revoked BY A ROTATION (auth_service.
+    # rotate_refresh_token) — never by logout/deactivation. Lets a second,
+    # near-simultaneous redemption of the same already-rotated raw token
+    # (e.g. two browser tabs racing to refresh at once) still succeed within
+    # a short grace window instead of being logged out, while a token killed
+    # by logout/deactivation (this column stays NULL) never comes back to
+    # life regardless of timing.
+    replacedByTokenHash: Mapped[Optional[str]] = nvarchar(128, nullable=True)

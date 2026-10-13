@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.middleware.rate_limit import AUTH_RATE_LIMIT, limiter
+from app.middleware.rate_limit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
 from app.security import dkms_client
 from app.security.csrf import issue_csrf_cookie, require_csrf_token
 from app.security.deps import require_auth
@@ -126,7 +126,7 @@ async def login(request: Request, body: LoginRequest, db: Session = Depends(get_
 
 
 @router.post("/refresh", dependencies=[Depends(require_csrf_token)])
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(REFRESH_RATE_LIMIT)
 async def refresh(request: Request, db: Session = Depends(get_db)) -> JSONResponse:
     raw_token = request.cookies.get(REFRESH_COOKIE_NAME)
     if not raw_token:

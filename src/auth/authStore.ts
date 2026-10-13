@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { apiClient, setAccessToken, ApiError } from "../api/apiClient";
+import { apiClient, getAccessToken, setAccessToken, setOnTokenRefreshed, ApiError } from "../api/apiClient";
 import { useAiChatStore } from "../store/aiChatStore";
 
 export type UserRole = "admin" | "standard" | "superadmin";
@@ -81,6 +81,64 @@ function decodeAccessToken(token: string): AuthUser | null {
   }
 }
 
+type AuthBroadcastMessage =
+  | { type: "announce"; accessToken: string; user: AuthUser }
+  | { type: "request" }
+  | { type: "logout" };
+
+/**
+ * Lets every open tab of this app share one session instead of each
+ * independently re-authenticating against the httpOnly refresh cookie.
+ * Without this, a tab opened via `window.open` (e.g. BuilderActionBar.tsx's
+ * Edit Files button — the only place this app opens a new tab) has no
+ * access token of its own and always called `POST /auth/refresh`
+ * immediately on mount, racing any other open tab doing the same against
+ * the single-use rotating refresh token and sometimes losing (logged out).
+ * Memory-only, same-origin, cleared when every tab closes — nothing here
+ * touches disk, so the "access token never persisted" security property
+ * (see apiClient.ts) is unchanged. `undefined` on browsers without
+ * BroadcastChannel (old Safari); every call site below degrades to the
+ * existing cookie-based flow alone in that case.
+ */
+const AUTH_CHANNEL_NAME = "formiq-auth";
+const authChannel: BroadcastChannel | undefined =
+  typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(AUTH_CHANNEL_NAME) : undefined;
+
+function broadcastSession(accessToken: string, user: AuthUser): void {
+  authChannel?.postMessage({ type: "announce", accessToken, user } satisfies AuthBroadcastMessage);
+}
+
+function broadcastLogout(): void {
+  authChannel?.postMessage({ type: "logout" } satisfies AuthBroadcastMessage);
+}
+
+/** Asks any other open tab "does anyone already have a session?" and waits
+ * briefly for an answer instead of immediately spending a refresh-token
+ * rotation. Resolves `null` on timeout or when BroadcastChannel isn't
+ * available, so callers fall back to the cookie-based flow unconditionally. */
+function requestSessionFromOtherTabs(timeoutMs = 200): Promise<{ accessToken: string; user: AuthUser } | null> {
+  if (!authChannel) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    // A separate instance from `authChannel` so this one-off wait never
+    // fights over `onmessage` with the persistent listener set up below —
+    // both instances share the same channel name, so this still receives
+    // every "announce" broadcast from other tabs.
+    const responseChannel = new BroadcastChannel(AUTH_CHANNEL_NAME);
+    let settled = false;
+    const finish = (result: { accessToken: string; user: AuthUser } | null) => {
+      if (settled) return;
+      settled = true;
+      responseChannel.close();
+      resolve(result);
+    };
+    responseChannel.onmessage = (event: MessageEvent<AuthBroadcastMessage>) => {
+      if (event.data.type === "announce") finish({ accessToken: event.data.accessToken, user: event.data.user });
+    };
+    setTimeout(() => finish(null), timeoutMs);
+    authChannel.postMessage({ type: "request" } satisfies AuthBroadcastMessage);
+  });
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   status: "idle",
@@ -97,6 +155,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       // logout()'s own reset below, but this covers any path that reaches
       // here without going through logout first).
       useAiChatStore.getState().reset();
+      broadcastSession(response.accessToken, response.user);
     } catch (err) {
       setAccessToken(null);
       const message = err instanceof ApiError ? err.message : "Login failed";
@@ -119,11 +178,24 @@ export const useAuthStore = create<AuthState>((set) => ({
       // same browser tab would inherit this user's chat history (the panel
       // is mounted globally, per-tab, not per-session; see AppLayout.tsx).
       useAiChatStore.getState().reset();
+      broadcastLogout();
     }
   },
 
   async silentRefresh() {
     set({ status: "loading" });
+
+    // Ask any other already-open tab for its session first — avoids
+    // spending a refresh-token rotation (and racing any sibling tab doing
+    // the same) just because a new tab happened to open. See
+    // requestSessionFromOtherTabs's own doc comment.
+    const fromOtherTab = await requestSessionFromOtherTabs();
+    if (fromOtherTab) {
+      setAccessToken(fromOtherTab.accessToken);
+      set({ user: fromOtherTab.user, status: "authenticated", error: null });
+      return;
+    }
+
     const token = await apiClient.refreshAccessToken();
     if (!token) {
       set({ user: null, status: "unauthenticated" });
@@ -138,5 +210,43 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     set({ user, status: "authenticated", error: null });
+    broadcastSession(token, user);
   },
 }));
+
+// Persistent cross-tab listener: answers other tabs' "does anyone have a
+// session?" requests, adopts a session another tab just obtained (so this
+// tab doesn't need its own refresh later, and stays in sync if the signed-in
+// user changed elsewhere), and mirrors an explicit logout from another tab.
+authChannel?.addEventListener("message", (event: MessageEvent<AuthBroadcastMessage>) => {
+  const data = event.data;
+  if (data.type === "request") {
+    const state = useAuthStore.getState();
+    const token = getAccessToken();
+    if (state.status === "authenticated" && state.user && token) {
+      broadcastSession(token, state.user);
+    }
+    return;
+  }
+  if (data.type === "announce") {
+    setAccessToken(data.accessToken);
+    useAuthStore.setState({ user: data.user, status: "authenticated", error: null });
+    return;
+  }
+  if (data.type === "logout") {
+    setAccessToken(null);
+    useAuthStore.setState({ user: null, status: "unauthenticated", error: null });
+    useAiChatStore.getState().reset();
+  }
+});
+
+// Every access token this module obtains outside of login/silentRefresh
+// (apiClient.ts's own mid-session 401-retry) also gets decoded and
+// broadcast, so a tab that refreshes mid-session — not just at mount —
+// still keeps every other open tab in sync.
+setOnTokenRefreshed((token) => {
+  const user = decodeAccessToken(token);
+  if (!user) return;
+  useAuthStore.setState({ user, status: "authenticated", error: null });
+  broadcastSession(token, user);
+});
