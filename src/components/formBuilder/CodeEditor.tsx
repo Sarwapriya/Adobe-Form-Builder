@@ -6,6 +6,7 @@ import { css } from "@codemirror/lang-css";
 import { javascript } from "@codemirror/lang-javascript";
 import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { buildCodeEditorExtensions } from "./codeEditorTheme";
+import { codeSyntaxLinter } from "./codeSyntaxLinter";
 import type { GeneratedFileType } from "../../api/formBuilderApi";
 
 export interface CodeEditorHandle {
@@ -23,7 +24,9 @@ function languageExtension(fileType: GeneratedFileType) {
  * The Edit Files window's code editor — CodeMirror 6 (line numbers, syntax
  * highlighting, bracket matching, code folding — "IDE-like" out of the box
  * via its own `basicSetup`) themed from the app's live MUI theme (see
- * codeEditorTheme.ts) rather than a stock editor palette. Undo/redo is
+ * codeEditorTheme.ts) rather than a stock editor palette, plus live
+ * syntax-error highlighting (see codeSyntaxLinter.ts) — a red underline and
+ * gutter marker on genuinely broken syntax, same as any IDE. Undo/redo is
  * CodeMirror's own built-in history (already bound to Ctrl+Z/Ctrl+Y by
  * `basicSetup`'s keymap) — this component just exposes it imperatively so
  * FormFilesEditorPage's toolbar buttons can drive the same history, and
@@ -73,7 +76,7 @@ export const CodeEditor = forwardRef<
       value={value}
       onChange={onChange}
       onUpdate={handleUpdate}
-      extensions={[languageExtension(fileType), ...buildCodeEditorExtensions(theme)]}
+      extensions={[languageExtension(fileType), ...buildCodeEditorExtensions(theme), ...codeSyntaxLinter()]}
       theme="none"
       height="100%"
       style={{ height: "100%" }}
