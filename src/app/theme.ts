@@ -15,18 +15,34 @@ const STATUS_CHIP_COLORS = ["success", "warning", "error", "info"] as const;
  * is used before a role is known (login screen, /local's public wizard). */
 export type ThemeVariant = "admin" | "subsidiary" | "default";
 
-/** Each role's `main`/`light` are tuned brighter than the deep maroon/navy
- * this app started with (now `dark`) — a dark-mode background needs a
- * lighter, more saturated accent to read clearly, where the light-mode
- * theme could get away with the deep tone directly. `secondary` (gold/teal)
- * was already vivid enough to work unchanged on a dark background. */
+/** Each role's `main`/`light` are tuned brighter than the deep `dark` shade
+ * — a dark-mode background needs a lighter, more saturated accent to read
+ * clearly, where the light-mode theme could get away with the deep tone
+ * directly. Indigo (admin) / emerald (subsidiary) — see SIDEBAR_DARK_BASE
+ * below for the matching slate-navy/slate sidebar base tones these sit on
+ * top of in dark mode. `secondary` (gold/teal) is a deliberately distinct
+ * complementary accent, not a shade of `main`, so a page using both reads as
+ * two colors, not one color at two opacities. */
 /** Exported so AppLayout.tsx's sidebar (gradient active-item pill, logo
  * badge tint) can use the exact same per-role colors as the MUI theme
  * itself, rather than duplicating the hex values in two places. */
 export const PALETTES: Record<ThemeVariant, { main: string; light: string; dark: string; secondary: string }> = {
-  admin: { main: "#a5495c", light: "#c97e8d", dark: "#7a1428", secondary: "#c58a2e" },
-  subsidiary: { main: "#3f52c4", light: "#6b7bd6", dark: "#1428a0", secondary: "#00a9b5" },
-  default: { main: "#3f52c4", light: "#6b7bd6", dark: "#1428a0", secondary: "#00a9b5" },
+  admin: { main: "#4F46E5", light: "#818CF8", dark: "#4338CA", secondary: "#c58a2e" },
+  subsidiary: { main: "#10B981", light: "#34D399", dark: "#047857", secondary: "#00a9b5" },
+  default: { main: "#10B981", light: "#34D399", dark: "#047857", secondary: "#00a9b5" },
+};
+
+/** Dark-mode sidebar base gradient (top→bottom), per role — replaces a
+ * single shared near-black base both roles used to sit on, so admin and
+ * subsidiary are now distinguishable by sidebar tone itself (slate-navy vs.
+ * a visibly lighter slate), not only by the accent glow bleeding in from
+ * the top (see AppLayout.tsx's `sidebarGradient`). Light mode keeps its
+ * existing white-based sidebar unchanged — only the dark-mode base changes
+ * here. */
+export const SIDEBAR_DARK_BASE: Record<ThemeVariant, { from: string; to: string }> = {
+  admin: { from: "#0F172A", to: "#0B1222" },
+  subsidiary: { from: "#1E293B", to: "#13202F" },
+  default: { from: "#1E293B", to: "#13202F" },
 };
 
 export type ThemeMode = "dark" | "light";
@@ -121,8 +137,14 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
     // the app (form status, upload status, QA results, etc.) — see the
     // MuiChip `variants` below for the actual "glow pill" treatment.
     success: { main: "#22c55e", light: "#4ade80", dark: "#15803d", contrastText: "#06210f" },
+    // Amber — already matches the "pending" status color this app's own
+    // design brief calls for, unchanged.
     warning: { main: "#f59e0b", light: "#fbbf24", dark: "#b45309", contrastText: "#2b1900" },
-    error: { main: "#ef4444", light: "#f87171", dark: "#b91c1c", contrastText: "#ffffff" },
+    // Shifted from a flat red toward true crimson (more magenta-leaning) to
+    // match "rejected" status tags in this app's design brief — a shared
+    // token, so this affects every error state across both roles, not just
+    // rejected forms.
+    error: { main: "#E11D48", light: "#FB7185", dark: "#9F1239", contrastText: "#ffffff" },
     info: { main: "#3b82f6", light: "#60a5fa", dark: "#1d4ed8", contrastText: "#ffffff" },
     background: {
       // Lifted off near-black (was #0b0b10/#15151d, barely a hair apart) —
@@ -130,7 +152,11 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
       // feel but with real separation between page background and card
       // surfaces, so a Paper's edge reads without depending on the (also
       // faint) border/divider color to do all the work.
-      default: isDark ? "#0d1117" : "#f4f5f9",
+      // Light mode's default nudged to #F1F5F9 (slate-100) — the exact
+      // workspace tone this app's own design brief calls for, paired with a
+      // literal subtle grid-pattern body background below rather than the
+      // previous soft radial glow.
+      default: isDark ? "#0d1117" : "#F1F5F9",
       paper: isDark ? "#1c212b" : "#ffffff",
     },
     text: {
@@ -168,8 +194,14 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
               backgroundAttachment: "fixed",
             }
           : {
-              backgroundColor: "#f4f5f9",
-              backgroundImage: "radial-gradient(circle at top left, #ffffff 0%, #f4f5f9 45%)",
+              backgroundColor: "#F1F5F9",
+              // A literal subtle grid-pattern (faint 1px lines every 24px)
+              // instead of the previous soft radial glow — the main
+              // workspace texture this app's own design brief calls for.
+              backgroundImage:
+                "linear-gradient(to right, rgba(20, 22, 33, 0.035) 1px, transparent 1px), " +
+                "linear-gradient(to bottom, rgba(20, 22, 33, 0.035) 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
               backgroundAttachment: "fixed",
             },
       },

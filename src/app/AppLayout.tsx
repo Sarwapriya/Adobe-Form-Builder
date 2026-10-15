@@ -54,7 +54,7 @@ import { useFormBuilderStore } from "../store/formBuilderStore";
 import { useFormContributionStore } from "../store/formContributionStore";
 import { AIChatButton } from "../components/ai/AIChatButton";
 import { AIChatPanel } from "../components/ai/AIChatPanel";
-import { PALETTES } from "./theme";
+import { PALETTES, SIDEBAR_DARK_BASE } from "./theme";
 
 const EXPANDED_WIDTH = 260;
 const COLLAPSED_WIDTH = 76;
@@ -183,6 +183,7 @@ export function AppLayout() {
    * item to look at. */
   const roleAccent = isAdmin ? PALETTES.admin : PALETTES.subsidiary;
   const roleAccentGradient = `linear-gradient(135deg, ${roleAccent.main} 0%, ${roleAccent.secondary} 100%)`;
+  const sidebarDarkBase = isAdmin ? SIDEBAR_DARK_BASE.admin : SIDEBAR_DARK_BASE.subsidiary;
 
   // Light/dark is a user toggle (the switch next to "Log out" below),
   // independent of which role is signed in — every hardcoded white-on-dark
@@ -192,7 +193,7 @@ export function AppLayout() {
   const toggleMode = useThemeModeStore((s) => s.toggleMode);
   const isDarkMode = mode === "dark";
   const sidebarGradient = isDarkMode
-    ? `radial-gradient(ellipse 480px 260px at 50% -10%, ${alpha(roleAccent.main, 0.35)} 0%, transparent 60%), linear-gradient(180deg, #0e0e15 0%, #08080c 100%)`
+    ? `radial-gradient(ellipse 480px 260px at 50% -10%, ${alpha(roleAccent.main, 0.35)} 0%, transparent 60%), linear-gradient(180deg, ${sidebarDarkBase.from} 0%, ${sidebarDarkBase.to} 100%)`
     : `radial-gradient(ellipse 480px 260px at 50% -10%, ${alpha(roleAccent.main, 0.14)} 0%, transparent 60%), linear-gradient(180deg, #ffffff 0%, #f1f2f7 100%)`;
   const sidebarTokens = isDarkMode
     ? {
