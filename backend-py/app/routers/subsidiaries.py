@@ -22,6 +22,15 @@ from app.services import country_service, subsidiary_logo_service, subsidiary_se
 
 router = APIRouter(dependencies=[Depends(require_auth)])
 
+# No auth dependency, deliberately — this backs a plain <img src> in the
+# browser (SubsidiaryLogo.tsx), which can't attach an Authorization header
+# the way apiClient.ts's fetch wrapper does, so every request here arrives
+# unauthenticated. Safe to leave open: a generated logo is just a circular
+# flag-composite SVG built from public country data, same sensitivity level
+# as the already-unauthenticated /api/v1/static/... mount the "upload"
+# logos are served from.
+public_router = APIRouter()
+
 FLAG_DIR = Path(__file__).resolve().parent.parent / "static" / "flags"
 UPLOAD_DIR = Path(settings.UPLOAD_DIR)
 
@@ -87,7 +96,7 @@ def list_countries(db: Session = Depends(get_db)) -> list[dict]:
 # losing the file is self-healing, not data loss. A subsidiary whose
 # logoSource is "upload" has no row here; the frontend never calls this for
 # one (see _serialize_subsidiary's logoUrl).
-@router.get("/{id}/logo")
+@public_router.get("/{id}/logo")
 def get_subsidiary_logo(id: str, db: Session = Depends(get_db)) -> FileResponse:
     subsidiary = subsidiary_service.find_subsidiary_by_id(db, id)
     if subsidiary is None or subsidiary.logoSource != "generated":
