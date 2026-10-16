@@ -7,11 +7,6 @@ import { alpha, createTheme, type Theme } from "@mui/material/styles";
  * design brief's "without excessive gradients or decorative effects"). */
 const STATUS_CHIP_COLORS = ["success", "warning", "error", "info"] as const;
 
-/** The AI assistant's own dedicated accent — deliberately separate from
- * `primary`/`secondary` (which stay role-based) since the AI experience is
- * identical for every role. Used only by src/components/ai/*. */
-export const AI_ACCENT = { main: "#7657D6", light: "#9C8FE3", dark: "#4F3FA8" };
-
 /** Which side of the app is rendering: drives the accent color so admin's
  * deep-navy gradient (see AppLayout.tsx's `sidebarGradient`/active-item
  * pill) is matched by the rest of the UI (buttons, links, focus rings, hover
