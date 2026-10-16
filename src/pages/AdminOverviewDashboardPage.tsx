@@ -117,8 +117,8 @@ export function AdminOverviewDashboardPage() {
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5, 1fr)" }, gap: 2, mb: 3 }}>
             <StatCard
               icon={<DescriptionIcon fontSize="small" />}
-              iconBg={`linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`}
-              iconColor="#fff"
+              iconBg={alpha(theme.palette.primary.main, 0.14)}
+              iconColor="primary.dark"
               label="Total Campaigns"
               value={summary.counts.total}
               onClick={() => setSelectedStat("total")}

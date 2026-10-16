@@ -1,6 +1,7 @@
 import { AvatarGroup, Box, Tooltip, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useAiChatStore } from "../../store/aiChatStore";
+import { AI_ACCENT } from "../../app/theme";
 import { AiBotAvatar } from "./AiBotAvatar";
 import { AiPersonAvatar } from "./AiPersonAvatar";
 
@@ -9,12 +10,14 @@ import { AiPersonAvatar } from "./AiPersonAvatar";
  * minimized (AppLayout.tsx renders it on every page, not just the two form
  * editors). Pairs a bot avatar with a person avatar (no real photo is
  * fabricated here — AiPersonAvatar is a stock illustrated glyph standing in
- * for "someone is available to help"). Deliberately loud — a solid
- * primary→secondary gradient pill (matching AiBotAvatar's own gradient,
- * the sidebar's active-item pill, and PageHeader's icon badges) plus a
- * wider double pulse ring, rather than a neutral bgcolor="background.paper"
- * chip that blended into the corner. Clicking it re-opens the panel with
- * its conversation exactly as it was left (see AIChatPanel.tsx).
+ * for "someone is available to help"). Uses the app's dedicated AI purple
+ * accent (AI_ACCENT, theme.ts) rather than the role-based primary/secondary
+ * colors — the AI experience is identical for every role, and this app's
+ * design brief calls for "subtle purple accents" specifically for AI
+ * surfaces. A single-tone fill plus a restrained pulse ring (toned down
+ * from a two-color gradient glow) keeps it noticeable without being loud.
+ * Clicking it re-opens the panel with its conversation exactly as it was
+ * left (see AIChatPanel.tsx).
  */
 export function AIChatButton() {
   const open = useAiChatStore((s) => s.open);
@@ -42,24 +45,18 @@ export function AIChatButton() {
           pl: 0.75,
           pr: 2.25,
           py: 0.85,
-          backgroundImage: `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.secondary.main} 100%)`,
+          backgroundColor: AI_ACCENT.main,
           color: "#fff",
-          boxShadow: `0 6px 20px ${alpha(t.palette.primary.main, 0.55)}`,
+          boxShadow: `0 4px 14px ${alpha(AI_ACCENT.main, 0.35)}`,
           "@keyframes aiChatPulse": {
-            "0%": {
-              boxShadow: `0 6px 20px ${alpha(t.palette.primary.main, 0.55)}, 0 0 0 0 ${alpha(t.palette.secondary.main, 0.6)}`,
-            },
-            "70%": {
-              boxShadow: `0 6px 20px ${alpha(t.palette.primary.main, 0.55)}, 0 0 0 18px ${alpha(t.palette.secondary.main, 0)}`,
-            },
-            "100%": {
-              boxShadow: `0 6px 20px ${alpha(t.palette.primary.main, 0.55)}, 0 0 0 0 ${alpha(t.palette.secondary.main, 0)}`,
-            },
+            "0%": { boxShadow: `0 4px 14px ${alpha(AI_ACCENT.main, 0.35)}, 0 0 0 0 ${alpha(AI_ACCENT.main, 0.35)}` },
+            "70%": { boxShadow: `0 4px 14px ${alpha(AI_ACCENT.main, 0.35)}, 0 0 0 14px ${alpha(AI_ACCENT.main, 0)}` },
+            "100%": { boxShadow: `0 4px 14px ${alpha(AI_ACCENT.main, 0.35)}, 0 0 0 0 ${alpha(AI_ACCENT.main, 0)}` },
           },
-          animation: "aiChatPulse 2s ease-out infinite",
+          animation: "aiChatPulse 2.4s ease-out infinite",
           "@media (prefers-reduced-motion: reduce)": { animation: "none" },
           transition: "transform 0.15s ease",
-          "&:hover": { transform: "scale(1.04)", boxShadow: `0 8px 26px ${alpha(t.palette.primary.main, 0.7)}` },
+          "&:hover": { transform: "scale(1.04)", boxShadow: `0 6px 18px ${alpha(AI_ACCENT.main, 0.45)}` },
         })}
       >
         <AvatarGroup

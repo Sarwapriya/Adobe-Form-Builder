@@ -13,10 +13,11 @@ export type FormStatusTone = "draft" | "pending" | "approved" | "rejected" | "lo
  * reading the label, so each tone gets its own clearly distinct, saturated
  * color rather than the app's usual muted palette. Text color is picked per
  * tone for contrast (amber needs a dark foreground; the rest are dark enough
- * backgrounds for white text). */
+ * backgrounds for white text). Values match this app's design brief's exact
+ * success/warning/error colors (approved/rejected) and brand blue (locked).*/
 const TONE_STYLE: Record<FormStatusTone, { bg: string; fg: string; icon: ReactNode }> = {
   draft: { bg: "rgb(100, 116, 139)", fg: "rgb(255, 255, 255)", icon: <EditNoteIcon fontSize="small" /> },
-  pending: { bg: "rgb(245, 158, 11)", fg: "rgb(41, 26, 3)", icon: <HourglassTopIcon fontSize="small" /> },
+  pending: { bg: "rgb(217, 119, 6)", fg: "rgb(41, 26, 3)", icon: <HourglassTopIcon fontSize="small" /> },
   approved: { bg: "rgb(22, 163, 74)", fg: "rgb(255, 255, 255)", icon: <CheckCircleIcon fontSize="small" /> },
   rejected: { bg: "rgb(220, 38, 38)", fg: "rgb(255, 255, 255)", icon: <CancelIcon fontSize="small" /> },
   locked: { bg: "rgb(37, 99, 235)", fg: "rgb(255, 255, 255)", icon: <LockIcon fontSize="small" /> },

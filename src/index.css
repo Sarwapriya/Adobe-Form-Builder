@@ -1,9 +1,9 @@
 :root {
   color-scheme: light dark;
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
-  --brand: #047857;
-  --brand-dark: #065f46;
-  --brand-light: #10b981;
+  --brand: #2563eb;
+  --brand-dark: #1428a0;
+  --brand-light: #5b8df6;
 }
 
 * {
