@@ -49,6 +49,8 @@ import { alpha } from "@mui/material/styles";
 import type { ReactNode } from "react";
 import { isAdminRole, useAuthStore } from "../auth/authStore";
 import { roleLabel } from "../auth/roleLabel";
+import { getMySubsidiary, type Subsidiary } from "../api/subsidiariesApi";
+import { SubsidiaryLogo } from "../components/common/SubsidiaryLogo";
 import { useAiChatStore } from "../store/aiChatStore";
 import { useThemeModeStore } from "../store/themeModeStore";
 import { useFormBuilderStore } from "../store/formBuilderStore";
@@ -120,6 +122,21 @@ export function AppLayout() {
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // The caller's own subsidiary (for its logo, shown next to their name in
+  // the sidebar's account chip below) — only meaningful for a
+  // subsidiary-scoped standard user; admins/superadmins have no
+  // subsidiaryId and keep the plain initial-letter avatar.
+  const [mySubsidiary, setMySubsidiary] = useState<Subsidiary | null>(null);
+  useEffect(() => {
+    if (!user?.subsidiaryId) {
+      setMySubsidiary(null);
+      return;
+    }
+    getMySubsidiary()
+      .then(setMySubsidiary)
+      .catch(() => undefined); // cosmetic only — a failed fetch just keeps the generic avatar
+  }, [user?.subsidiaryId]);
 
   const isAdmin = isAdminRole(user?.role);
   const panelLabel = isAdmin ? "Admin Panel" : "Subsidiary Panel";
@@ -616,17 +633,27 @@ export function AppLayout() {
 
         <Box sx={{ p: 1.25 }}>
           {collapsed ? (
-            <Tooltip title={`${displayName} · ${roleLabel(user?.role)}`} placement="right">
-              <Avatar sx={{ bgcolor: sidebarTokens.avatarBg, color: sidebarTokens.contrastText, mx: "auto", mb: 1 }}>
-                {displayName?.[0]?.toUpperCase() ?? "?"}
-              </Avatar>
+            <Tooltip title={`${displayName} · ${roleLabel(user?.role)}${mySubsidiary ? ` · ${mySubsidiary.name}` : ""}`} placement="right">
+              {mySubsidiary ? (
+                <Box sx={{ mx: "auto", mb: 1, width: 40, display: "flex", justifyContent: "center" }}>
+                  <SubsidiaryLogo subsidiary={mySubsidiary} size={36} />
+                </Box>
+              ) : (
+                <Avatar sx={{ bgcolor: sidebarTokens.avatarBg, color: sidebarTokens.contrastText, mx: "auto", mb: 1 }}>
+                  {displayName?.[0]?.toUpperCase() ?? "?"}
+                </Avatar>
+              )}
             </Tooltip>
           ) : (
             <Chip
               avatar={
-                <Avatar sx={{ bgcolor: sidebarTokens.avatarBgStrong, color: sidebarTokens.contrastText }}>
-                  {displayName?.[0]?.toUpperCase() ?? "?"}
-                </Avatar>
+                mySubsidiary ? (
+                  <SubsidiaryLogo subsidiary={mySubsidiary} size={32} />
+                ) : (
+                  <Avatar sx={{ bgcolor: sidebarTokens.avatarBgStrong, color: sidebarTokens.contrastText }}>
+                    {displayName?.[0]?.toUpperCase() ?? "?"}
+                  </Avatar>
+                )
               }
               label={`${displayName} · ${roleLabel(user?.role)}`}
               sx={{
