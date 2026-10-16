@@ -17,10 +17,10 @@ export type FormStatusTone = "draft" | "pending" | "approved" | "rejected" | "lo
  * success/warning/error colors (approved/rejected) and brand blue (locked).*/
 const TONE_STYLE: Record<FormStatusTone, { bg: string; fg: string; icon: ReactNode }> = {
   draft: { bg: "rgb(100, 116, 139)", fg: "rgb(255, 255, 255)", icon: <EditNoteIcon fontSize="small" /> },
-  pending: { bg: "rgb(217, 119, 6)", fg: "rgb(41, 26, 3)", icon: <HourglassTopIcon fontSize="small" /> },
-  approved: { bg: "rgb(22, 163, 74)", fg: "rgb(255, 255, 255)", icon: <CheckCircleIcon fontSize="small" /> },
-  rejected: { bg: "rgb(220, 38, 38)", fg: "rgb(255, 255, 255)", icon: <CancelIcon fontSize="small" /> },
-  locked: { bg: "rgb(37, 99, 235)", fg: "rgb(255, 255, 255)", icon: <LockIcon fontSize="small" /> },
+  pending: { bg: "rgb(183, 121, 31)", fg: "rgb(41, 26, 3)", icon: <HourglassTopIcon fontSize="small" /> },
+  approved: { bg: "rgb(22, 133, 104)", fg: "rgb(255, 255, 255)", icon: <CheckCircleIcon fontSize="small" /> },
+  rejected: { bg: "rgb(209, 67, 67)", fg: "rgb(255, 255, 255)", icon: <CancelIcon fontSize="small" /> },
+  locked: { bg: "rgb(49, 85, 217)", fg: "rgb(255, 255, 255)", icon: <LockIcon fontSize="small" /> },
 };
 
 /**

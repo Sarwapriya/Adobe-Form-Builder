@@ -10,7 +10,7 @@ const STATUS_CHIP_COLORS = ["success", "warning", "error", "info"] as const;
 /** The AI assistant's own dedicated accent — deliberately separate from
  * `primary`/`secondary` (which stay role-based) since the AI experience is
  * identical for every role. Used only by src/components/ai/*. */
-export const AI_ACCENT = { main: "#7C3AED", light: "#A78BFA", dark: "#5B21B6" };
+export const AI_ACCENT = { main: "#7657D6", light: "#9C8FE3", dark: "#4F3FA8" };
 
 /** Which side of the app is rendering: drives the accent color so admin's
  * maroon/gold gradient (see AppLayout.tsx's `sidebarGradient`/active-item
@@ -21,7 +21,7 @@ export type ThemeVariant = "admin" | "subsidiary" | "default";
 
 /** `dark` is each role's light-mode `primary.main` — the app's own
  * enterprise design brief's two exact brand blues, one per role (admin gets
- * the deeper `#1428A0`, subsidiary/default the brighter `#2563EB`), kept
+ * the deeper `#1428A0`, subsidiary/default the brighter `#3155D9`), kept
  * distinct enough to tell the two sides apart while staying one consistent
  * blue-brand family rather than contrasting hues. `main`/`light` are
  * brightened variants of that same blue for dark-mode legibility — see
@@ -33,8 +33,8 @@ export type ThemeVariant = "admin" | "subsidiary" | "default";
  * than duplicating the hex values in two places. */
 export const PALETTES: Record<ThemeVariant, { main: string; light: string; dark: string; secondary: string }> = {
   admin: { main: "#3B4FC9", light: "#6B7BDB", dark: "#1428A0", secondary: "#06B6D4" },
-  subsidiary: { main: "#5B8DF6", light: "#8AB4FA", dark: "#2563EB", secondary: "#06B6D4" },
-  default: { main: "#5B8DF6", light: "#8AB4FA", dark: "#2563EB", secondary: "#06B6D4" },
+  subsidiary: { main: "#5B8DF6", light: "#8AB4FA", dark: "#3155D9", secondary: "#06B6D4" },
+  default: { main: "#5B8DF6", light: "#8AB4FA", dark: "#3155D9", secondary: "#06B6D4" },
 };
 
 /** Dark-mode sidebar base gradient (top→bottom), per role — lets admin and
@@ -145,9 +145,9 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
     // token, so these affect every status state across both roles, not
     // just one page. light/dark shades are the neighboring steps on the
     // same Tailwind-style scale these values already sit on.
-    success: { main: "#16A34A", light: "#4ADE80", dark: "#15803D", contrastText: "#06210f" },
-    warning: { main: "#D97706", light: "#FBBF24", dark: "#B45309", contrastText: "#2b1900" },
-    error: { main: "#DC2626", light: "#F87171", dark: "#B91C1C", contrastText: "#ffffff" },
+    success: { main: "#168568", light: "#34C99A", dark: "#0F6B53", contrastText: "#06211a" },
+    warning: { main: "#B7791F", light: "#D9A548", dark: "#8A5A14", contrastText: "#2a1c04" },
+    error: { main: "#D14343", light: "#E07A7A", dark: "#A33333", contrastText: "#ffffff" },
     // The brief's accent cyan — reused as `info`, the one semantic slot
     // this app otherwise leaves available for a brand accent.
     info: { main: "#06B6D4", light: "#22D3EE", dark: "#0E7490", contrastText: "#06210f" },
@@ -156,22 +156,22 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
       // describes only a light theme) — just the accent colors above
       // change what sits on top of them. Light mode moves to the brief's
       // exact workspace/card tones.
-      default: isDark ? "#0d1117" : "#F5F7FA",
+      default: isDark ? "#0d1117" : "#F6F7FB",
       paper: isDark ? "#1c212b" : "#FFFFFF",
     },
     text: {
       // Dark mode unchanged; light mode moves to the brief's exact text
-      // colors (#111827/#6B7280 — both already comfortably clear WCAG AA
-      // against the new #F5F7FA/#FFFFFF surfaces).
+      // colors (#111827/#667085 — both already comfortably clear WCAG AA
+      // against the new #F6F7FB/#FFFFFF surfaces).
       primary: isDark ? "#f1f2f6" : "#111827",
-      secondary: isDark ? "#aab0c2" : "#6B7280",
+      secondary: isDark ? "#aab0c2" : "#667085",
     },
-    // Light mode's border moves to the brief's exact #E5E7EB; dark mode
+    // Light mode's border moves to the brief's exact #E4E7EC; dark mode
     // unchanged.
-    divider: isDark ? "rgba(255, 255, 255, 0.14)" : "#E5E7EB",
+    divider: isDark ? "rgba(255, 255, 255, 0.14)" : "#E4E7EC",
   },
   shape: {
-    borderRadius: 12,
+    borderRadius: 10,
   },
   typography: {
     fontFamily: ['"Segoe UI"', "system-ui", "-apple-system", "Roboto", "sans-serif"].join(","),
@@ -191,15 +191,11 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
               backgroundAttachment: "fixed",
             }
           : {
-              backgroundColor: "#F5F7FA",
-              // A literal subtle grid-pattern (faint 1px lines every 24px)
-              // instead of a decorative gradient glow — the main workspace
-              // texture this app's own design brief calls for.
-              backgroundImage:
-                "linear-gradient(to right, rgba(17, 24, 39, 0.03) 1px, transparent 1px), " +
-                "linear-gradient(to bottom, rgba(17, 24, 39, 0.03) 1px, transparent 1px)",
-              backgroundSize: "24px 24px",
-              backgroundAttachment: "fixed",
+              // A flat, restrained canvas — this app's design brief calls
+              // for "clean white content surfaces with subtle neutral
+              // backgrounds," not a decorative texture.
+              backgroundColor: "#F6F7FB",
+              backgroundImage: "none",
             },
       },
     },
@@ -210,11 +206,14 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
         // `sx={{ borderRadius: 3 }}` override exactly (MUI's sx shorthand
         // multiplies a numeric borderRadius by theme.shape.borderRadius) —
         // centralized so pages that need it don't have to repeat it.
-        root: ({ theme }) => ({
+        root: {
           backgroundImage: "none",
-          border: `1px solid ${isDark ? "rgba(255, 255, 255, 0.14)" : "#E5E7EB"}`,
-          borderRadius: theme.shape.borderRadius * 3,
-        }),
+          border: `1px solid ${isDark ? "rgba(255, 255, 255, 0.14)" : "#E4E7EC"}`,
+          // A fixed, restrained card radius (not a multiple of the base
+          // control radius) — this app's design brief explicitly calls out
+          // "excessively rounded cards" as a look to avoid.
+          borderRadius: 12,
+        },
         elevation0: {
           boxShadow: isDark ? "0 1px 2px rgba(0, 0, 0, 0.3)" : "0 1px 2px rgba(17, 24, 39, 0.06)",
         },
@@ -223,7 +222,10 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 999,
+          // A rounded-rect control, not a full pill — this app's design
+          // brief asks for a precise, enterprise look rather than the
+          // rounder, more "consumer app" shape this used previously.
+          borderRadius: 8,
           paddingLeft: 18,
           paddingRight: 18,
         },
@@ -262,7 +264,7 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
     },
     MuiOutlinedInput: {
       styleOverrides: {
-        root: { borderRadius: 10 },
+        root: { borderRadius: 8 },
       },
     },
     MuiTableHead: {
@@ -270,8 +272,8 @@ export function createAppTheme(variant: ThemeVariant = "default", mode: ThemeMod
         root: {
           "& .MuiTableCell-head": {
             fontWeight: 700,
-            color: isDark ? "#aab0c2" : "#6B7280",
-            backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(17, 24, 39, 0.03)",
+            color: isDark ? "#aab0c2" : "#667085",
+            backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "#F0F2F7",
             fontSize: 12,
             textTransform: "uppercase",
             letterSpacing: 0.4,

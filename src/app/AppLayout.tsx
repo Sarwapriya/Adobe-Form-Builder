@@ -175,14 +175,13 @@ export function AppLayout() {
   /** Sidebar background matches the page's own light/dark mode for both
    * roles (near-black in dark mode, near-white in light mode — see theme.ts
    * and the toggle next to "Log out" below), with a soft role-colored glow
-   * bleeding in from the top — plus the solid accent rail on the drawer's
+   * bleeding in from the top — plus the thin accent rail on the drawer's
    * own edge (below), the logo badge tint, the "Admin/Subsidiary Panel"
-   * label chip, and the active nav item's gradient pill — several
-   * persistent, low-effort cues rather than one single strong one, so which
-   * side of the app you're in is still obvious even without an active nav
-   * item to look at. */
+   * label badge, and the active nav item's flat left-accent-bar indicator —
+   * several persistent, restrained cues rather than one single strong one,
+   * so which side of the app you're in is still obvious even without an
+   * active nav item to look at. */
   const roleAccent = isAdmin ? PALETTES.admin : PALETTES.subsidiary;
-  const roleAccentGradient = `linear-gradient(135deg, ${roleAccent.main} 0%, ${roleAccent.secondary} 100%)`;
   const sidebarDarkBase = isAdmin ? SIDEBAR_DARK_BASE.admin : SIDEBAR_DARK_BASE.subsidiary;
 
   // Light/dark is a user toggle (the switch next to "Log out" below),
@@ -375,11 +374,16 @@ export function AppLayout() {
           minHeight: 44,
           justifyContent: collapsed ? "center" : "flex-start",
           color: sidebarTokens.text,
+          borderLeft: "3px solid transparent",
+          // A restrained left-accent-bar + tinted background instead of a
+          // gradient-filled pill — this app's design brief explicitly asks
+          // for "restrained active-navigation indicators."
           "&.Mui-selected": {
-            backgroundImage: roleAccentGradient,
-            color: "#fff",
+            borderLeft: `3px solid ${roleAccent.main}`,
+            backgroundColor: alpha(roleAccent.main, isDarkMode ? 0.22 : 0.1),
+            color: isDarkMode ? roleAccent.light : roleAccent.dark,
           },
-          "&.Mui-selected:hover": { backgroundImage: roleAccentGradient, filter: "brightness(1.1)" },
+          "&.Mui-selected:hover": { backgroundColor: alpha(roleAccent.main, isDarkMode ? 0.28 : 0.15) },
           "&:hover": { bgcolor: sidebarTokens.hoverBg },
         }}
       >
@@ -422,8 +426,13 @@ export function AppLayout() {
                       ml: 2,
                       minHeight: 36,
                       color: sidebarTokens.textChild,
-                      "&.Mui-selected": { backgroundImage: roleAccentGradient, color: "#fff" },
-                      "&.Mui-selected:hover": { backgroundImage: roleAccentGradient, filter: "brightness(1.1)" },
+                      borderLeft: "3px solid transparent",
+                      "&.Mui-selected": {
+                        borderLeft: `3px solid ${roleAccent.main}`,
+                        backgroundColor: alpha(roleAccent.main, isDarkMode ? 0.22 : 0.1),
+                        color: isDarkMode ? roleAccent.light : roleAccent.dark,
+                      },
+                      "&.Mui-selected:hover": { backgroundColor: alpha(roleAccent.main, isDarkMode ? 0.28 : 0.15) },
                       "&:hover": { bgcolor: sidebarTokens.hoverBg },
                     }}
                   >
@@ -471,7 +480,7 @@ export function AppLayout() {
             overflowX: "hidden",
             boxSizing: "border-box",
             border: "none",
-            borderRight: `3px solid ${roleAccent.main}`,
+            borderRight: `2px solid ${roleAccent.main}`,
             backgroundImage: sidebarGradient,
             color: sidebarTokens.contrastText,
             transition: (t) => t.transitions.create("width", { duration: t.transitions.duration.shortest }),
@@ -531,8 +540,9 @@ export function AppLayout() {
                   fontWeight: 700,
                   letterSpacing: 0.4,
                   textTransform: "uppercase",
-                  color: "#fff",
-                  backgroundImage: roleAccentGradient,
+                  color: isDarkMode ? roleAccent.light : roleAccent.dark,
+                  backgroundColor: alpha(roleAccent.main, isDarkMode ? 0.26 : 0.14),
+                  border: `1px solid ${alpha(roleAccent.main, isDarkMode ? 0.4 : 0.3)}`,
                   "& .MuiChip-label": { px: 0.75 },
                 }}
               />

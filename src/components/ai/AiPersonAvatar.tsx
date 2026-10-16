@@ -16,7 +16,7 @@ export function AiPersonAvatar({ size = 30 }: { size?: number }) {
       sx={{
         width: size,
         height: size,
-        outline: "2px solid #16A34A",
+        outline: "2px solid #168568",
         outlineOffset: "1px",
       }}
     />

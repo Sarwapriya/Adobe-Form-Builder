@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import { Box, IconButton, Stack, Typography, type SxProps, type Theme } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 /** The 44x44 icon-chip + h4 title + secondary subtitle pattern used at the
  * top of nearly every page in the app — previously copy-pasted verbatim into
- * each page's own JSX. */
+ * each page's own JSX. The icon chip is a flat tinted badge (no gradient
+ * fill) to match this app's restrained enterprise design brief. */
 export function PageHeader({
   icon,
   title,
@@ -32,17 +34,17 @@ export function PageHeader({
         </IconButton>
       )}
       <Box
-        sx={{
+        sx={(t) => ({
           width: 44,
           height: 44,
           borderRadius: 2,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          backgroundImage: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.secondary.main} 100%)`,
-          color: "primary.contrastText",
+          backgroundColor: alpha(t.palette.primary.main, t.palette.mode === "dark" ? 0.22 : 0.12),
+          color: t.palette.mode === "dark" ? t.palette.primary.light : t.palette.primary.dark,
           flexShrink: 0,
-        }}
+        })}
       >
         {icon}
       </Box>
