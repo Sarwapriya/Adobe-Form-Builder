@@ -13,28 +13,29 @@ const STATUS_CHIP_COLORS = ["success", "warning", "error", "info"] as const;
 export const AI_ACCENT = { main: "#7657D6", light: "#9C8FE3", dark: "#4F3FA8" };
 
 /** Which side of the app is rendering: drives the accent color so admin's
- * maroon/gold gradient (see AppLayout.tsx's `sidebarGradient`/active-item
+ * deep-navy gradient (see AppLayout.tsx's `sidebarGradient`/active-item
  * pill) is matched by the rest of the UI (buttons, links, focus rings, hover
- * shadows) instead of clashing with a blue theme everywhere else. "default"
- * is used before a role is known (login screen, /local's public wizard). */
+ * shadows) instead of clashing with subsidiary's cyan theme. "default" is
+ * used before a role is known (login screen, /local's public wizard). */
 export type ThemeVariant = "admin" | "subsidiary" | "default";
 
-/** `dark` is each role's light-mode `primary.main` — the app's own
- * enterprise design brief's two exact brand blues, one per role (admin gets
- * the deeper `#1428A0`, subsidiary/default the brighter `#3155D9`), kept
- * distinct enough to tell the two sides apart while staying one consistent
- * blue-brand family rather than contrasting hues. `main`/`light` are
- * brightened variants of that same blue for dark-mode legibility — see
- * SIDEBAR_DARK_BASE below for the matching sidebar base tones these sit on
- * top of in dark mode. `secondary` (cyan) is shared across both roles, a
- * single discrete accent rather than a per-role color. */
+/** `dark` is each role's light-mode `primary.main` — the two anchor brand
+ * colors per role: admin gets deep navy (`#1E293B`), subsidiary/default gets
+ * cyan (`#06B6D4`), kept visually distinct (desaturated slate-navy vs. a
+ * vivid saturated cyan) so the two sides read unmistakably apart rather than
+ * as shades of one hue. `main`/`light` are brightened variants of that same
+ * base color for dark-mode legibility (same Tailwind-scale step pattern the
+ * previous blue palette used) — see SIDEBAR_DARK_BASE below for the matching
+ * sidebar base tones these sit on top of in dark mode. `secondary` (cyan)
+ * stays the shared accent for both roles — for subsidiary this now matches
+ * its own primary `dark`, reinforcing cyan as that role's whole identity. */
 /** Exported so AppLayout.tsx's sidebar (active-item color, logo badge tint)
  * can use the exact same per-role colors as the MUI theme itself, rather
  * than duplicating the hex values in two places. */
 export const PALETTES: Record<ThemeVariant, { main: string; light: string; dark: string; secondary: string }> = {
-  admin: { main: "#3B4FC9", light: "#6B7BDB", dark: "#1428A0", secondary: "#06B6D4" },
-  subsidiary: { main: "#5B8DF6", light: "#8AB4FA", dark: "#3155D9", secondary: "#06B6D4" },
-  default: { main: "#5B8DF6", light: "#8AB4FA", dark: "#3155D9", secondary: "#06B6D4" },
+  admin: { main: "#64748B", light: "#94A3B8", dark: "#1E293B", secondary: "#06B6D4" },
+  subsidiary: { main: "#22D3EE", light: "#67E8F9", dark: "#06B6D4", secondary: "#06B6D4" },
+  default: { main: "#22D3EE", light: "#67E8F9", dark: "#06B6D4", secondary: "#06B6D4" },
 };
 
 /** Dark-mode sidebar base gradient (top→bottom), per role — lets admin and
