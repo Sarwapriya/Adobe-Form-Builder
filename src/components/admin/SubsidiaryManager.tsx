@@ -41,6 +41,7 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
+  const [newCountries, setNewCountries] = useState<SubsidiaryCountry[]>([]);
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -79,8 +80,19 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
 
     setCreating(true);
     try {
-      await createSubsidiary(newName.trim());
+      const created = await createSubsidiary(newName.trim());
+      if (newCountries.length > 0) {
+        await setSubsidiaryCountries(
+          created.id,
+          newCountries.map((c) => c.id),
+        );
+        // A brand-new subsidiary has no "upload" logo to protect, so
+        // generating one immediately (instead of requiring a separate
+        // "Regenerate logo" click) means it's visible right away.
+        await regenerateSubsidiaryLogo(created.id);
+      }
       setNewName("");
+      setNewCountries([]);
       await refresh();
       onChange?.();
     } catch (err) {
@@ -245,14 +257,54 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
         </Stack>
       )}
 
-      <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", gap: 1.5, mb: 1.5, flexWrap: "wrap" }}>
+      <Box
+        component="form"
+        onSubmit={handleCreate}
+        sx={{ display: "flex", gap: 1.5, mb: 1.5, flexWrap: "wrap", alignItems: "flex-start" }}
+      >
         <TextField
           label="New subsidiary"
           size="small"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
         />
-        <Button type="submit" variant="outlined" disabled={!newName.trim() || creating}>
+        <Autocomplete
+          multiple
+          size="small"
+          sx={{ minWidth: 320, flexGrow: 1 }}
+          options={allCountries}
+          value={newCountries}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          getOptionLabel={(c) => `${c.countryName} (${c.isoCode})`}
+          onChange={(_e, next) => setNewCountries(next)}
+          renderOption={(props, c) => (
+            <Box component="li" {...props} key={c.id} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              {c.flagUrl && (
+                <Box component="img" src={resolveApiAssetUrl(c.flagUrl)} alt="" sx={{ width: 20, height: 14, objectFit: "cover" }} />
+              )}
+              {c.countryName} ({c.isoCode})
+            </Box>
+          )}
+          renderTags={(value, getTagProps) =>
+            value.map((c, index) => (
+              <Chip
+                {...getTagProps({ index })}
+                key={c.id}
+                size="small"
+                label={c.isoCode}
+                icon={
+                  c.flagUrl ? (
+                    <Box component="img" src={resolveApiAssetUrl(c.flagUrl)} alt="" sx={{ width: 16, height: 11, objectFit: "cover", ml: 0.5 }} />
+                  ) : undefined
+                }
+              />
+            ))
+          }
+          renderInput={(params) => (
+            <TextField {...params} label="Countries (optional)" placeholder="Add a country" helperText="Generates its logo immediately" />
+          )}
+        />
+        <Button type="submit" variant="outlined" disabled={!newName.trim() || creating} sx={{ mt: 0.5 }}>
           {creating ? "Adding..." : "Add"}
         </Button>
       </Box>

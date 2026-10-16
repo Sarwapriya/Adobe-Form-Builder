@@ -113,7 +113,12 @@ app.add_middleware(SecurityHeadersMiddleware)
 # subsidiary logo PNGs) — never user-uploaded at runtime, so no auth is
 # needed here; see app/static/README (doc comment in
 # subsidiary_logo_service.py) for why these aren't routed through UPLOAD_DIR.
-app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+#
+# Mounted under /api/v1/static (NOT bare /static) deliberately — the
+# frontend's own nginx only reverse-proxies __SUBPATH__/api/ to this backend
+# (see nginx.conf.template); a bare /static/... URL would fall through to
+# nginx's SPA catch-all and never reach this container at all.
+app.mount("/api/v1/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 # --- Routers -------------------------------------------------------------
 # Auth (phase 1), the admin-config surface (phase 3), and the form-builder

@@ -53,27 +53,35 @@ GO
 -- never overwrites a name/flag path an admin has since edited.
 MERGE fq.Countries AS target
 USING (VALUES
-    ('SA', N'Saudi Arabia',           '/static/flags/sa.svg'),
-    ('AE', N'United Arab Emirates',   '/static/flags/ae.svg'),
-    ('QA', N'Qatar',                  '/static/flags/qa.svg'),
-    ('OM', N'Oman',                   '/static/flags/om.svg'),
-    ('BH', N'Bahrain',                '/static/flags/bh.svg'),
-    ('KW', N'Kuwait',                 '/static/flags/kw.svg'),
-    ('TR', N'Turkey',                 '/static/flags/tr.svg'),
-    ('PK', N'Pakistan',               '/static/flags/pk.svg'),
-    ('IR', N'Iran',                   '/static/flags/ir.svg'),
-    ('IL', N'Israel',                 '/static/flags/il.svg'),
-    ('PS', N'Palestine',              '/static/flags/ps.svg'),
-    ('EG', N'Egypt',                  '/static/flags/eg.svg'),
-    ('MA', N'Morocco',                '/static/flags/ma.svg'),
-    ('TN', N'Tunisia',                '/static/flags/tn.svg'),
-    ('JO', N'Jordan',                 '/static/flags/jo.svg'),
-    ('IQ', N'Iraq',                   '/static/flags/iq.svg'),
-    ('LB', N'Lebanon',                '/static/flags/lb.svg')
+    ('SA', N'Saudi Arabia',           '/api/v1/static/flags/sa.svg'),
+    ('AE', N'United Arab Emirates',   '/api/v1/static/flags/ae.svg'),
+    ('QA', N'Qatar',                  '/api/v1/static/flags/qa.svg'),
+    ('OM', N'Oman',                   '/api/v1/static/flags/om.svg'),
+    ('BH', N'Bahrain',                '/api/v1/static/flags/bh.svg'),
+    ('KW', N'Kuwait',                 '/api/v1/static/flags/kw.svg'),
+    ('TR', N'Turkey',                 '/api/v1/static/flags/tr.svg'),
+    ('PK', N'Pakistan',               '/api/v1/static/flags/pk.svg'),
+    ('IR', N'Iran',                   '/api/v1/static/flags/ir.svg'),
+    ('IL', N'Israel',                 '/api/v1/static/flags/il.svg'),
+    ('PS', N'Palestine',              '/api/v1/static/flags/ps.svg'),
+    ('EG', N'Egypt',                  '/api/v1/static/flags/eg.svg'),
+    ('MA', N'Morocco',                '/api/v1/static/flags/ma.svg'),
+    ('TN', N'Tunisia',                '/api/v1/static/flags/tn.svg'),
+    ('JO', N'Jordan',                 '/api/v1/static/flags/jo.svg'),
+    ('IQ', N'Iraq',                   '/api/v1/static/flags/iq.svg'),
+    ('LB', N'Lebanon',                '/api/v1/static/flags/lb.svg')
 ) AS src (isoCode, countryName, flagAssetPath)
 ON target.isoCode = src.isoCode
 WHEN NOT MATCHED THEN
     INSERT (isoCode, countryName, flagAssetPath) VALUES (src.isoCode, src.countryName, src.flagAssetPath);
+GO
+
+-- Corrects any rows a pre-fix run of this script already inserted with the
+-- unreachable bare /static/... prefix (idempotent — a no-op once applied;
+-- see app/main.py's static mount comment for why /api/v1/static is required).
+UPDATE fq.Countries
+SET flagAssetPath = '/api/v1' + flagAssetPath
+WHERE flagAssetPath LIKE '/static/flags/%';
 GO
 
 -- Seed the 17 subsidiary-country pairings, sortOrder matching the spec's

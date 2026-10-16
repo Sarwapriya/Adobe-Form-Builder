@@ -252,7 +252,7 @@ class TestSeededSubsidiaryLogos:
             pytest.skip("SGE not seeded with an upload logo in this DB")
         countries = subsidiary_service.list_countries_for_subsidiary(db_session, sge.id)
         assert {c.isoCode for c in countries} == {"AE", "QA", "OM", "BH", "KW"}
-        assert sge.logoAssetPath == "/static/subsidiary-logos/SGE.png"
+        assert sge.logoAssetPath == "/api/v1/static/subsidiary-logos/SGE.png"
 
     def test_rerunning_seed_pairing_logic_does_not_duplicate(self, db_session: Session):
         sge = subsidiary_service.find_subsidiary_by_name(db_session, "SGE")

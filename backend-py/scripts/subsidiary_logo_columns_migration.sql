@@ -20,14 +20,23 @@ GO
 
 -- Point the nine originally-supplied subsidiaries at their committed PNG
 -- badges (backend-py/app/static/subsidiary-logos/<name>.png, served at
--- /static/subsidiary-logos/<name>.png). Only fills rows that are currently
+-- /api/v1/static/subsidiary-logos/<name>.png — mounted under /api/v1/static,
+-- not bare /static, so the frontend's nginx proxy actually reaches it; see
+-- app/main.py's static mount comment). Only fills rows that are currently
 -- NULL, so it never overwrites an admin's later change (e.g. after they
 -- click "Regenerate logo", which sets logoSource='generated' instead).
 UPDATE fq.Subsidiaries
-SET logoAssetPath = '/static/subsidiary-logos/' + name + '.png',
+SET logoAssetPath = '/api/v1/static/subsidiary-logos/' + name + '.png',
     logoSource = 'upload'
 WHERE name IN ('SESAR', 'SGE', 'SETK', 'SEPAK', 'IRAN', 'SEIL', 'SEEG', 'SEMAG', 'SELV')
   AND logoAssetPath IS NULL;
+GO
+
+-- Corrects any rows a pre-fix run of this script already set to the
+-- unreachable bare /static/... prefix (idempotent — a no-op once applied).
+UPDATE fq.Subsidiaries
+SET logoAssetPath = '/api/v1' + logoAssetPath
+WHERE logoAssetPath LIKE '/static/subsidiary-logos/%';
 GO
 
 -- Verify

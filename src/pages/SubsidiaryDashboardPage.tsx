@@ -6,9 +6,11 @@ import AddIcon from "@mui/icons-material/Add";
 import { ApiError } from "../api/apiClient";
 import { useAuthStore } from "../auth/authStore";
 import { getMyDashboardSummary, type CampaignStatusType, type SubsidiaryDashboardSummary } from "../api/subsidiaryFormsApi";
+import { getMySubsidiary, type Subsidiary } from "../api/subsidiariesApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { SectionHeader } from "../components/common/SectionHeader";
 import { LoadingState } from "../components/common/LoadingState";
+import { SubsidiaryLogo } from "../components/common/SubsidiaryLogo";
 import { StatCard } from "../components/dashboard/StatCard";
 import { StatusDonutChart, type DonutSegment } from "../components/dashboard/StatusDonutChart";
 import { RecentCampaignsList } from "../components/dashboard/RecentCampaignsList";
@@ -37,6 +39,7 @@ export function SubsidiaryDashboardPage() {
   const theme = useTheme();
   const user = useAuthStore((s) => s.user);
   const [summary, setSummary] = useState<SubsidiaryDashboardSummary | null>(null);
+  const [mySubsidiary, setMySubsidiary] = useState<Subsidiary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [campaignStatusType, setCampaignStatusType] = useState<CampaignStatusType>("all");
@@ -53,7 +56,12 @@ export function SubsidiaryDashboardPage() {
         setLoading(false);
       }
     })();
-  }, []);
+    if (user?.subsidiaryId) {
+      getMySubsidiary()
+        .then(setMySubsidiary)
+        .catch(() => undefined); // cosmetic only — a failed fetch just keeps the generic icon
+    }
+  }, [user?.subsidiaryId]);
 
   const campaignStatusCounts = summary?.campaignStatusByType[campaignStatusType];
   const donutSegments: DonutSegment[] = campaignStatusCounts
@@ -68,7 +76,7 @@ export function SubsidiaryDashboardPage() {
   return (
     <Box>
       <PageHeader
-        icon={<DashboardIcon />}
+        icon={mySubsidiary ? <SubsidiaryLogo subsidiary={mySubsidiary} size={36} /> : <DashboardIcon />}
         title={user ? `Welcome back, ${user.firstName || user.username}` : "Dashboard"}
         subtitle={user?.subsidiaryId ? `Here's what's happening with your campaigns — ${user.subsidiaryId}` : "Here's what's happening with your campaigns"}
         action={
