@@ -1,25 +1,31 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Autocomplete, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DomainIcon from "@mui/icons-material/Domain";
-import { ApiError } from "../../api/apiClient";
+import AutorenewIcon from "@mui/icons-material/Autorenew";
+import { ApiError, resolveApiAssetUrl } from "../../api/apiClient";
 import {
   createSubsidiary,
   deleteSubsidiary,
   listAllSubsidiaries,
+  regenerateSubsidiaryLogo,
   setSubsidiaryActive,
+  setSubsidiaryCountries,
   setSubsidiaryNotificationEmails,
   setSubsidiaryReportSuiteId,
   type Subsidiary,
+  type SubsidiaryCountry,
 } from "../../api/adminApi";
+import { listCountries } from "../../api/countriesApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { LoadingState } from "../common/LoadingState";
 import { NotificationEmailFields } from "../common/NotificationEmailFields";
+import { SubsidiaryLogo } from "../common/SubsidiaryLogo";
 import { showToast } from "../../store/toastStore";
 
 /**
@@ -44,6 +50,10 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [savingEmailsId, setSavingEmailsId] = useState<string | null>(null);
   const [savingReportSuiteId, setSavingReportSuiteId] = useState<string | null>(null);
+  const [allCountries, setAllCountries] = useState<SubsidiaryCountry[]>([]);
+  const [savingCountriesId, setSavingCountriesId] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [confirmRegenerate, setConfirmRegenerate] = useState<Subsidiary | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -58,6 +68,9 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
 
   useEffect(() => {
     void refresh();
+    listCountries()
+      .then(setAllCountries)
+      .catch((err) => showToast(err instanceof ApiError ? err.message : "Failed to load countries", "error"));
   }, []);
 
   async function handleCreate(e: FormEvent) {
@@ -144,6 +157,35 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
       showToast(err instanceof ApiError ? err.message : "Failed to update report suite ID", "error");
     } finally {
       setSavingReportSuiteId(null);
+    }
+  }
+
+  async function handleSaveCountries(id: string, countryIds: string[]) {
+    setSavingCountriesId(id);
+    try {
+      await setSubsidiaryCountries(id, countryIds);
+      await refresh();
+      showToast("Countries updated.", "success");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to update countries", "error");
+    } finally {
+      setSavingCountriesId(null);
+    }
+  }
+
+  async function handleConfirmRegenerate() {
+    if (!confirmRegenerate) return;
+    const subsidiary = confirmRegenerate;
+    setRegeneratingId(subsidiary.id);
+    try {
+      await regenerateSubsidiaryLogo(subsidiary.id);
+      setConfirmRegenerate(null);
+      await refresh();
+      showToast("Logo regenerated.", "success");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to regenerate logo", "error");
+    } finally {
+      setRegeneratingId(null);
     }
   }
 
@@ -250,16 +292,18 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
                   title={s.isActive ? "Active" : "Disabled"}
                 />
               ) : (
-                <Chip
-                  key={s.id}
-                  label={s.name}
-                  color={s.isActive ? "success" : "default"}
-                  icon={s.isActive ? <LockOpenIcon /> : <LockIcon />}
-                  onClick={() => handleToggle(s)}
-                  onDelete={() => setConfirmDelete(s)}
-                  disabled={togglingId === s.id || deletingId === s.id}
-                  title={s.isActive ? "Active — click to disable" : "Disabled — click to enable"}
-                />
+                <Stack key={s.id} direction="row" alignItems="center" spacing={0.5}>
+                  <SubsidiaryLogo subsidiary={s} size={24} />
+                  <Chip
+                    label={s.name}
+                    color={s.isActive ? "success" : "default"}
+                    icon={s.isActive ? <LockOpenIcon /> : <LockIcon />}
+                    onClick={() => handleToggle(s)}
+                    onDelete={() => setConfirmDelete(s)}
+                    disabled={togglingId === s.id || deletingId === s.id}
+                    title={s.isActive ? "Active — click to disable" : "Disabled — click to enable"}
+                  />
+                </Stack>
               ),
             )}
           </Stack>
@@ -303,10 +347,49 @@ export function SubsidiaryManager({ onChange }: { onChange?: () => void } = {}) 
                   />
                 ))}
               </Stack>
+
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                Logos &amp; countries
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                Which countries each subsidiary covers — drives the "assigned countries" display everywhere, and
+                (for new subsidiaries, or any existing one an admin explicitly regenerates) the circular
+                flag-composite logo. Saving the country list never replaces an existing uploaded logo on its own.
+              </Typography>
+              <Stack spacing={1}>
+                {subsidiaries.map((s) => (
+                  <SubsidiaryCountriesRow
+                    key={s.id}
+                    subsidiary={s}
+                    allCountries={allCountries}
+                    saving={savingCountriesId === s.id}
+                    regenerating={regeneratingId === s.id}
+                    onSave={(countryIds) => handleSaveCountries(s.id, countryIds)}
+                    onRegenerate={() => setConfirmRegenerate(s)}
+                  />
+                ))}
+              </Stack>
             </>
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={!!confirmRegenerate}
+        title="Regenerate logo"
+        message={
+          <>
+            Replace <strong>{confirmRegenerate?.name}</strong>&apos;s current logo with a generated circular badge
+            built from its assigned countries? This can't be undone — the original uploaded logo image won't be
+            restored automatically.
+          </>
+        }
+        confirmLabel="Regenerate"
+        loading={!!confirmRegenerate && regeneratingId === confirmRegenerate.id}
+        onConfirm={handleConfirmRegenerate}
+        onCancel={() => setConfirmRegenerate(null)}
+      />
 
       <ConfirmDialog
         open={!!confirmDelete}
@@ -404,6 +487,97 @@ function SubsidiaryReportSuiteRow({
       />
       <Button size="small" disabled={!isDirty || saving} onClick={() => onSave(value.trim())}>
         {saving ? "Saving..." : "Save"}
+      </Button>
+    </Stack>
+  );
+}
+
+function SubsidiaryCountriesRow({
+  subsidiary,
+  allCountries,
+  saving,
+  regenerating,
+  onSave,
+  onRegenerate,
+}: {
+  subsidiary: Subsidiary;
+  allCountries: SubsidiaryCountry[];
+  saving: boolean;
+  regenerating: boolean;
+  onSave: (countryIds: string[]) => void;
+  onRegenerate: () => void;
+}) {
+  const [selected, setSelected] = useState<SubsidiaryCountry[]>(subsidiary.countries);
+
+  useEffect(() => {
+    setSelected(subsidiary.countries);
+  }, [subsidiary.countries]);
+
+  const savedIds = subsidiary.countries.map((c) => c.id).join(",");
+  const selectedIds = selected.map((c) => c.id).join(",");
+  const isDirty = savedIds !== selectedIds;
+
+  return (
+    <Stack
+      direction="row"
+      spacing={1.5}
+      alignItems="center"
+      flexWrap="wrap"
+      sx={(t) => ({ px: 1.5, py: 1, borderRadius: 2, bgcolor: alpha(t.palette.text.primary, 0.03) })}
+    >
+      <SubsidiaryLogo subsidiary={subsidiary} size={40} />
+      <Typography variant="body2" fontWeight={600} sx={{ minWidth: 140 }}>
+        {subsidiary.name}
+      </Typography>
+      <Autocomplete
+        multiple
+        size="small"
+        sx={{ minWidth: 320, flexGrow: 1 }}
+        options={allCountries}
+        value={selected}
+        isOptionEqualToValue={(a, b) => a.id === b.id}
+        getOptionLabel={(c) => `${c.countryName} (${c.isoCode})`}
+        onChange={(_e, next) => setSelected(next)}
+        renderOption={(props, c) => (
+          <Box component="li" {...props} key={c.id} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            {c.flagUrl && (
+              <Box component="img" src={resolveApiAssetUrl(c.flagUrl)} alt="" sx={{ width: 20, height: 14, objectFit: "cover" }} />
+            )}
+            {c.countryName} ({c.isoCode})
+          </Box>
+        )}
+        renderTags={(value, getTagProps) =>
+          value.map((c, index) => (
+            <Chip
+              {...getTagProps({ index })}
+              key={c.id}
+              size="small"
+              label={c.isoCode}
+              icon={
+                c.flagUrl ? (
+                  <Box component="img" src={resolveApiAssetUrl(c.flagUrl)} alt="" sx={{ width: 16, height: 11, objectFit: "cover", ml: 0.5 }} />
+                ) : undefined
+              }
+            />
+          ))
+        }
+        renderInput={(params) => <TextField {...params} label="Assigned countries" placeholder="Add a country" />}
+      />
+      <Button size="small" disabled={!isDirty || saving} onClick={() => onSave(selected.map((c) => c.id))}>
+        {saving ? "Saving..." : "Save"}
+      </Button>
+      <Button
+        size="small"
+        startIcon={<AutorenewIcon fontSize="small" />}
+        disabled={subsidiary.countries.length === 0 || regenerating}
+        onClick={onRegenerate}
+        title={
+          subsidiary.countries.length === 0
+            ? "Assign at least one country first"
+            : "Replace the current logo with one generated from the assigned countries"
+        }
+      >
+        {regenerating ? "Regenerating..." : "Regenerate logo"}
       </Button>
     </Stack>
   );

@@ -25,6 +25,17 @@ class Subsidiary(Base):
     # (Configuration > Subsidiaries); that form's analytics simply has no
     # report suite until then.
     reportSuiteId: Mapped[Optional[str]] = nvarchar(100, nullable=True)
+    # Logo badge shown throughout the app (SubsidiaryLogo component) — either
+    # a committed, build-time "upload" asset (the original supplied PNGs,
+    # under app/static/subsidiary-logos/) or a "generated" circular
+    # flag-composite SVG built from this subsidiary's assigned countries (see
+    # subsidiary_logo_service.py). logoAssetPath is a path relative to the
+    # relevant base dir for whichever source; logoVersion is a content hash
+    # of the country-code list, used to cache-bust the frontend's <img src>
+    # and to detect when a "generated" badge needs regenerating.
+    logoAssetPath: Mapped[Optional[str]] = nvarchar(255, nullable=True)
+    logoSource: Mapped[Optional[str]] = nvarchar(20, nullable=True, default="upload")
+    logoVersion: Mapped[Optional[str]] = nvarchar(32, nullable=True)
     # Soft delete — the row (and everything keyed on its name) is kept; a
     # deleted subsidiary is also `isActive = False` and hidden from every list.
     # Re-adding the same name restores it. See subsidiary_service.delete_subsidiary.

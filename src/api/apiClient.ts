@@ -16,6 +16,16 @@ if (!import.meta.env.VITE_API_BASE_URL) {
   );
 }
 
+/**
+ * Prefixes a backend-relative path (e.g. a subsidiary's `logoUrl`, which may
+ * point at either `/static/...` or `/api/v1/...`) with the same API origin
+ * every other request uses — for the rare case (an `<img src>`) that needs a
+ * plain URL instead of going through this client's `fetch` wrapper.
+ */
+export function resolveApiAssetUrl(path: string): string {
+  return `${BASE_URL}${path}`;
+}
+
 let accessToken: string | null = null;
 
 /**

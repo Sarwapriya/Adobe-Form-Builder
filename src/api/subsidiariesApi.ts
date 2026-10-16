@@ -1,5 +1,15 @@
 import { apiClient } from "./apiClient";
 
+export interface SubsidiaryCountry {
+  id: string;
+  isoCode: string;
+  countryName: string;
+  /** Backend-relative — pass through resolveApiAssetUrl() before using in an
+   * <img src>. */
+  flagUrl: string | null;
+  isActive: boolean;
+}
+
 export interface Subsidiary {
   id: string;
   name: string;
@@ -15,6 +25,14 @@ export interface Subsidiary {
    * admin sets it. */
   reportSuiteId: string | null;
   createdAt: string;
+  /** Backend-relative (either a committed `/static/subsidiary-logos/...png`
+   * asset or a `/api/v1/subsidiaries/{id}/logo?v=...` generated-SVG
+   * endpoint) — pass through resolveApiAssetUrl() before using in an
+   * <img src>. Null for a subsidiary with no logo and no assigned
+   * countries yet. */
+  logoUrl: string | null;
+  logoAlt: string | null;
+  countries: SubsidiaryCountry[];
 }
 
 /** GET /api/v1/subsidiaries — active subsidiaries only, populating the

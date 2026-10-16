@@ -22,12 +22,14 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Annotated, Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, BeforeValidator, EmailStr, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.form_pipeline import ValidationResult
 from app.models.qa_run import QaRunVariant
@@ -36,6 +38,7 @@ from app.security.deps import require_admin
 from app.services import (
     ai_providers_service,
     auth_service,
+    country_service,
     dashboard_service,
     dkms_settings_service,
     email_service,
@@ -49,6 +52,7 @@ from app.services import (
     sftp_settings_service,
     smtp_settings_service,
     subsidiary_locale_service,
+    subsidiary_logo_service,
     subsidiary_privacy_link_service,
     subsidiary_project_block_service,
     subsidiary_service,
@@ -96,7 +100,28 @@ def _serialize_project_code(pc) -> dict:
     }
 
 
-def _serialize_subsidiary(s) -> dict:
+FLAG_DIR = Path(__file__).resolve().parent.parent / "static" / "flags"
+UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+
+
+def _serialize_country(c) -> dict:
+    return {
+        "id": c.id,
+        "isoCode": c.isoCode,
+        "countryName": c.countryName,
+        "flagUrl": c.flagAssetPath,
+        "isActive": c.isActive,
+    }
+
+
+def _serialize_subsidiary(s, db: Session) -> dict:
+    countries = subsidiary_service.list_countries_for_subsidiary(db, s.id)
+    if s.logoSource == "generated":
+        logo_url = f"/api/v1/subsidiaries/{s.id}/logo?v={s.logoVersion or ''}"
+    elif s.logoAssetPath:
+        logo_url = s.logoAssetPath
+    else:
+        logo_url = None
     return {
         "id": s.id,
         "name": s.name,
@@ -105,6 +130,9 @@ def _serialize_subsidiary(s) -> dict:
         "notificationEmail2": s.notificationEmail2,
         "reportSuiteId": s.reportSuiteId,
         "createdAt": s.createdAt,
+        "logoUrl": logo_url,
+        "logoAlt": subsidiary_logo_service.build_alt_text([c.countryName for c in countries]),
+        "countries": [_serialize_country(c) for c in countries],
     }
 
 
@@ -290,7 +318,7 @@ def update_project_code(id: str, body: UpdateProjectCodeBody, db: Session = Depe
 
 @router.get("/subsidiaries")
 def list_subsidiaries(db: Session = Depends(get_db)) -> list[dict]:
-    return [_serialize_subsidiary(s) for s in subsidiary_service.list_subsidiaries(db)]
+    return [_serialize_subsidiary(s, db) for s in subsidiary_service.list_subsidiaries(db)]
 
 
 class CreateSubsidiaryBody(BaseModel):
@@ -308,7 +336,7 @@ class CreateSubsidiaryBody(BaseModel):
 @router.post("/subsidiaries", status_code=status.HTTP_201_CREATED)
 def create_subsidiary(body: CreateSubsidiaryBody, db: Session = Depends(get_db)) -> dict:
     created = subsidiary_service.create_subsidiary(db, body.name)
-    return _serialize_subsidiary(created)
+    return _serialize_subsidiary(created, db)
 
 
 class UpdateSubsidiaryBody(BaseModel):
@@ -334,7 +362,7 @@ def update_subsidiary(id: str, body: UpdateSubsidiaryBody, db: Session = Depends
         updated = subsidiary_service.set_subsidiary_report_suite_id(db, id, data["reportSuiteId"])
     if updated is None:
         raise HTTPException(status_code=404, detail="subsidiary not found")
-    return _serialize_subsidiary(updated)
+    return _serialize_subsidiary(updated, db)
 
 
 @router.delete("/subsidiaries/{id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -342,6 +370,66 @@ def delete_subsidiary(id: str, db: Session = Depends(get_db)) -> None:
     deleted = subsidiary_service.delete_subsidiary(db, id)
     if not deleted:
         raise HTTPException(status_code=404, detail="subsidiary not found")
+
+
+# --- Countries & subsidiary logo generation ----------------------------------
+
+
+class CreateCountryBody(BaseModel):
+    isoCode: str = Field(min_length=2, max_length=2)
+    countryName: str = Field(min_length=1)
+
+
+@router.get("/countries")
+def list_all_countries(db: Session = Depends(get_db)) -> list[dict]:
+    return [_serialize_country(c) for c in country_service.list_all_countries(db)]
+
+
+@router.post("/countries", status_code=status.HTTP_201_CREATED)
+def create_country(body: CreateCountryBody, db: Session = Depends(get_db)) -> dict:
+    created = country_service.create_country(db, body.isoCode, body.countryName)
+    return _serialize_country(created)
+
+
+class UpdateCountryBody(BaseModel):
+    isActive: Optional[bool] = None
+
+
+@router.patch("/countries/{id}")
+def update_country(id: str, body: UpdateCountryBody, db: Session = Depends(get_db)) -> dict:
+    updated = None
+    if body.isActive is not None:
+        updated = country_service.set_country_active(db, id, body.isActive)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="country not found")
+    return _serialize_country(updated)
+
+
+class SetSubsidiaryCountriesBody(BaseModel):
+    countryIds: list[str]
+
+
+@router.put("/subsidiaries/{id}/countries")
+def set_subsidiary_countries(id: str, body: SetSubsidiaryCountriesBody, db: Session = Depends(get_db)) -> dict:
+    updated = subsidiary_service.set_subsidiary_countries(db, id, body.countryIds)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="subsidiary not found")
+    return _serialize_subsidiary(updated, db)
+
+
+@router.post("/subsidiaries/{id}/logo/regenerate")
+def regenerate_subsidiary_logo(id: str, db: Session = Depends(get_db)) -> dict:
+    subsidiary = subsidiary_service.find_subsidiary_by_id(db, id)
+    if subsidiary is None:
+        raise HTTPException(status_code=404, detail="subsidiary not found")
+    countries = subsidiary_service.list_countries_for_subsidiary(db, id)
+    if not countries:
+        raise HTTPException(status_code=400, detail="Assign at least one country before generating a logo")
+    iso_codes = [c.isoCode for c in countries]
+    updated = subsidiary_logo_service.regenerate_subsidiary_logo(
+        db, subsidiary, iso_codes, upload_dir=UPLOAD_DIR, flag_dir=FLAG_DIR
+    )
+    return _serialize_subsidiary(updated, db)
 
 
 # --- Subsidiary-project blocks -----------------------------------------------

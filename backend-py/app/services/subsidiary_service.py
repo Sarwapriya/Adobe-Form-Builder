@@ -17,11 +17,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.errors import ConflictError, NotFoundError, SubsidiaryInactiveError
+from app.models.country import Country
 from app.models.subsidiary import Subsidiary
+from app.models.subsidiary_country import SubsidiaryCountry
 from app.models.user import User
 
 
@@ -34,6 +36,13 @@ def list_subsidiaries(db: Session) -> list[Subsidiary]:
             select(Subsidiary).where(Subsidiary.isDeleted == False).order_by(Subsidiary.name.asc())  # noqa: E712
         ).scalars().all()
     )
+
+
+def find_subsidiary_by_id(db: Session, id: str) -> Optional[Subsidiary]:
+    existing = db.get(Subsidiary, id)
+    if existing is None or existing.isDeleted:
+        return None
+    return existing
 
 
 def find_subsidiary_by_name(db: Session, name: str) -> Optional[Subsidiary]:
@@ -162,6 +171,39 @@ def delete_subsidiary(db: Session, id: str) -> bool:
     db.execute(update(User).where(User.subsidiaryId == existing.name).values(isActive=False))
     db.commit()
     return True
+
+
+def list_countries_for_subsidiary(db: Session, subsidiary_id: str) -> list[Country]:
+    """A subsidiary's assigned countries, in display (`sortOrder`) order —
+    what the `SubsidiaryLogo`/admin-preview country list and the dynamic
+    logo generator's ISO-code list are both built from."""
+    rows = db.execute(
+        select(SubsidiaryCountry, Country)
+        .join(Country, Country.id == SubsidiaryCountry.countryId)
+        .where(SubsidiaryCountry.subsidiaryId == subsidiary_id)
+        .order_by(SubsidiaryCountry.sortOrder.asc())
+    ).all()
+    return [country for _link, country in rows]
+
+
+def set_subsidiary_countries(db: Session, subsidiary_id: str, country_ids: list[str]) -> Optional[Subsidiary]:
+    """Replaces a subsidiary's full country assignment with `country_ids`, in
+    the given order (`sortOrder`). Purely a metadata update — this never
+    touches `logoSource`/regenerates a logo itself, so saving a country list
+    never silently replaces a hand-authored "upload" badge; see
+    `subsidiary_logo_service.regenerate_subsidiary_logo` for the separate,
+    explicit action that does. Returns `None` if the subsidiary id doesn't
+    exist."""
+    subsidiary = db.get(Subsidiary, subsidiary_id)
+    if subsidiary is None or subsidiary.isDeleted:
+        return None
+
+    db.execute(delete(SubsidiaryCountry).where(SubsidiaryCountry.subsidiaryId == subsidiary_id))
+    for index, country_id in enumerate(country_ids):
+        db.add(SubsidiaryCountry(subsidiaryId=subsidiary_id, countryId=country_id, sortOrder=index))
+    db.commit()
+    db.refresh(subsidiary)
+    return subsidiary
 
 
 def assert_subsidiary_active(db: Session, name: str) -> None:

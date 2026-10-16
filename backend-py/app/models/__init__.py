@@ -13,6 +13,8 @@ from app.models.generated_file import GeneratedFile
 from app.models.email_log import EmailLog
 from app.models.project_code import ProjectCode
 from app.models.subsidiary import Subsidiary
+from app.models.country import Country
+from app.models.subsidiary_country import SubsidiaryCountry
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
 from app.models.subsidiary_locale import SubsidiaryLocale
 from app.models.subsidiary_privacy_link import SubsidiaryPrivacyLink
@@ -43,6 +45,8 @@ __all__ = [
     "EmailLog",
     "ProjectCode",
     "Subsidiary",
+    "Country",
+    "SubsidiaryCountry",
     "SubsidiaryProjectBlock",
     "SubsidiaryLocale",
     "SubsidiaryPrivacyLink",

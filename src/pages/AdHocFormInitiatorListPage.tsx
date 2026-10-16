@@ -28,6 +28,7 @@ import { listOpenProjectCodes, type ProjectCode } from "../api/projectCodesApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
+import { SubsidiaryLogo } from "../components/common/SubsidiaryLogo";
 import { ProjectCodeFormGroups } from "../components/formBuilder/ProjectCodeFormGroups";
 import { TemplatePickerDialog } from "../components/formBuilder/TemplatePickerDialog";
 import type { TemplateSummary } from "../api/templatesApi";
@@ -328,7 +329,8 @@ export function AdHocFormInitiatorListPage() {
                 required
               >
                 {subsidiaries.map((s) => (
-                  <MenuItem key={s.id} value={s.name}>
+                  <MenuItem key={s.id} value={s.name} sx={{ gap: 1 }}>
+                    <SubsidiaryLogo subsidiary={s} size={20} />
                     {s.name}
                   </MenuItem>
                 ))}

@@ -15,6 +15,7 @@ Run with: `uvicorn app.main:app --reload --port 4001` (see `backend-py/README.md
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -22,6 +23,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -105,6 +107,13 @@ app.add_middleware(
 )
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+
+# --- Static assets -----------------------------------------------------------
+# Committed, build-time assets only (flag SVGs, the nine originally-supplied
+# subsidiary logo PNGs) — never user-uploaded at runtime, so no auth is
+# needed here; see app/static/README (doc comment in
+# subsidiary_logo_service.py) for why these aren't routed through UPLOAD_DIR.
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 # --- Routers -------------------------------------------------------------
 # Auth (phase 1), the admin-config surface (phase 3), and the form-builder

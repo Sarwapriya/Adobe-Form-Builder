@@ -7,6 +7,7 @@ import { PageHeader } from "../components/common/PageHeader";
 import { SectionHeader } from "../components/common/SectionHeader";
 import { LoadingState } from "../components/common/LoadingState";
 import { NotificationEmailFields } from "../components/common/NotificationEmailFields";
+import { SubsidiaryLogo } from "../components/common/SubsidiaryLogo";
 import { showToast } from "../store/toastStore";
 
 /**
@@ -70,7 +71,7 @@ export function MySubsidiaryPage() {
       ) : subsidiary ? (
         <Paper sx={{ p: 2 }}>
           <SectionHeader
-            icon={<DomainIcon fontSize="small" color="primary" />}
+            icon={<SubsidiaryLogo subsidiary={subsidiary} size={32} />}
             title={subsidiary.name}
             subtitle="Up to two addresses that receive notifications for this subsidiary, in addition to whichever of your subsidiary's own users already receive one. Leave a field blank to clear it."
           />

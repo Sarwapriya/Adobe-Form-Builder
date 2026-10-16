@@ -16,9 +16,11 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { ApiError } from "../../api/apiClient";
+import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { getTemplateDetail, listTemplates, type TemplateDetail, type TemplateSummary } from "../../api/templatesApi";
 import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 import { showToast } from "../../store/toastStore";
+import { SubsidiaryLogo } from "../common/SubsidiaryLogo";
 import { TemplatePreviewDialog } from "./TemplatePreviewDialog";
 
 const SCOPE_LABEL: Record<TemplateSummary["scope"], string> = {
@@ -52,12 +54,16 @@ export function TemplatePickerDialog({
   const [search, setSearch] = useState("");
   const [previewTemplate, setPreviewTemplate] = useState<TemplateDetail | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
+  const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    listTemplates()
-      .then(setTemplates)
+    Promise.all([listTemplates(), listSubsidiaries()])
+      .then(([t, s]) => {
+        setTemplates(t);
+        setSubsidiaries(s);
+      })
       .catch((err) => showToast(err instanceof ApiError ? err.message : "Failed to load templates", "error"))
       .finally(() => setLoading(false));
   }, [open]);
@@ -125,7 +131,19 @@ export function TemplatePickerDialog({
                       )}
                       <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
                         <Chip size="small" label={SCOPE_LABEL[t.scope]} variant="outlined" />
-                        {t.subsidiaryName && <Chip size="small" label={t.subsidiaryName} variant="outlined" />}
+                        {t.subsidiaryName && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={t.subsidiaryName}
+                            icon={
+                              <SubsidiaryLogo
+                                subsidiary={subsidiaries.find((s) => s.name === t.subsidiaryName)}
+                                size={16}
+                              />
+                            }
+                          />
+                        )}
                         {t.category && <Chip size="small" label={t.category} variant="outlined" />}
                       </Stack>
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>

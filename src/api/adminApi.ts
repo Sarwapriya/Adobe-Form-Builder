@@ -1,10 +1,10 @@
 import { apiClient } from "./apiClient";
 import type { ProjectCode } from "./projectCodesApi";
-import type { Subsidiary } from "./subsidiariesApi";
+import type { Subsidiary, SubsidiaryCountry } from "./subsidiariesApi";
 import type { SubsidiaryLocale } from "./subsidiaryLocalesApi";
 
 export type { ProjectCode } from "./projectCodesApi";
-export type { Subsidiary } from "./subsidiariesApi";
+export type { Subsidiary, SubsidiaryCountry } from "./subsidiariesApi";
 
 export type AdminUserRole = "admin" | "standard" | "superadmin";
 
@@ -228,6 +228,40 @@ export function setSubsidiaryReportSuiteId(id: string, reportSuiteId: string | n
  * subsidiaryService.deleteSubsidiary. */
 export function deleteSubsidiary(id: string): Promise<void> {
   return apiClient.delete(`/api/v1/admin/subsidiaries/${id}`);
+}
+
+/** Replaces a subsidiary's full country assignment (order matters — it
+ * drives both display order and the generated logo's wedge arrangement).
+ * Purely metadata: never touches logoSource/regenerates anything — see
+ * regenerateSubsidiaryLogo below for the separate, explicit action that
+ * does. */
+export function setSubsidiaryCountries(id: string, countryIds: string[]): Promise<Subsidiary> {
+  return apiClient.put<Subsidiary>(`/api/v1/admin/subsidiaries/${id}/countries`, { countryIds });
+}
+
+/** Explicitly (re)generates a circular flag-composite SVG badge from this
+ * subsidiary's current country assignment and switches it to
+ * logoSource="generated" going forward — a one-way action for any of the
+ * nine originally-supplied "upload" logos, since it replaces the
+ * hand-authored PNG with a generated one. */
+export function regenerateSubsidiaryLogo(id: string): Promise<Subsidiary> {
+  return apiClient.post<Subsidiary>(`/api/v1/admin/subsidiaries/${id}/logo/regenerate`, {});
+}
+
+/** GET /api/v1/admin/countries — every country (active and inactive), for
+ * the admin country-management surface. Read-only "active countries only"
+ * access for any authenticated user (the country multi-select) lives at
+ * /api/v1/subsidiaries/countries instead (see countriesApi.ts). */
+export function listAllCountries(): Promise<SubsidiaryCountry[]> {
+  return apiClient.get<SubsidiaryCountry[]>("/api/v1/admin/countries");
+}
+
+export function createCountry(isoCode: string, countryName: string): Promise<SubsidiaryCountry> {
+  return apiClient.post<SubsidiaryCountry>("/api/v1/admin/countries", { isoCode, countryName });
+}
+
+export function setCountryActive(id: string, isActive: boolean): Promise<SubsidiaryCountry> {
+  return apiClient.patch<SubsidiaryCountry>(`/api/v1/admin/countries/${id}`, { isActive });
 }
 
 export interface SubsidiaryProjectBlock {

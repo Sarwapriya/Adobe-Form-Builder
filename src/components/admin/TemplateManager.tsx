@@ -33,6 +33,7 @@ import { isAdminRole, useAuthStore } from "../../auth/authStore";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
 import { ConfirmDialog } from "../common/ConfirmDialog";
+import { SubsidiaryLogo } from "../common/SubsidiaryLogo";
 import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 import { showToast } from "../../store/toastStore";
 import { TemplatePreviewDialog } from "../formBuilder/TemplatePreviewDialog";
@@ -77,7 +78,7 @@ export function TemplateManager() {
   async function refresh() {
     setLoading(true);
     try {
-      const [rows, subs] = await Promise.all([listTemplates(), isAdmin ? listSubsidiaries() : Promise.resolve([])]);
+      const [rows, subs] = await Promise.all([listTemplates(), listSubsidiaries()]);
       setTemplates(rows);
       setSubsidiaries(subs);
     } catch (err) {
@@ -181,7 +182,16 @@ export function TemplateManager() {
                   )}
                   <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
                     <Chip size="small" label={SCOPE_LABEL[t.scope]} variant="outlined" />
-                    {t.subsidiaryName && <Chip size="small" label={t.subsidiaryName} variant="outlined" />}
+                    {t.subsidiaryName && (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={t.subsidiaryName}
+                        icon={
+                          <SubsidiaryLogo subsidiary={subsidiaries.find((s) => s.name === t.subsidiaryName)} size={16} />
+                        }
+                      />
+                    )}
                     {t.category && <Chip size="small" label={t.category} variant="outlined" />}
                   </Stack>
                   <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
