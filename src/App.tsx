@@ -25,6 +25,8 @@ import { MyFormTranslatePage } from "./pages/MyFormTranslatePage.tsx";
 import { MyAdHocFormEditorPage } from "./pages/MyAdHocFormEditorPage.tsx";
 import { MySubmissionsPage } from "./pages/MySubmissionsPage.tsx";
 import { MySubsidiaryPage } from "./pages/MySubsidiaryPage.tsx";
+import { MyTemplatesPage } from "./pages/MyTemplatesPage.tsx";
+import { TemplateManagementPage } from "./pages/TemplateManagementPage.tsx";
 import { QuestionMasterPage } from "./pages/QuestionMasterPage.tsx";
 import { GlobalToast } from "./components/common/GlobalToast.tsx";
 
@@ -83,11 +85,13 @@ export default function App() {
                 <Route path="my-forms/:id" element={<MyFormTranslatePage />} />
                 <Route path="my-submissions" element={<MySubmissionsPage />} />
                 <Route path="my-subsidiary" element={<MySubsidiaryPage />} />
+                <Route path="my-templates" element={<MyTemplatesPage />} />
                 <Route element={<AdminRoute />}>
                   <Route path="admin/dashboard" element={<AdminOverviewDashboardPage />} />
                   <Route path="admin/dashboard/action-required" element={<AdminActionRequiredPage />} />
                   <Route path="admin/dashboard/recent-activity" element={<AdminRecentActivityPage />} />
                   <Route path="admin/configuration" element={<ConfigurationPage />} />
+                  <Route path="admin/templates" element={<TemplateManagementPage />} />
                   <Route path="admin/users" element={<UserManagementPage />} />
                   <Route path="admin/form-builder" element={<Navigate to="/admin/form-builder/hr" replace />} />
                   <Route path="admin/form-builder/hr" element={<HrFormInitiatorListPage />} />

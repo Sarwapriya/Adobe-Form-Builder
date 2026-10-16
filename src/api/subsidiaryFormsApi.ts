@@ -30,9 +30,17 @@ export function getMyFormDetail(formId: string): Promise<FormDetail> {
  * Ad-hoc Form" dialog's dropdown is built from. `copyFromFormId` clones one
  * of this subsidiary's own previous ad-hoc forms' current content as the
  * starting point instead of a blank form — ownership-checked server-side,
- * so it can only ever be one of this same subsidiary's own ad-hoc forms. */
-export function createAdHocForm(name: string, projectCode: string, copyFromFormId?: string): Promise<FormListItem> {
-  return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name, projectCode, copyFromFormId });
+ * so it can only ever be one of this same subsidiary's own ad-hoc forms.
+ * `copyFromTemplateId` clones a saved template's content instead (mutually
+ * exclusive with copyFromFormId) — visibility-checked server-side the same
+ * way (`form_template_service.get_template_if_visible`). */
+export function createAdHocForm(
+  name: string,
+  projectCode: string,
+  copyFromFormId?: string,
+  copyFromTemplateId?: string,
+): Promise<FormListItem> {
+  return apiClient.post<FormListItem>("/api/v1/forms/adhoc", { name, projectCode, copyFromFormId, copyFromTemplateId });
 }
 
 export type { QuestionSeed } from "./formBuilderApi";

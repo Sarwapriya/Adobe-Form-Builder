@@ -27,6 +27,8 @@ import type { ContributionProgress, FormListItem } from "../api/formBuilderApi";
 import { PageHeader } from "../components/common/PageHeader";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
 import { ContributionStatusBar } from "../components/formContribution/ContributionStatusBar";
+import { TemplatePickerDialog } from "../components/formBuilder/TemplatePickerDialog";
+import type { TemplateSummary } from "../api/templatesApi";
 import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 import { useConfirm } from "../hooks/useConfirm";
 
@@ -96,6 +98,8 @@ export function MyAdHocFormsListPage() {
    * ordinary "New Ad-hoc Form" button, which creates a blank form exactly
    * as before. */
   const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
+  const [copySourceTemplate, setCopySourceTemplate] = useState<TemplateSummary | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirm();
@@ -128,6 +132,7 @@ export function MyAdHocFormsListPage() {
     setNewName("");
     setNewProjectCode("");
     setCopySourceForm(null);
+    setCopySourceTemplate(null);
   }
 
   function handleCopy(form: FormListItem) {
@@ -135,11 +140,17 @@ export function MyAdHocFormsListPage() {
     setCreateOpen(true);
   }
 
+  function handleUseTemplate(template: TemplateSummary) {
+    setCopySourceTemplate(template);
+    setCopySourceForm(null);
+    setTemplatePickerOpen(false);
+  }
+
   async function handleCreate() {
     if (!newName.trim() || !newProjectCode) return;
     setCreating(true);
     try {
-      const created = await createAdHocForm(newName.trim(), newProjectCode, copySourceForm?.id);
+      const created = await createAdHocForm(newName.trim(), newProjectCode, copySourceForm?.id, copySourceTemplate?.id);
       closeCreateDialog();
       navigate(`/my-forms/adhoc/${created.id}`);
     } catch (err) {
@@ -245,7 +256,9 @@ export function MyAdHocFormsListPage() {
       {confirmDialog}
 
       <Dialog {...responsiveDialogProps} open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
-        <DialogTitle>{copySourceForm ? "New Ad-hoc Form (copy)" : "New Ad-hoc Form"}</DialogTitle>
+        <DialogTitle>
+          {copySourceForm ? "New Ad-hoc Form (copy)" : copySourceTemplate ? "New Ad-hoc Form (from template)" : "New Ad-hoc Form"}
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {copySourceForm && (
@@ -253,6 +266,17 @@ export function MyAdHocFormsListPage() {
                 Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
                 everything afterward.
               </Alert>
+            )}
+            {copySourceTemplate && (
+              <Alert severity="info" sx={{ borderRadius: 2 }} onClose={() => setCopySourceTemplate(null)}>
+                Starting from the <strong>{copySourceTemplate.name}</strong> template — you can still change everything
+                afterward.
+              </Alert>
+            )}
+            {!copySourceForm && !copySourceTemplate && (
+              <Button size="small" variant="outlined" onClick={() => setTemplatePickerOpen(true)}>
+                Use Existing Template
+              </Button>
             )}
             <TextField
               autoFocus
@@ -293,6 +317,12 @@ export function MyAdHocFormsListPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <TemplatePickerDialog
+        open={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        onUse={handleUseTemplate}
+      />
     </Box>
   );
 }

@@ -41,6 +41,7 @@ from app.form_pipeline.codegen.types import ChannelConfig
 from app.errors import NotFoundError, ValidationError
 from app.models.form import Form, FormOrigin, FormStatus
 from app.models.form_contribution import FormContribution
+from app.models.form_template import FormTemplate
 from app.models.form_version import FormVersion, FormVersionStatus
 from app.models.generated_file import GeneratedFile as GeneratedFileEntity
 from app.services import (
@@ -228,13 +229,23 @@ def create_form(
     project_code: Optional[str] = None,
     origin: FormOrigin = "admin",
     copy_from_form_id: Optional[str] = None,
+    copy_from_template_id: Optional[str] = None,
     questions: Optional[list[QuestionDefinition]] = None,
     exclude_locked_project_code: bool = False,
     exclude_hand_raiser_project_code: bool = False,
 ) -> dict[str, Any]:
-    """Creates a new builder form: a draft FormVersion (blank, or cloned from
-    an existing form — see `copy_from_form_id`) plus the Form row pointing at
-    it. No generation happens yet."""
+    """Creates a new builder form: a draft FormVersion (blank, cloned from an
+    existing form — see `copy_from_form_id` — or cloned from a saved
+    template — see `copy_from_template_id`) plus the Form row pointing at it.
+    No generation happens yet.
+
+    `copy_from_template_id` does a plain, unchecked lookup here — same as
+    `copy_from_form_id` above it, which never re-checks ownership either; the
+    caller (`app/routers/form_builder.py`/`subsidiary_forms.py`) is
+    responsible for confirming the template is visible to this caller
+    *before* calling this function, via `form_template_service.get_template_if_visible`.
+    `copy_from_form_id`/`copy_from_template_id` are mutually exclusive — also
+    enforced by the caller."""
     # Same governance gates as the (removed) Excel-upload path — see
     # project_code_service.assert_project_code_open's own doc comment. A
     # subsidiary user now picks the project code up front for their own
@@ -253,6 +264,14 @@ def create_form(
 
     copy_source = get_form_detail(db, copy_from_form_id) if copy_from_form_id else None
     source_content = (copy_source or {}).get("draft") or (copy_source or {}).get("published") if copy_source else None
+
+    if copy_from_template_id:
+        template = db.get(FormTemplate, copy_from_template_id)
+        if template is not None and not template.isDeleted:
+            source_content = {
+                "definition": FormDefinition.model_validate_json(template.definitionJson),
+                "config": BuilderConfig.model_validate_json(template.configJson),
+            }
 
     definition: FormDefinition
     if source_content:

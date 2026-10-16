@@ -23,7 +23,13 @@ from app.schemas.form_builder import (
     DraftUpdateBody,
 )
 from app.security.deps import require_auth
-from app.services import dashboard_service, form_access_service, form_builder_service, form_contribution_service
+from app.services import (
+    dashboard_service,
+    form_access_service,
+    form_builder_service,
+    form_contribution_service,
+    form_template_service,
+)
 
 router = APIRouter(dependencies=[Depends(require_auth)])
 
@@ -71,6 +77,12 @@ def create_adhoc_form(body: CreateAdHocFormBody, db: Session = Depends(get_db), 
         owned = form_builder_service.find_owned_adhoc_form(db, body.copyFromFormId, subsidiary_id)
         if owned is None:
             raise HTTPException(status_code=404, detail="Form to copy not found")
+    if body.copyFromTemplateId:
+        template = form_template_service.get_template_if_visible(
+            db, body.copyFromTemplateId, is_admin=False, subsidiary_name=subsidiary_id, user_id=auth["sub"]
+        )
+        if template is None:
+            raise HTTPException(status_code=404, detail="Template not found")
     return form_builder_service.create_form(
         db,
         name=body.name,
@@ -79,6 +91,7 @@ def create_adhoc_form(body: CreateAdHocFormBody, db: Session = Depends(get_db), 
         origin="adhoc",
         project_code=body.projectCode,
         copy_from_form_id=body.copyFromFormId,
+        copy_from_template_id=body.copyFromTemplateId,
         exclude_locked_project_code=True,
         exclude_hand_raiser_project_code=True,
     )

@@ -27,6 +27,8 @@ import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
 import { ProjectCodeFormGroups } from "../components/formBuilder/ProjectCodeFormGroups";
+import { TemplatePickerDialog } from "../components/formBuilder/TemplatePickerDialog";
+import type { TemplateSummary } from "../api/templatesApi";
 import { showToast } from "../store/toastStore";
 import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
@@ -71,6 +73,10 @@ export function HrFormInitiatorListPage() {
    * cloned from this form. Null for the ordinary "New Form" button, which
    * creates a blank form exactly as before. */
   const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
+  /** Set when "Browse Templates" picks one instead — mutually exclusive
+   * with copySourceForm (picking one clears the other). */
+  const [copySourceTemplate, setCopySourceTemplate] = useState<TemplateSummary | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [confirmDeleteForm, setConfirmDeleteForm] = useState<FormListItem | null>(null);
 
@@ -127,6 +133,13 @@ export function HrFormInitiatorListPage() {
     setNewSubsidiaryId("");
     setNewProjectCode("");
     setCopySourceForm(null);
+    setCopySourceTemplate(null);
+  }
+
+  function handleUseTemplate(template: TemplateSummary) {
+    setCopySourceTemplate(template);
+    setCopySourceForm(null);
+    setTemplatePickerOpen(false);
   }
 
   /** Row-level "Copy" action — opens the same New Form dialog, but with this
@@ -147,6 +160,7 @@ export function HrFormInitiatorListPage() {
         subsidiaryId: newSubsidiaryId,
         projectCode: newProjectCode || undefined,
         copyFromFormId: copySourceForm?.id,
+        copyFromTemplateId: copySourceTemplate?.id,
       });
       closeCreateDialog();
       navigate(`/admin/form-builder/${form.id}`);
@@ -253,7 +267,7 @@ export function HrFormInitiatorListPage() {
 
       <Dialog {...responsiveDialogProps} open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
         <Box component="form" onSubmit={handleCreate}>
-          <DialogTitle>{copySourceForm ? "New Form (copy)" : "New Form"}</DialogTitle>
+          <DialogTitle>{copySourceForm ? "New Form (copy)" : copySourceTemplate ? "New Form (from template)" : "New Form"}</DialogTitle>
           <DialogContent>
             <Stack spacing={2} sx={{ pt: 1 }}>
               {copySourceForm && (
@@ -261,6 +275,17 @@ export function HrFormInitiatorListPage() {
                   Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
                   everything afterward.
                 </Alert>
+              )}
+              {copySourceTemplate && (
+                <Alert severity="info" sx={{ borderRadius: 2 }} onClose={() => setCopySourceTemplate(null)}>
+                  Starting from the <strong>{copySourceTemplate.name}</strong> template — you can still change
+                  everything afterward.
+                </Alert>
+              )}
+              {!copySourceForm && !copySourceTemplate && (
+                <Button size="small" variant="outlined" onClick={() => setTemplatePickerOpen(true)}>
+                  Use Existing Template
+                </Button>
               )}
               <TextField
                 label="Campaign name"
@@ -317,6 +342,12 @@ export function HrFormInitiatorListPage() {
           </DialogActions>
         </Box>
       </Dialog>
+
+      <TemplatePickerDialog
+        open={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        onUse={handleUseTemplate}
+      />
     </Box>
   );
 }

@@ -110,6 +110,11 @@ export interface CreateFormInput {
    * (draft or published, whichever is more current) is cloned as this new
    * form's starting definition/config. Any existing form is a valid source. */
   copyFromFormId?: string;
+  /** "Use Existing Template" — the id of a saved template (templatesApi.ts)
+   * whose content is cloned as this new form's starting definition/config
+   * instead. Mutually exclusive with copyFromFormId (the backend rejects
+   * both being set at once). */
+  copyFromTemplateId?: string;
   /** "adhoc" starts a new ad-hoc campaign (Full Form only, listed under Ad-hoc
    * Forms); omitted means an ordinary admin/HR form. */
   origin?: FormOrigin;

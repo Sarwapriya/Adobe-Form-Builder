@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.form_pipeline import BuilderConfig, ContributionContent, FormDefinition, QuestionDefinition
 
@@ -41,6 +41,10 @@ class CreateFormBody(BaseModel):
     subsidiaryId: str = Field(min_length=1)
     projectCode: Optional[str] = None
     copyFromFormId: Optional[str] = None
+    # Starts the new form from a saved template instead of blank/a copied
+    # form — see app/services/form_template_service.py. Mutually exclusive
+    # with copyFromFormId (enforced below).
+    copyFromTemplateId: Optional[str] = None
     # "adhoc" lets an admin start a new ad-hoc campaign directly (Full Form only,
     # listed under Ad-hoc Forms); the default keeps every existing caller creating
     # an ordinary admin/HR form exactly as before.
@@ -50,6 +54,13 @@ class CreateFormBody(BaseModel):
     _v_subsidiary = field_validator("subsidiaryId")(classmethod(lambda cls, v: _trim_required(v)))
     _v_project_code = field_validator("projectCode")(classmethod(lambda cls, v: _trim_optional(v)))
     _v_copy_from = field_validator("copyFromFormId")(classmethod(lambda cls, v: _trim_optional(v)))
+    _v_copy_from_template = field_validator("copyFromTemplateId")(classmethod(lambda cls, v: _trim_optional(v)))
+
+    @model_validator(mode="after")
+    def _one_copy_source_at_most(self) -> "CreateFormBody":
+        if self.copyFromFormId and self.copyFromTemplateId:
+            raise ValueError("copyFromFormId and copyFromTemplateId are mutually exclusive")
+        return self
 
 
 class CreateFormWithQuestionsBody(BaseModel):
@@ -67,10 +78,18 @@ class CreateAdHocFormBody(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     projectCode: str = Field(min_length=1)
     copyFromFormId: Optional[str] = None
+    copyFromTemplateId: Optional[str] = None
 
     _v_name = field_validator("name")(classmethod(lambda cls, v: _trim_required(v)))
     _v_project_code = field_validator("projectCode")(classmethod(lambda cls, v: _trim_required(v)))
     _v_copy_from = field_validator("copyFromFormId")(classmethod(lambda cls, v: _trim_optional(v)))
+    _v_copy_from_template = field_validator("copyFromTemplateId")(classmethod(lambda cls, v: _trim_optional(v)))
+
+    @model_validator(mode="after")
+    def _one_copy_source_at_most(self) -> "CreateAdHocFormBody":
+        if self.copyFromFormId and self.copyFromTemplateId:
+            raise ValueError("copyFromFormId and copyFromTemplateId are mutually exclusive")
+        return self
 
 
 class CreateAdHocFormWithQuestionsBody(BaseModel):

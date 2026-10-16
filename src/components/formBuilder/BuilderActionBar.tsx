@@ -9,6 +9,7 @@ import UnpublishedIcon from "@mui/icons-material/Unpublished";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import CodeIcon from "@mui/icons-material/Code";
+import BookmarkAddIcon from "@mui/icons-material/BookmarkAdd";
 import { downloadFormZip } from "../../api/formBuilderApi";
 import { ApiError } from "../../api/apiClient";
 import { downloadBlob } from "../../utils/download";
@@ -16,6 +17,7 @@ import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { useSaveShortcut } from "../../hooks/useSaveShortcut";
 import { unsavedChangesBlinkSx } from "./unsavedChangesBlinkSx";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
+import { SaveAsTemplateDialog } from "./SaveAsTemplateDialog";
 import { showToast } from "../../store/toastStore";
 import { useConfirm } from "../../hooks/useConfirm";
 
@@ -72,6 +74,8 @@ export function BuilderActionBar() {
   const status = useFormBuilderStore((s) => s.status);
   const origin = useFormBuilderStore((s) => s.origin);
   const name = useFormBuilderStore((s) => s.name);
+  const definition = useFormBuilderStore((s) => s.definition);
+  const config = useFormBuilderStore((s) => s.config);
   const dirty = useFormBuilderStore((s) => s.dirty);
   const contributions = useFormBuilderStore((s) => s.contributions);
   const saving = useFormBuilderStore((s) => s.saving);
@@ -85,6 +89,7 @@ export function BuilderActionBar() {
 
   const { confirm, confirmDialog } = useConfirm();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
@@ -180,6 +185,9 @@ export function BuilderActionBar() {
         <Button size="small" variant="outlined" startIcon={<VisibilityIcon />} onClick={() => setPreviewOpen(true)}>
           Preview
         </Button>
+        <Button size="small" variant="outlined" startIcon={<BookmarkAddIcon />} onClick={() => setSaveAsTemplateOpen(true)}>
+          Save as Template
+        </Button>
         {status === "published" && (
           <Button
             size="small"
@@ -224,6 +232,12 @@ export function BuilderActionBar() {
         </Button>
       </Stack>
       <FormBuilderPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      <SaveAsTemplateDialog
+        open={saveAsTemplateOpen}
+        onClose={() => setSaveAsTemplateOpen(false)}
+        definition={definition}
+        config={config}
+      />
       {confirmDialog}
     </Paper>
   );

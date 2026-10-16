@@ -29,6 +29,8 @@ import { PageHeader } from "../components/common/PageHeader";
 import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { FormRowIconActions } from "../components/common/FormRowIconActions";
 import { ProjectCodeFormGroups } from "../components/formBuilder/ProjectCodeFormGroups";
+import { TemplatePickerDialog } from "../components/formBuilder/TemplatePickerDialog";
+import type { TemplateSummary } from "../api/templatesApi";
 import { showToast } from "../store/toastStore";
 import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 
@@ -82,6 +84,8 @@ export function AdHocFormInitiatorListPage() {
   const [newSubsidiaryId, setNewSubsidiaryId] = useState("");
   const [newProjectCode, setNewProjectCode] = useState("");
   const [copySourceForm, setCopySourceForm] = useState<FormListItem | null>(null);
+  const [copySourceTemplate, setCopySourceTemplate] = useState<TemplateSummary | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
   async function refresh() {
@@ -136,6 +140,13 @@ export function AdHocFormInitiatorListPage() {
     setNewSubsidiaryId("");
     setNewProjectCode("");
     setCopySourceForm(null);
+    setCopySourceTemplate(null);
+  }
+
+  function handleUseTemplate(template: TemplateSummary) {
+    setCopySourceTemplate(template);
+    setCopySourceForm(null);
+    setTemplatePickerOpen(false);
   }
 
   /** Row-level "Copy" action — opens a New Form dialog (Name/Subsidiary/
@@ -162,6 +173,7 @@ export function AdHocFormInitiatorListPage() {
         // or copying another ad-hoc submission's content as the starting point.
         origin: "adhoc",
         ...(copySourceForm ? { copyFromFormId: copySourceForm.id } : {}),
+        ...(copySourceTemplate ? { copyFromTemplateId: copySourceTemplate.id } : {}),
       });
       closeCreateDialog();
       navigate(`/admin/form-builder/${form.id}`);
@@ -274,7 +286,9 @@ export function AdHocFormInitiatorListPage() {
 
       <Dialog {...responsiveDialogProps} open={createOpen} onClose={closeCreateDialog} maxWidth="xs" fullWidth>
         <Box component="form" onSubmit={handleCreate}>
-          <DialogTitle>{copySourceForm ? "New Form (copy)" : "New Ad-hoc Form"}</DialogTitle>
+          <DialogTitle>
+            {copySourceForm ? "New Form (copy)" : copySourceTemplate ? "New Form (from template)" : "New Ad-hoc Form"}
+          </DialogTitle>
           <DialogContent>
             <Stack spacing={2} sx={{ pt: 1 }}>
               {copySourceForm ? (
@@ -282,10 +296,20 @@ export function AdHocFormInitiatorListPage() {
                   Copying questions/fields/consents from <strong>{copySourceForm.name}</strong> — you can still change
                   everything afterward. This creates a new ad-hoc campaign, separate from the source submission.
                 </Alert>
-              ) : (
-                <Alert severity="info" sx={{ borderRadius: 2 }}>
-                  Creates a new ad-hoc campaign (Full Form only) that opens straight in the editor.
+              ) : copySourceTemplate ? (
+                <Alert severity="info" sx={{ borderRadius: 2 }} onClose={() => setCopySourceTemplate(null)}>
+                  Starting from the <strong>{copySourceTemplate.name}</strong> template — you can still change
+                  everything afterward.
                 </Alert>
+              ) : (
+                <>
+                  <Alert severity="info" sx={{ borderRadius: 2 }}>
+                    Creates a new ad-hoc campaign (Full Form only) that opens straight in the editor.
+                  </Alert>
+                  <Button size="small" variant="outlined" onClick={() => setTemplatePickerOpen(true)}>
+                    Use Existing Template
+                  </Button>
+                </>
               )}
               <TextField
                 label="Campaign name"
@@ -342,6 +366,12 @@ export function AdHocFormInitiatorListPage() {
           </DialogActions>
         </Box>
       </Dialog>
+
+      <TemplatePickerDialog
+        open={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        onUse={handleUseTemplate}
+      />
     </Box>
   );
 }

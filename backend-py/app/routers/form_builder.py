@@ -23,7 +23,7 @@ from app.schemas.form_builder import (
     UpdateGeneratedFileBody,
 )
 from app.security.deps import require_admin
-from app.services import form_builder_service, form_contribution_service, resource_check_service
+from app.services import form_builder_service, form_contribution_service, form_template_service, resource_check_service
 from app.services.preview_service import PreviewVariant, build_form_version_preview
 
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -67,6 +67,14 @@ def create_form(body: CreateFormBody, db: Session = Depends(get_db), auth: dict 
         source = form_builder_service.get_form_detail(db, body.copyFromFormId)
         if source is None:
             raise HTTPException(status_code=404, detail="Form to copy not found")
+    if body.copyFromTemplateId:
+        # Admin can use any template, so existence is the only check needed
+        # here (is_admin=True — this route is require_admin-gated).
+        template = form_template_service.get_template_if_visible(
+            db, body.copyFromTemplateId, is_admin=True, subsidiary_name=None, user_id=auth["sub"]
+        )
+        if template is None:
+            raise HTTPException(status_code=404, detail="Template not found")
     return form_builder_service.create_form(
         db,
         name=body.name,
@@ -75,6 +83,7 @@ def create_form(body: CreateFormBody, db: Session = Depends(get_db), auth: dict 
         user_id=auth["sub"],
         origin=body.origin,
         copy_from_form_id=body.copyFromFormId,
+        copy_from_template_id=body.copyFromTemplateId,
     )
 
 

@@ -6,12 +6,14 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
 import DeleteIcon from "@mui/icons-material/Delete";
+import BookmarkAddIcon from "@mui/icons-material/BookmarkAdd";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { useSaveShortcut } from "../../hooks/useSaveShortcut";
 import { unsavedChangesBlinkSx } from "./unsavedChangesBlinkSx";
 import { ApiError } from "../../api/apiClient";
 import { deleteAdHocForm } from "../../api/subsidiaryFormsApi";
 import { FormBuilderPreviewDialog } from "./FormBuilderPreviewDialog";
+import { SaveAsTemplateDialog } from "./SaveAsTemplateDialog";
 import { showToast } from "../../store/toastStore";
 import { useConfirm } from "../../hooks/useConfirm";
 
@@ -32,6 +34,8 @@ export function AdHocActionBar() {
   const status = useFormBuilderStore((s) => s.status);
   const pendingReview = useFormBuilderStore((s) => s.pendingReview);
   const reviewNote = useFormBuilderStore((s) => s.reviewNote);
+  const definition = useFormBuilderStore((s) => s.definition);
+  const config = useFormBuilderStore((s) => s.config);
   const dirty = useFormBuilderStore((s) => s.dirty);
   const saving = useFormBuilderStore((s) => s.saving);
   const publishing = useFormBuilderStore((s) => s.publishing);
@@ -42,6 +46,7 @@ export function AdHocActionBar() {
 
   const { confirm, confirmDialog } = useConfirm();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -114,6 +119,9 @@ export function AdHocActionBar() {
         <Button size="small" variant="outlined" startIcon={<VisibilityIcon />} onClick={() => setPreviewOpen(true)}>
           Preview
         </Button>
+        <Button size="small" variant="outlined" startIcon={<BookmarkAddIcon />} onClick={() => setSaveAsTemplateOpen(true)}>
+          Save as Template
+        </Button>
         <Button
           size="small"
           variant="outlined"
@@ -158,6 +166,12 @@ export function AdHocActionBar() {
         </Alert>
       )}
       <FormBuilderPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      <SaveAsTemplateDialog
+        open={saveAsTemplateOpen}
+        onClose={() => setSaveAsTemplateOpen(false)}
+        definition={definition}
+        config={config}
+      />
       {confirmDialog}
     </Paper>
   );

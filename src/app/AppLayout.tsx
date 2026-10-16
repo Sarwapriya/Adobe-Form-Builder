@@ -39,6 +39,7 @@ import DesignServicesIcon from "@mui/icons-material/DesignServices";
 import TranslateIcon from "@mui/icons-material/Translate";
 import DomainIcon from "@mui/icons-material/Domain";
 import ListAltIcon from "@mui/icons-material/ListAlt";
+import ViewModuleIcon from "@mui/icons-material/ViewModule";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -293,6 +294,7 @@ export function AppLayout() {
                 },
               ],
             },
+            { to: "/admin/templates", label: "Templates", icon: <ViewModuleIcon />, exact: true },
           ],
         },
         {
@@ -332,6 +334,7 @@ export function AppLayout() {
                     ],
                   },
                   { to: "/my-submissions", label: "Submissions", icon: <HistoryIcon />, exact: true },
+                  { to: "/my-templates", label: "Templates", icon: <ViewModuleIcon />, exact: true },
                 ],
               },
               {

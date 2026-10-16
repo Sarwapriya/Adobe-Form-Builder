@@ -303,7 +303,14 @@ class TestSftpDeploymentSettings:
     def test_round_trip_no_encryption(self, client: TestClient, admin_headers: dict, db_session: Session):
         resp = client.patch(
             "/api/v1/admin/deployment-settings/staging",
-            json={"host": "sftp.example.com", "port": 2222, "username": "deploy", "privateKeyPath": "/keys/id_rsa", "remotePath": "/incoming"},
+            json={
+                "host": "sftp.example.com",
+                "port": 2222,
+                "username": "deploy",
+                "privateKeyPath": "/keys/id_rsa",
+                "remotePath": "/incoming",
+                "apiEndpoint": "https://res5.africa2s.crm.samsung.com/ingest",
+            },
             headers=admin_headers,
         )
         assert resp.status_code == 200
@@ -317,7 +324,12 @@ class TestSftpDeploymentSettings:
     def test_reports_whether_the_key_file_exists(self, client: TestClient, admin_headers: dict, tmp_path):
         key_file = tmp_path / "test_key"
         key_file.write_text("not a real key")
-        payload = {"host": "sftp.example.com", "username": "deploy", "remotePath": "/incoming"}
+        payload = {
+            "host": "sftp.example.com",
+            "username": "deploy",
+            "remotePath": "/incoming",
+            "apiEndpoint": "https://res5.africa2s.crm.samsung.com/ingest",
+        }
 
         found = client.patch(
             "/api/v1/admin/deployment-settings/staging",
