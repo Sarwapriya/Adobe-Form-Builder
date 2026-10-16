@@ -9,22 +9,37 @@ import { isAdminRole, useAuthStore } from "../../auth/authStore";
 import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
 import { showToast } from "../../store/toastStore";
 
-const SCOPE_OPTIONS: Array<{ value: TemplateScope; label: string; helper: string }> = [
-  { value: "USER", label: "Just me", helper: "Only you can see and use this template." },
-  { value: "SUBSIDIARY", label: "My subsidiary", helper: "Everyone in your subsidiary can see and use it." },
-  { value: "GLOBAL", label: "Every subsidiary", helper: "Every subsidiary can see and use it." },
-];
+/** The SUBSIDIARY option's wording depends on who's looking: a subsidiary
+ * user doesn't get a picker (the backend forces it to their own subsidiary,
+ * see `app/routers/templates.py`'s `_resolve_scope`), so "My subsidiary"
+ * is accurate for them — but an admin/superadmin has no subsidiary of their
+ * own and instead picks any one from the full list (the picker rendered
+ * below when `needsTargetSubsidiary` is true), so calling it "My subsidiary"
+ * for them is simply wrong. */
+function scopeOptionsFor(isAdmin: boolean): Array<{ value: TemplateScope; label: string; helper: string }> {
+  const base: Array<{ value: TemplateScope; label: string; helper: string }> = [
+    { value: "USER", label: "Just me", helper: "Only you can see and use this template." },
+    isAdmin
+      ? {
+          value: "SUBSIDIARY",
+          label: "A specific subsidiary",
+          helper: "Choose which subsidiary below — everyone in it can see and use this template.",
+        }
+      : { value: "SUBSIDIARY", label: "My subsidiary", helper: "Everyone in your subsidiary can see and use it." },
+  ];
+  return isAdmin ? [...base, { value: "GLOBAL", label: "Every subsidiary", helper: "Every subsidiary can see and use it." }] : base;
+}
 
 /**
  * "Save as Template" — snapshots whatever is *currently* in the builder
  * (the `definition`/`config` passed in as props, read by the caller from
  * `useFormBuilderStore` at click time) as a new, independent template row.
  * Never touches the form being edited, and never publishes/creates a
- * campaign — purely a template save. Scope options are role-aware: a
- * subsidiary user only ever sees "Just me"/"My subsidiary" (their own
- * subsidiary, not selectable); an admin/superadmin also sees "Every
- * subsidiary" and, for a subsidiary-targeted template, a subsidiary picker.
- * The server re-derives/validates all of this regardless (see
+ * campaign — purely a template save. Scope options are role-aware (see
+ * `scopeOptionsFor` above): a subsidiary user only ever sees "Just me"/"My
+ * subsidiary" (their own, not selectable); an admin/superadmin instead sees
+ * "A specific subsidiary" (with a picker loaded from every subsidiary) and
+ * "Every subsidiary". The server re-derives/validates all of this regardless (see
  * `app/routers/templates.py`'s `_resolve_scope`) — this is convenience UI,
  * not the actual authorization boundary.
  */
@@ -65,7 +80,7 @@ export function SaveAsTemplateDialog({
     listSubsidiaries().then(setSubsidiaries).catch(() => undefined);
   }, [open, isAdmin]);
 
-  const scopeOptions = isAdmin ? SCOPE_OPTIONS : SCOPE_OPTIONS.filter((o) => o.value !== "GLOBAL");
+  const scopeOptions = scopeOptionsFor(isAdmin);
   const needsTargetSubsidiary = isAdmin && scope === "SUBSIDIARY";
   const canSave = !!name.trim() && !!definition && !!config && (!needsTargetSubsidiary || !!targetSubsidiaryName);
 
