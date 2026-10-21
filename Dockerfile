@@ -21,6 +21,13 @@
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
+# node:20-bookworm-slim bundles npm 10.8.x, whose dependency resolver
+# (Arborist) has a known crash ("Cannot read properties of null (reading
+# 'edgesOut')") on certain peer-dependency graphs — it started reproducing
+# here once @mui/x-date-pickers (AppDatePicker.tsx) was added. Fixed in later
+# npm releases; upgrading before the real install sidesteps it entirely.
+RUN npm install -g npm@11
+
 COPY package.json ./
 COPY packages ./packages
 RUN npm install --include=optional
