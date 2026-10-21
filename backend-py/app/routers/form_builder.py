@@ -144,7 +144,8 @@ def deploy_form(id: str, db: Session = Depends(get_db), auth: dict = Depends(req
 @router.get("/{id}/files")
 def list_generated_files(id: str, db: Session = Depends(get_db)) -> list[dict]:
     """Edit Files window's file list — every file belonging to the form's
-    published version, any type."""
+    currently-editable version (published if published, generated on first
+    access from the draft otherwise), any type."""
     return form_builder_service.list_generated_files(db, id)
 
 
@@ -163,6 +164,14 @@ def update_generated_file(
     Download and Deploy all pick up the change on their next read, with no
     further wiring (see form_builder_service.update_generated_file_content)."""
     return form_builder_service.update_generated_file_content(db, id, fileId, body.content, auth["sub"])
+
+
+@router.post("/{id}/files/regenerate")
+def regenerate_generated_files(id: str, db: Session = Depends(get_db)) -> list[dict]:
+    """"Regenerate from definition" — draft forms only; discards any
+    hand-edits and rebuilds the file list fresh from the live definition
+    (see form_builder_service.regenerate_draft_generated_files)."""
+    return form_builder_service.regenerate_draft_generated_files(db, id)
 
 
 @router.get("/{id}/resource-checks")

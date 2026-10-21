@@ -1,5 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { CssBaseline, ThemeProvider } from "@mui/material";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { createAppTheme } from "./app/theme.ts";
 import { useThemeModeStore } from "./store/themeModeStore.ts";
@@ -69,6 +71,7 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
       <ErrorBoundary>
         <BrowserRouter basename={ROUTER_BASENAME}>
           <Routes>
@@ -108,6 +111,7 @@ export default function App() {
         </BrowserRouter>
         <GlobalToast />
       </ErrorBoundary>
+      </LocalizationProvider>
     </ThemeProvider>
   );
 }

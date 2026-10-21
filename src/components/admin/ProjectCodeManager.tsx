@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Autocomplete, Box, Button, Chip, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
@@ -10,6 +10,7 @@ import BadgeIcon from "@mui/icons-material/Badge";
 import { ApiError } from "../../api/apiClient";
 import {
   createProjectCode,
+  createSubsidiaryProjectBlock,
   listAllProjectCodes,
   setProjectCodeCategory,
   setProjectCodeDateRange,
@@ -18,8 +19,10 @@ import {
   setProjectCodeValue,
   type ProjectCode,
 } from "../../api/adminApi";
+import { listSubsidiaries, type Subsidiary } from "../../api/subsidiariesApi";
 import { SectionHeader } from "../common/SectionHeader";
 import { LoadingState } from "../common/LoadingState";
+import { AppDatePicker } from "../common/AppDatePicker";
 import { showToast } from "../../store/toastStore";
 
 /** Backend returns Date columns as full ISO datetime strings ("2026-06-01T00:00:00.000Z")
@@ -43,7 +46,14 @@ const PROJECT_CODE_HELPER_TEXT = 'Letters, numbers, "-", "_", and "/" only — n
  * uploadService.createUpload) without touching uploads already made under
  * it; renaming likewise never touches anything already uploaded under the
  * old value (Upload.projectCode is a text snapshot, not a live reference —
- * see that column's own doc comment). Locking is independent of open/closed —
+ * see that column's own doc comment). The "Available to" picker on the
+ * create row is pure convenience over the real mechanism one section down
+ * (SubsidiaryProjectBlockManager): the backend has no allow-list, only a
+ * block-list — deselecting a subsidiary here just creates a block row for
+ * it immediately after the code is created, same as adding it by hand down
+ * there. Leaving every subsidiary selected (the default) creates no block
+ * rows at all, matching "open to everyone" being the unblocked default.
+ * Locking is independent of open/closed —
  * it additionally blocks subsidiary Form Builder contributions (which open/closed
  * never covers) and is the precondition for generating a Question Master; admins
  * stay exempt from it (see backend ProjectCode entity's own doc comment). Start/end
@@ -57,11 +67,15 @@ const PROJECT_CODE_HELPER_TEXT = 'Letters, numbers, "-", "_", and "/" only — n
 export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {}) {
   const [codes, setCodes] = useState<ProjectCode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [newCode, setNewCode] = useState("");
   const [newStartDate, setNewStartDate] = useState("");
   const [newEndDate, setNewEndDate] = useState("");
   const [newCutoffDate, setNewCutoffDate] = useState("");
   const [newCategory, setNewCategory] = useState<"adhoc" | "handRaiser">("adhoc");
+  // null = "every subsidiary" (the default, no block rows created); once the
+  // admin touches the picker this becomes the explicit allow-list.
+  const [availableTo, setAvailableTo] = useState<Subsidiary[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [togglingLockedId, setTogglingLockedId] = useState<string | null>(null);
@@ -82,6 +96,9 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
 
   useEffect(() => {
     void refresh();
+    listSubsidiaries()
+      .then(setSubsidiaries)
+      .catch(() => undefined);
   }, []);
 
   async function handleCreate(e: FormEvent) {
@@ -94,12 +111,28 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
 
     setCreating(true);
     try {
-      await createProjectCode(newCode.trim(), newStartDate || undefined, newEndDate || undefined, newCutoffDate || undefined, newCategory);
+      const created = await createProjectCode(
+        newCode.trim(),
+        newStartDate || undefined,
+        newEndDate || undefined,
+        newCutoffDate || undefined,
+        newCategory,
+      );
+      // availableTo === null means "every subsidiary" (the untouched
+      // default) — nothing to block. Otherwise block every subsidiary NOT
+      // in the picked set, the same action SubsidiaryProjectBlockManager's
+      // own "Block" button takes, just applied in bulk right away.
+      if (availableTo !== null) {
+        const availableNames = new Set(availableTo.map((s) => s.name));
+        const blocked = subsidiaries.filter((s) => !availableNames.has(s.name));
+        await Promise.all(blocked.map((s) => createSubsidiaryProjectBlock(s.name, created.code)));
+      }
       setNewCode("");
       setNewStartDate("");
       setNewEndDate("");
       setNewCutoffDate("");
       setNewCategory("adhoc");
+      setAvailableTo(null);
       await refresh();
       onChange?.();
     } catch (err) {
@@ -187,35 +220,33 @@ export function ProjectCodeManager({ onChange }: { onChange?: () => void } = {})
           helperText={PROJECT_CODE_HELPER_TEXT}
           sx={{ minWidth: 260 }}
         />
-        <TextField
-          label="Start date"
-          type="date"
-          size="small"
-          value={newStartDate}
-          onChange={(e) => setNewStartDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          label="End date"
-          type="date"
-          size="small"
-          value={newEndDate}
-          onChange={(e) => setNewEndDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          label="Cutoff date"
-          type="date"
-          size="small"
-          value={newCutoffDate}
-          onChange={(e) => setNewCutoffDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
+        <AppDatePicker label="Start date" value={newStartDate} onChange={setNewStartDate} />
+        <AppDatePicker label="End date" value={newEndDate} onChange={setNewEndDate} />
+        <AppDatePicker label="Cutoff date" value={newCutoffDate} onChange={setNewCutoffDate} />
         <Chip
           label={newCategory === "handRaiser" ? "Hand Raiser" : "Ad-hoc"}
           color={newCategory === "handRaiser" ? "secondary" : "default"}
           onClick={() => setNewCategory((c) => (c === "handRaiser" ? "adhoc" : "handRaiser"))}
           title="Ad-hoc: open to subsidiary self-service campaigns. Hand Raiser: reserved for HR Form Initiator — click to toggle."
+        />
+        <Autocomplete
+          multiple
+          size="small"
+          limitTags={2}
+          options={subsidiaries}
+          getOptionLabel={(s) => s.name}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          value={availableTo ?? subsidiaries}
+          onChange={(_, next) => setAvailableTo(next)}
+          disabled={subsidiaries.length === 0}
+          sx={{ minWidth: 260 }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Available to"
+              helperText={availableTo === null ? "Every subsidiary — deselect any to restrict" : undefined}
+            />
+          )}
         />
         <Button type="submit" variant="outlined" disabled={!newCode.trim() || creating}>
           {creating ? "Adding..." : "Add"}
@@ -354,30 +385,9 @@ function ProjectCodeRow({
       </Stack>
       <Divider sx={{ my: 1 }} />
       <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-        <TextField
-          label="Start date"
-          type="date"
-          size="small"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          label="End date"
-          type="date"
-          size="small"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          label="Cutoff date"
-          type="date"
-          size="small"
-          value={cutoffDate}
-          onChange={(e) => setCutoffDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
+        <AppDatePicker label="Start date" value={startDate} onChange={setStartDate} />
+        <AppDatePicker label="End date" value={endDate} onChange={setEndDate} />
+        <AppDatePicker label="Cutoff date" value={cutoffDate} onChange={setCutoffDate} />
         <Button size="small" variant="text" disabled={!isDirty || saving} onClick={() => onSaveDateRange(startDate, endDate, cutoffDate)}>
           {saving ? "Saving..." : "Save dates"}
         </Button>

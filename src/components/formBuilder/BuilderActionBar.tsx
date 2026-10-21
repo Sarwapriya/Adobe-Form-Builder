@@ -43,6 +43,13 @@ const STATUS_COLOR = { draft: "default", published: "success", unpublished: "war
  * an admin approves it via AdHocReviewPanel, which calls publishForm directly).
  * A draft or unpublished form has nothing generated to download.
  *
+ * Edit Files, unlike Download, is also offered for a plain `"draft"` (not
+ * just `"published"`) — FormFilesEditorPage.tsx generates the file list from
+ * the draft definition the first time it's opened (regenerate-on-miss, see
+ * form_builder_service.ensure_draft_generated_files), so hand-editing the
+ * generated output can start before the first Publish. An `"unpublished"`
+ * form still doesn't get it, same as before.
+ *
  * This bar's own "Publish" button makes the admin's *own* edits (made
  * directly in this editor) visible/downloadable for subsidiary users to see
  * — it never pushes anything to Adobe by itself (form_builder_service.
@@ -188,7 +195,7 @@ export function BuilderActionBar() {
         <Button size="small" variant="outlined" startIcon={<BookmarkAddIcon />} onClick={() => setSaveAsTemplateOpen(true)}>
           Save as Template
         </Button>
-        {status === "published" && (
+        {(status === "published" || status === "draft") && (
           <Button
             size="small"
             variant="outlined"

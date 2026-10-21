@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   getGeneratedFileContent,
   listGeneratedFiles,
+  regenerateGeneratedFiles,
   updateGeneratedFileContent,
   type GeneratedFileSummary,
 } from "../api/formBuilderApi";
@@ -27,12 +28,14 @@ interface FormFilesState {
   loading: boolean;
   loadingContent: boolean;
   saving: boolean;
+  regenerating: boolean;
   error: string | null;
 
   load: (formId: string) => Promise<void>;
   selectFile: (fileId: string) => Promise<void>;
   setContent: (value: string) => void;
   save: () => Promise<boolean>;
+  regenerate: () => Promise<boolean>;
   discard: () => void;
   reset: () => void;
 }
@@ -46,6 +49,7 @@ const initialState = {
   loading: false,
   loadingContent: false,
   saving: false,
+  regenerating: false,
   error: null,
 } satisfies Partial<FormFilesState>;
 
@@ -96,6 +100,25 @@ export const useFormFilesStore = create<FormFilesState>((set, get) => ({
       return true;
     } catch (err) {
       set({ saving: false, error: err instanceof ApiError ? err.message : "Save failed" });
+      return false;
+    }
+  },
+
+  async regenerate() {
+    const { formId, files, selectedFileId } = get();
+    if (!formId) return false;
+    const selectedFileName = files.find((f) => f.id === selectedFileId)?.fileName ?? null;
+    set({ regenerating: true, error: null });
+    try {
+      const freshFiles = await regenerateGeneratedFiles(formId);
+      set({ regenerating: false, files: freshFiles });
+      // Regeneration deletes and recreates every row, so file ids change —
+      // re-select by name to keep the admin on the same file where possible.
+      const next = freshFiles.find((f) => f.fileName === selectedFileName) ?? freshFiles[0];
+      if (next) await get().selectFile(next.id);
+      return true;
+    } catch (err) {
+      set({ regenerating: false, error: err instanceof ApiError ? err.message : "Regenerate failed" });
       return false;
     }
   },

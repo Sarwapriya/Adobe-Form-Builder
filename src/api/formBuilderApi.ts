@@ -381,6 +381,12 @@ export function updateGeneratedFileContent(formId: string, fileId: string, conte
   return apiClient.put<GeneratedFileContent>(`/api/v1/admin/forms/${formId}/files/${fileId}`, { content });
 }
 
+/** "Regenerate from definition" — draft forms only. Discards any hand-edits
+ * and rebuilds the file list fresh from the current form definition. */
+export function regenerateGeneratedFiles(formId: string): Promise<GeneratedFileSummary[]> {
+  return apiClient.post<GeneratedFileSummary[]>(`/api/v1/admin/forms/${formId}/files/regenerate`);
+}
+
 // Subsidiary-user contribution review — see subsidiaryFormsApi.ts's own
 // ContributionSummary for the submitting side; re-exported here so both sides share
 // one shape rather than two independently-drifting copies.

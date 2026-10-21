@@ -19,6 +19,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import UndoIcon from "@mui/icons-material/Undo";
 import RedoIcon from "@mui/icons-material/Redo";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { PageHeader } from "../components/common/PageHeader";
 import { CodeEditor, type CodeEditorHandle } from "../components/formBuilder/CodeEditor";
 import { QaRunDialog } from "../components/admin/QaRunDialog";
@@ -49,6 +50,15 @@ const TYPE_LABEL: Record<string, string> = {
  * (reusing the same in-place preview the Preview button renders) — the one
  * QA path that reflects a hand-edit, since every other QA entry point in
  * the app regenerates from the FormDefinition and never sees one.
+ *
+ * Also opens for a never-yet-published draft (BuilderActionBar.tsx shows
+ * Edit Files for both statuses): the file list is generated from the draft
+ * definition on first load and persists from then on, surviving further
+ * Save Draft calls in the builder — see form_builder_service
+ * .ensure_draft_generated_files. "Regenerate" (draft only, confirm-gated)
+ * discards any hand-edits and rebuilds the list fresh from the current
+ * definition, for when the admin wants the code to catch up with real
+ * definition changes instead of hand-patching it.
  */
 export function FormFilesEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -62,11 +72,13 @@ export function FormFilesEditorPage() {
   const loading = useFormFilesStore((s) => s.loading);
   const loadingContent = useFormFilesStore((s) => s.loadingContent);
   const saving = useFormFilesStore((s) => s.saving);
+  const regenerating = useFormFilesStore((s) => s.regenerating);
   const error = useFormFilesStore((s) => s.error);
   const load = useFormFilesStore((s) => s.load);
   const selectFile = useFormFilesStore((s) => s.selectFile);
   const setContent = useFormFilesStore((s) => s.setContent);
   const save = useFormFilesStore((s) => s.save);
+  const regenerate = useFormFilesStore((s) => s.regenerate);
   const discard = useFormFilesStore((s) => s.discard);
   const reset = useFormFilesStore((s) => s.reset);
 
@@ -127,6 +139,21 @@ export function FormFilesEditorPage() {
     if (ok) showToast("File saved.", "success");
   }
 
+  async function handleRegenerate() {
+    const confirmed = await confirm({
+      title: "Regenerate files",
+      message: "Rebuild every file fresh from the current form definition? Any hand-edits made here will be lost.",
+      confirmLabel: "Regenerate",
+      confirmColor: "warning",
+    });
+    if (!confirmed) return;
+    setCanUndo(false);
+    setCanRedo(false);
+    setEditorInstance((n) => n + 1);
+    const ok = await regenerate();
+    if (ok) showToast("Files regenerated.", "success");
+  }
+
   const selectedFile = files.find((f) => f.id === selectedFileId) ?? null;
   const grouped = files.reduce<Record<string, GeneratedFileSummary[]>>((acc, f) => {
     (acc[f.fileType] ??= []).push(f);
@@ -146,7 +173,7 @@ export function FormFilesEditorPage() {
       <Box>
         <PageHeader icon={<CodeIcon />} title="Edit Files" subtitle={form?.name} />
         <Typography color="text.secondary">
-          This form has no published files yet — publish it first, then come back here to hand-edit the generated output.
+          {error ?? "This form has no files to edit yet."}
         </Typography>
       </Box>
     );
@@ -165,18 +192,31 @@ export function FormFilesEditorPage() {
         }
         titleNoWrap
         action={
-          <Tooltip title={dirty ? "Tests the last saved version — save your edits first to include them" : ""}>
-            <span>
+          <Stack direction="row" spacing={1.5}>
+            {form?.status === "draft" && (
               <Button
                 variant="outlined"
-                startIcon={<PlayCircleOutlineIcon />}
-                disabled={availableVariants.length === 0}
-                onClick={() => setQaDialogOpen(true)}
+                color="warning"
+                startIcon={<RefreshIcon />}
+                disabled={regenerating}
+                onClick={() => void handleRegenerate()}
               >
-                Run QA
+                {regenerating ? "Regenerating..." : "Regenerate"}
               </Button>
-            </span>
-          </Tooltip>
+            )}
+            <Tooltip title={dirty ? "Tests the last saved version — save your edits first to include them" : ""}>
+              <span>
+                <Button
+                  variant="outlined"
+                  startIcon={<PlayCircleOutlineIcon />}
+                  disabled={availableVariants.length === 0}
+                  onClick={() => setQaDialogOpen(true)}
+                >
+                  Run QA
+                </Button>
+              </span>
+            </Tooltip>
+          </Stack>
         }
       />
 

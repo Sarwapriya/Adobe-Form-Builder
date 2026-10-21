@@ -514,6 +514,26 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
             except OSError:
                 continue
 
+    # Files already generated directly on this draft (via a pre-publish Edit
+    # Files session — see ensure_draft_generated_files) share draft_version.id
+    # with what's about to be inserted below, so they'd otherwise become
+    # duplicate rows for the same (formVersionId, fileName); delete them
+    # first. Any hand-edit among them is more recent than whatever the
+    # previous published version carried above, so it's applied last here
+    # and wins on conflict.
+    existing_draft_files = list(
+        db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == draft_version.id)).scalars()
+    )
+    for f in existing_draft_files:
+        if f.editedAt is not None:
+            try:
+                with open(absolute_file_path(f.filePath), "r", encoding="utf-8", newline="") as fh:
+                    edited_by_filename[f.fileName] = (fh.read(), f.editedAt, f.editedByUserId)
+            except OSError:
+                continue
+        db.delete(f)
+    db.flush()
+
     files: list[GeneratedFile] = generation["files"]
     file_names: FileNames = generation["fileNames"]
     saved = save_form_version_generated_files(form.subsidiaryId, draft_version.id, files)
@@ -636,19 +656,106 @@ def _serialize_generated_file(f: GeneratedFileEntity) -> dict[str, Any]:
     }
 
 
-def _get_published_generated_file(db: Session, form_id: str, file_id: str) -> GeneratedFileEntity:
-    """A form must be currently published and the file must belong to its
-    published version — same scope every other reader (preview/download/
-    deploy) already uses. Raises `NotFoundError` rather than returning an
-    outcome string, since this is the Edit Files window's one access path
-    and has no other caller to thread an outcome through."""
+def _editable_form_version_id(form: Form) -> Optional[str]:
+    """Which FormVersion the Edit Files window currently targets: a
+    published form keeps editing its live `publishedVersionId` (unchanged
+    behavior — those are the exact bytes Preview/Download/Deploy read), while
+    a never-yet-published draft targets `currentDraftVersionId` instead, so
+    hand-editing can start before the first Publish. Once published, further
+    edits here intentionally stay on the published version, not the fresh
+    draft publish_form clones afterward — see that function's own carry-
+    forward logic for how a published hand-edit survives into the next
+    publish regardless."""
+    if form.status == "published" and form.publishedVersionId:
+        return form.publishedVersionId
+    if form.status == "draft" and form.currentDraftVersionId:
+        return form.currentDraftVersionId
+    return None
+
+
+def ensure_draft_generated_files(db: Session, form_id: str) -> list[GeneratedFileEntity]:
+    """Generates and persists GeneratedFiles for the current draft version
+    the first time they're needed (Edit Files opened on a never-yet-
+    published form) — "regenerate on miss", the same convention
+    subsidiary_logo_service uses. Once any rows exist for this draft
+    version, they're returned as-is and never silently regenerated, so a
+    hand-edit survives further Save Draft calls untouched (same guarantee a
+    published version's hand-edit already has); publish_form carries
+    whatever's here forward into the newly published version too."""
     form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
-    if form is None or form.status != "published" or not form.publishedVersionId:
-        raise NotFoundError("form not found or not published")
-    file = db.execute(
-        select(GeneratedFileEntity).where(
-            GeneratedFileEntity.id == file_id, GeneratedFileEntity.formVersionId == form.publishedVersionId
+    if form is None or form.status != "draft" or not form.currentDraftVersionId:
+        raise NotFoundError("form not found or not a draft")
+
+    existing = list(
+        db.execute(
+            select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == form.currentDraftVersionId)
+        ).scalars()
+    )
+    if existing:
+        return existing
+
+    draft_version = db.get(FormVersion, form.currentDraftVersionId)
+    assert draft_version is not None
+    definition = FormDefinition.model_validate_json(draft_version.definition)
+    definition = definition.model_copy(update={"pageError": _resolve_page_error_updates(db, definition)})
+    config = _enforce_variants_for_origin(form.origin, BuilderConfig.model_validate_json(draft_version.config))
+    generation_config = config.model_copy(
+        update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form)}
+    )
+    generation = _generate_from_form_definition(definition, generation_config)
+    if len(generation["validation"].errors) > 0:
+        raise ValidationError("fix the validation errors shown above before editing generated files")
+
+    files: list[GeneratedFile] = generation["files"]
+    file_names: FileNames = generation["fileNames"]
+    saved = save_form_version_generated_files(form.subsidiaryId, draft_version.id, files)
+    rows: list[GeneratedFileEntity] = []
+    for f in saved:
+        row = GeneratedFileEntity(
+            formVersionId=draft_version.id,
+            fileName=f.fileName,
+            filePath=f.relativePath,
+            fileType=classify_file_type(f.fileName, file_names),
         )
+        db.add(row)
+        rows.append(row)
+    db.commit()
+    return rows
+
+
+def regenerate_draft_generated_files(db: Session, form_id: str) -> list[dict[str, Any]]:
+    """Explicit, admin-triggered "Regenerate from definition" — discards any
+    hand-edits made to the current draft's files and rebuilds them fresh
+    from the live form definition. Deliberately separate from the
+    regenerate-on-miss behavior in `ensure_draft_generated_files`: that one
+    never clobbers an existing hand-edit, this one always does, so it must
+    be an explicit action (see FormFilesEditorPage.tsx's confirm dialog),
+    never an automatic side effect of anything else."""
+    form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
+    if form is None or form.status != "draft" or not form.currentDraftVersionId:
+        raise NotFoundError("form not found or not a draft")
+    for row in db.execute(
+        select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == form.currentDraftVersionId)
+    ).scalars():
+        db.delete(row)
+    db.commit()
+    return [_serialize_generated_file(f) for f in ensure_draft_generated_files(db, form_id)]
+
+
+def _get_editable_generated_file(db: Session, form_id: str, file_id: str) -> GeneratedFileEntity:
+    """The file must belong to whichever FormVersion `_editable_form_version_id`
+    currently targets for this form (published version if published, draft
+    version if still a draft) — same scope every other reader
+    (preview/download/deploy) already uses for a published form. Raises
+    `NotFoundError` rather than returning an outcome string, since this is
+    the Edit Files window's one access path and has no other caller to
+    thread an outcome through."""
+    form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
+    version_id = _editable_form_version_id(form) if form else None
+    if form is None or version_id is None:
+        raise NotFoundError("form not found or has no editable files")
+    file = db.execute(
+        select(GeneratedFileEntity).where(GeneratedFileEntity.id == file_id, GeneratedFileEntity.formVersionId == version_id)
     ).scalar_one_or_none()
     if file is None:
         raise NotFoundError("generated file not found")
@@ -656,29 +763,35 @@ def _get_published_generated_file(db: Session, form_id: str, file_id: str) -> Ge
 
 
 def list_generated_files(db: Session, form_id: str) -> list[dict[str, Any]]:
-    """Every file belonging to a form's published version, for the Edit
-    Files window's file list — any file type (html/js/css/data-js)."""
+    """Every file belonging to the form's currently-editable version, for
+    the Edit Files window's file list — any file type (html/js/css/data-js).
+    A published form serves its live published files (unchanged); a draft
+    generates them on first access (`ensure_draft_generated_files`)."""
     form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
     if form is None:
         raise NotFoundError("form not found")
-    if form.status != "published" or not form.publishedVersionId:
-        raise ValidationError("form has no published files to edit")
 
-    files = list(
-        db.execute(
-            select(GeneratedFileEntity)
-            .where(GeneratedFileEntity.formVersionId == form.publishedVersionId)
-            .order_by(GeneratedFileEntity.fileType, GeneratedFileEntity.fileName)
-        ).scalars()
-    )
+    if form.status == "draft":
+        files = sorted(ensure_draft_generated_files(db, form_id), key=lambda f: (f.fileType, f.fileName))
+    else:
+        version_id = _editable_form_version_id(form)
+        if version_id is None:
+            raise ValidationError("form has no files to edit")
+        files = list(
+            db.execute(
+                select(GeneratedFileEntity)
+                .where(GeneratedFileEntity.formVersionId == version_id)
+                .order_by(GeneratedFileEntity.fileType, GeneratedFileEntity.fileName)
+            ).scalars()
+        )
     return [_serialize_generated_file(f) for f in files]
 
 
 def get_generated_file_content(db: Session, form_id: str, file_id: str) -> dict[str, Any]:
     """Reads one generated file's current on-disk content, for the Edit
     Files window to load into its editor — the exact bytes Preview,
-    Download and Deploy already read."""
-    file = _get_published_generated_file(db, form_id, file_id)
+    Download and Deploy already read (for a published form)."""
+    file = _get_editable_generated_file(db, form_id, file_id)
     with open(absolute_file_path(file.filePath), "r", encoding="utf-8", newline="") as f:
         content = f.read()
     return {**_serialize_generated_file(file), "content": content}
@@ -728,7 +841,7 @@ def update_generated_file_content(db: Session, form_id: str, file_id: str, conte
     who edited it and when. No change needed anywhere else: preview_service,
     build_form_zip and deploy_form all read this same file path already, so
     the next Preview/Download/Deploy picks up the edit automatically."""
-    file = _get_published_generated_file(db, form_id, file_id)
+    file = _get_editable_generated_file(db, form_id, file_id)
     if not content.strip():
         raise ValidationError("content must not be empty")
     if file.fileType in ("js", "data-js"):

@@ -11,10 +11,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.errors import NotFoundError, ValidationError
+from app.models.form import Form
+from app.models.generated_file import GeneratedFile as GeneratedFileEntity
 from app.models.project_code import ProjectCode
 from app.models.subsidiary import Subsidiary
 from app.services import form_builder_service
-from tests.form_builder.conftest import create_and_publish_admin_form
+from tests.form_builder.conftest import (
+    create_admin_draft_form,
+    create_and_publish_admin_form,
+    sample_config_json,
+    sample_definition_json,
+)
 
 
 class TestListAndGetGeneratedFiles:
@@ -49,18 +56,6 @@ class TestListAndGetGeneratedFiles:
         form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
 
         assert client.get(f"/api/v1/admin/forms/{form_id}/files", headers=standard_headers).status_code == 403
-
-    def test_listing_a_draft_never_published_form_is_rejected(
-        self, client: TestClient, admin_headers: dict, db_session: Session, subsidiary_row: Subsidiary
-    ):
-        create_resp = client.post(
-            "/api/v1/admin/forms/", json={"name": "Never Published", "subsidiaryId": subsidiary_row.name}, headers=admin_headers
-        )
-        assert create_resp.status_code == 201, create_resp.text
-        form_id = create_resp.json()["id"]
-
-        with pytest.raises(ValidationError):
-            form_builder_service.list_generated_files(db_session, form_id)
 
     def test_listing_a_nonexistent_form_is_not_found(self, db_session: Session):
         with pytest.raises(NotFoundError):
@@ -206,3 +201,130 @@ class TestHandEditSurvivesRepublish:
 
         republished_files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         assert all(f["editedAt"] is None and f["editedByUserId"] is None for f in republished_files)
+
+
+class TestDraftFiles:
+    """Edit Files also works before a form is ever published — GET
+    /{id}/files generates the file list from the draft definition the first
+    time it's needed (ensure_draft_generated_files), a hand-edit survives
+    further Save Draft calls untouched, "Regenerate" explicitly discards
+    hand-edits and rebuilds fresh, and a pre-publish hand-edit carries
+    forward into the form's first publish the same way a republish already
+    carries forward an edit made on a previously published version."""
+
+    def test_listing_a_draft_generates_files_on_first_access(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+
+        resp = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers)
+        assert resp.status_code == 200, resp.text
+        files = resp.json()
+        assert {f["fileType"] for f in files} == {"html", "js", "css", "data-js"}
+        assert all(f["editedAt"] is None for f in files)
+
+        # Listing again must return the exact same rows, not regenerate.
+        again = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        assert {f["id"] for f in again} == {f["id"] for f in files}
+
+    def test_a_standard_user_cannot_list_or_edit_draft_files(
+        self, client: TestClient, admin_headers: dict, standard_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        assert client.get(f"/api/v1/admin/forms/{form_id}/files", headers=standard_headers).status_code == 403
+
+    def test_draft_hand_edit_survives_a_save_draft_call(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        js_file = next(f for f in files if f["fileType"] == "js")
+        original = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
+        edited_content = original + "\n// hand-added before first publish\n"
+
+        put_resp = client.put(
+            f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": edited_content}, headers=admin_headers
+        )
+        assert put_resp.status_code == 200, put_resp.text
+
+        # Save Draft again (definition/config unchanged content-wise, but a
+        # real resave all the same) must not touch the already-generated,
+        # hand-edited files.
+        draft_resp = client.patch(
+            f"/api/v1/admin/forms/{form_id}/draft",
+            json={"definition": sample_definition_json(subsidiary_row.name), "config": sample_config_json(["ff", "oc"])},
+            headers=admin_headers,
+        )
+        assert draft_resp.status_code == 204, draft_resp.text
+
+        after_save = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        same_file = next(f for f in after_save if f["id"] == js_file["id"])
+        assert same_file["editedAt"] is not None
+        reread = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()
+        assert reread["content"] == edited_content
+
+    def test_regenerate_discards_hand_edits_and_rebuilds_fresh(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        js_file = next(f for f in files if f["fileType"] == "js")
+        client.put(
+            f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": "// hand-edited"}, headers=admin_headers
+        )
+
+        resp = client.post(f"/api/v1/admin/forms/{form_id}/files/regenerate", headers=admin_headers)
+        assert resp.status_code == 200, resp.text
+        regenerated = resp.json()
+        assert all(f["editedAt"] is None for f in regenerated)
+        # Rows are deleted and recreated, not merely reset in place.
+        assert js_file["id"] not in {f["id"] for f in regenerated}
+
+    def test_a_standard_user_cannot_regenerate(
+        self, client: TestClient, admin_headers: dict, standard_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        resp = client.post(f"/api/v1/admin/forms/{form_id}/files/regenerate", headers=standard_headers)
+        assert resp.status_code == 403
+
+    def test_draft_hand_edit_carries_into_first_publish(
+        self,
+        client: TestClient,
+        admin_headers: dict,
+        admin_user,
+        db_session: Session,
+        subsidiary_row: Subsidiary,
+        project_code_row: ProjectCode,
+    ):
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        js_file = next(f for f in files if f["fileType"] == "js")
+        edited_content = client.get(
+            f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers
+        ).json()["content"] + "\n// hand-added pre-publish\n"
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": edited_content}, headers=admin_headers)
+
+        pre_publish_draft_version_id = db_session.get(Form, form_id).currentDraftVersionId
+
+        publish_resp = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert publish_resp.status_code == 200, publish_resp.text
+
+        published_files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        published_js = next(f for f in published_files if f["fileName"] == js_file["fileName"])
+        assert published_js["editedAt"] is not None
+        assert published_js["editedByUserId"] == admin_user.id
+        published_content = client.get(
+            f"/api/v1/admin/forms/{form_id}/files/{published_js['id']}", headers=admin_headers
+        ).json()["content"]
+        assert published_content == edited_content
+
+        # The pre-publish draft's own GeneratedFile rows (same formVersionId
+        # as what's now published, since publish_form promotes that row in
+        # place) must have been replaced, not duplicated.
+        db_session.expire_all()
+        remaining = (
+            db_session.query(GeneratedFileEntity)
+            .filter(GeneratedFileEntity.formVersionId == pre_publish_draft_version_id)
+            .all()
+        )
+        assert len(remaining) == len(published_files)

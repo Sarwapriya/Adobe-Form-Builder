@@ -110,6 +110,33 @@ def sample_config_json(variants: Optional[list[str]] = None) -> dict:
     return config.model_dump(mode="json")
 
 
+def create_admin_draft_form(
+    client,
+    admin_headers: dict,
+    subsidiary_name: str,
+    project_code: Optional[str] = None,
+    variants: Optional[list[str]] = None,
+) -> str:
+    """Test helper: creates a blank admin form and fills its draft with a
+    publish-ready definition, same as `create_and_publish_admin_form` but
+    deliberately stops short of publishing — for exercising Edit Files
+    against a form that's still a plain draft."""
+    body: dict = {"name": unique_name("Form"), "subsidiaryId": subsidiary_name}
+    if project_code:
+        body["projectCode"] = project_code
+    create_resp = client.post("/api/v1/admin/forms/", json=body, headers=admin_headers)
+    assert create_resp.status_code == 201, create_resp.text
+    form_id = create_resp.json()["id"]
+
+    draft_resp = client.patch(
+        f"/api/v1/admin/forms/{form_id}/draft",
+        json={"definition": sample_definition_json(subsidiary_name), "config": sample_config_json(variants or ["ff", "oc"])},
+        headers=admin_headers,
+    )
+    assert draft_resp.status_code == 204, draft_resp.text
+    return form_id
+
+
 def create_and_publish_admin_form(
     client,
     admin_headers: dict,
