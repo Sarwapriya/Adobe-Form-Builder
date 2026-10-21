@@ -22,11 +22,13 @@ from app.form_pipeline import (
     resolve_file_names,
     validate_form_definition,
 )
+from app.errors import ValidationError
 from app.models.form import Form
 from app.models.form_contribution import FormContribution
 from app.models.form_version import FormVersion
 from app.models.qa_run import QaRun, QaRunVariant
 from app.models.qa_test_case_result import QaTestCaseResult
+from app.services import form_builder_service
 from app.services.file_service import absolute_file_path, form_qa_storage_dir
 from app.services.preview_service import build_form_version_preview, inline_generated_files
 from app.services.qa.qa_test_runner import run_qa_suite
@@ -155,6 +157,39 @@ def create_published_files_qa_run(db: Session, form_id: str, variant: QaRunVaria
         return CreateQaRunResult(outcome="not_found")
 
     preview = build_form_version_preview(db, form_id, variant, strict=True)
+    if preview["outcome"] == "not_found":
+        return CreateQaRunResult(outcome="not_found")
+    if preview["outcome"] == "no_files":
+        return CreateQaRunResult(outcome="no_files")
+
+    qa_run = QaRun(uploadId=None, formId=form.id, contributionId=None, variant=variant, status="pending", triggeredByUserId=triggered_by_user_id)
+    db.add(qa_run)
+    db.commit()
+    db.refresh(qa_run)
+
+    run_qa_job(qa_run.id, preview["html"])
+
+    return CreateQaRunResult(outcome="ok", qaRun=qa_run)
+
+
+def create_draft_files_qa_run(db: Session, form_id: str, variant: QaRunVariant, triggered_by_user_id: str) -> CreateQaRunResult:
+    """Counterpart to `create_published_files_qa_run` for a never-yet-published
+    form's current draft — the Edit Files window's "Run QA" button once a
+    draft's files have been generated (see form_builder_service
+    .ensure_draft_generated_files, called here too so this works even if
+    Edit Files was never opened for this draft yet). Same "reads whatever's
+    actually on disk, reflects a hand-edit" behavior as the published path,
+    just against `currentDraftVersionId` instead of `publishedVersionId`."""
+    form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
+    if form is None or form.status != "draft":
+        return CreateQaRunResult(outcome="not_found")
+
+    try:
+        form_builder_service.ensure_draft_generated_files(db, form_id)
+    except ValidationError:
+        return CreateQaRunResult(outcome="invalid")
+
+    preview = build_form_version_preview(db, form_id, variant, strict=True, which="draft")
     if preview["outcome"] == "not_found":
         return CreateQaRunResult(outcome="not_found")
     if preview["outcome"] == "no_files":

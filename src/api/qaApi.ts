@@ -6,15 +6,19 @@ export type QaTestCaseStatus = "passed" | "failed";
 
 /** Identifies what a QA run targets — a pending Translate & Extend
  * contribution merged onto its form's draft, an ad-hoc form's own draft
- * while it awaits admin review, or a published form's actual on-disk
- * generated files (the one target that reflects a hand-edit made via the
- * Edit Files window, since it skips regeneration — see backend
- * qa_run_service.create_published_files_qa_run). Exactly one shape maps to
- * exactly one of createQaRun's/listQaRuns' request shapes. */
+ * while it awaits admin review, a published form's actual on-disk
+ * generated files, or a never-yet-published form's own current draft's
+ * on-disk files (generated on demand if Edit Files was never opened on it).
+ * "published"/"draft" are the two targets that reflect a hand-edit made via
+ * the Edit Files window, since both skip regeneration — see backend
+ * qa_run_service.create_published_files_qa_run/create_draft_files_qa_run.
+ * Exactly one shape maps to exactly one of createQaRun's/listQaRuns'
+ * request shapes. */
 export type QaRunSubject =
   | { kind: "contribution"; contributionId: string; formId: string }
   | { kind: "adhoc"; formId: string }
-  | { kind: "published"; formId: string };
+  | { kind: "published"; formId: string }
+  | { kind: "draft"; formId: string };
 
 export interface QaRun {
   id: string;
@@ -59,7 +63,11 @@ export function createQaRun(subject: QaRunSubject, variant: QaRunVariant): Promi
   const body =
     subject.kind === "contribution"
       ? { contributionId: subject.contributionId, variant }
-      : { formId: subject.formId, variant, source: subject.kind === "published" ? "published" : "adhoc_review" };
+      : {
+          formId: subject.formId,
+          variant,
+          source: subject.kind === "published" || subject.kind === "draft" ? subject.kind : "adhoc_review",
+        };
   return apiClient.post<QaRun>("/api/v1/admin/qa-runs", body);
 }
 

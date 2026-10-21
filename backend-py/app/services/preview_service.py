@@ -135,31 +135,40 @@ def _companion_files(
 
 
 def build_form_version_preview(
-    db: Session, form_id: str, variant: PreviewVariant, strict: bool = False
+    db: Session, form_id: str, variant: PreviewVariant, strict: bool = False, which: Literal["published", "draft"] = "published"
 ) -> dict:
-    """Builds a single self-contained HTML document for a Form's *published*
-    FormVersion — its default language's page (a form now has one page per
-    language, see file_names.py). Only ever serves a currently-published form
-    (`status == "published"`) — an unpublished form's previously-generated
-    files stay on disk but become unreachable here, reversible by
-    re-publishing.
+    """Builds a single self-contained HTML document for one of a Form's
+    FormVersions — its default language's page (a form now has one page per
+    language, see file_names.py). `which="published"` (the default, and the
+    only mode this had before draft files existed) only ever serves a
+    currently-published form (`status == "published"`), reading
+    `publishedVersionId` — an unpublished form's previously-generated files
+    stay on disk but become unreachable here, reversible by re-publishing.
+    `which="draft"` is the counterpart for a still-draft form's own
+    `currentDraftVersionId` (see qa_run_service.create_draft_files_qa_run,
+    the one caller that passes it) — the caller is responsible for making
+    sure draft files actually exist first (ensure_draft_generated_files),
+    same as how a draft only ever has files on disk once Edit Files has been
+    opened on it at least once.
 
     Returns `{"outcome": ..., "html": ...}` — `html` present only when
     `outcome == "ok"`.
     """
     form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
-    if form is None or form.status != "published" or not form.publishedVersionId:
-        return {"outcome": "not_found"}
+    if which == "draft":
+        if form is None or form.status != "draft" or not form.currentDraftVersionId:
+            return {"outcome": "not_found"}
+        version_id = form.currentDraftVersionId
+    else:
+        if form is None or form.status != "published" or not form.publishedVersionId:
+            return {"outcome": "not_found"}
+        version_id = form.publishedVersionId
 
-    files = list(
-        db.execute(
-            select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == form.publishedVersionId)
-        ).scalars()
-    )
+    files = list(db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == version_id)).scalars())
     if not files:
         return {"outcome": "no_files"}
 
-    names = _published_file_names(db.get(FormVersion, form.publishedVersionId))
+    names = _published_file_names(db.get(FormVersion, version_id))
 
     requested_html = _find_page(files, names, variant)
     fallback_variant: PreviewVariant = "oc" if variant == "ff" else "ff"

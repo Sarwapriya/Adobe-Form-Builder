@@ -64,6 +64,7 @@ const SUBJECT_NOUN: Record<QaRunSubject["kind"], string> = {
   contribution: "submission",
   adhoc: "form",
   published: "form's published files",
+  draft: "form's draft files",
 };
 
 /**

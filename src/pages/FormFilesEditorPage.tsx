@@ -85,7 +85,8 @@ export function FormFilesEditorPage() {
   const { confirm, confirmDialog } = useConfirm();
   const dirty = content !== originalContent;
   const [qaDialogOpen, setQaDialogOpen] = useState(false);
-  const availableVariants: QaRunVariant[] = form?.published?.config.variants ?? [];
+  const isDraft = form?.status === "draft";
+  const availableVariants: QaRunVariant[] = (isDraft ? form?.draft?.config.variants : form?.published?.config.variants) ?? [];
 
   // CodeMirror owns undo/redo history itself (see CodeEditor.tsx) — these
   // just mirror its current depth so the toolbar buttons know when to
@@ -193,7 +194,7 @@ export function FormFilesEditorPage() {
         titleNoWrap
         action={
           <Stack direction="row" spacing={1.5}>
-            {form?.status === "draft" && (
+            {isDraft && (
               <Button
                 variant="outlined"
                 color="warning"
@@ -342,7 +343,7 @@ export function FormFilesEditorPage() {
       {confirmDialog}
       {id && (
         <QaRunDialog
-          subject={{ kind: "published", formId: id }}
+          subject={isDraft ? { kind: "draft", formId: id } : { kind: "published", formId: id }}
           availableVariants={availableVariants}
           open={qaDialogOpen}
           onClose={() => setQaDialogOpen(false)}

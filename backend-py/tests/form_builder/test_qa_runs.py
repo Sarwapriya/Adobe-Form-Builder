@@ -25,7 +25,13 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from tests.form_builder.conftest import create_and_publish_admin_form, sample_config_json, sample_definition_json, unique_name
+from tests.form_builder.conftest import (
+    create_admin_draft_form,
+    create_and_publish_admin_form,
+    sample_config_json,
+    sample_definition_json,
+    unique_name,
+)
 
 
 def _create_adhoc_pending_review(client: TestClient, standard_headers: dict, subsidiary_name: str, variants: list[str], project_code: str) -> str:
@@ -164,6 +170,45 @@ class TestCreateQaRun:
 
         resp = client.post(
             "/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "ff", "source": "published"}, headers=admin_headers
+        )
+        assert resp.status_code == 404
+
+    def test_draft_files_qa_run_starts_pending(
+        self, client: TestClient, admin_headers: dict, subsidiary_row, project_code_row
+    ):
+        """source: "draft" tests a never-yet-published form's current
+        draft's on-disk files — generated on demand if Edit Files was never
+        opened on it — see qa_run_service.create_draft_files_qa_run."""
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code, variants=["ff", "oc"])
+
+        resp = client.post(
+            "/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "ff", "source": "draft"}, headers=admin_headers
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["formId"] == form_id
+        assert body["contributionId"] is None
+        assert body["variant"] == "ff"
+        assert body["status"] in ("pending", "running")
+
+        list_resp = client.get(f"/api/v1/admin/qa-runs?formId={form_id}", headers=admin_headers)
+        assert any(r["id"] == body["id"] for r in list_resp.json())
+
+    def test_draft_files_qa_run_with_unavailable_variant_is_409(
+        self, client: TestClient, admin_headers: dict, subsidiary_row, project_code_row
+    ):
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code, variants=["ff"])
+        resp = client.post(
+            "/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "oc", "source": "draft"}, headers=admin_headers
+        )
+        assert resp.status_code == 409
+
+    def test_draft_files_qa_run_against_a_published_form_404(
+        self, client: TestClient, admin_headers: dict, subsidiary_row, project_code_row
+    ):
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        resp = client.post(
+            "/api/v1/admin/qa-runs", json={"formId": form_id, "variant": "ff", "source": "draft"}, headers=admin_headers
         )
         assert resp.status_code == 404
 
