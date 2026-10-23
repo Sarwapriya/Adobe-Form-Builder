@@ -11,21 +11,23 @@
 # and nginx's own location blocks (see nginx.conf.template). Baked in at BUILD
 # time — rebuilding the image is the only way to change it.
 
-# node:20-bookworm-slim (glibc), not alpine — and `npm install`, not `npm ci`
+# node:24-bookworm-slim (glibc), not alpine — and `npm install`, not `npm ci`
 # with the committed package-lock.json. That lockfile was generated on
 # Windows; npm's optional-dependency resolution (npm/cli#4828) then omits the
 # Linux-only native rollup binary (@rollup/rollup-linux-x64-gnu/musl) from a
 # strict `npm ci` install, failing the build with "Cannot find module
 # @rollup/rollup-linux-x64-*". `npm install` re-resolves optional deps for the
 # platform actually running the build instead of trusting the lockfile's.
-FROM node:20-bookworm-slim AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 
-# node:20-bookworm-slim bundles npm 10.8.x, whose dependency resolver
-# (Arborist) has a known crash ("Cannot read properties of null (reading
-# 'edgesOut')") on certain peer-dependency graphs — it started reproducing
-# here once @mui/x-date-pickers (AppDatePicker.tsx) was added. Fixed in later
-# npm releases; upgrading before the real install sidesteps it entirely.
+# Older node:20-bookworm-slim builds bundled an npm 10.8.x whose dependency
+# resolver (Arborist) has a known crash ("Cannot read properties of null
+# (reading 'edgesOut')") on certain peer-dependency graphs — it started
+# reproducing here once @mui/x-date-pickers (AppDatePicker.tsx) was added.
+# Fixed in later npm releases; node:24's own bundled npm is already past the
+# affected range, but pinning explicitly here keeps the build correct
+# regardless of exactly what a given base image tag happens to ship.
 RUN npm install -g npm@11
 
 COPY package.json ./
