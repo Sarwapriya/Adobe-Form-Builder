@@ -62,4 +62,14 @@ ENV UPLOAD_DIR=/app/uploads
 VOLUME ["/app/uploads"]
 EXPOSE 4001
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4001"]
+# Shell form (not the usual exec-form JSON array) so $TRUSTED_PROXY_IPS gets
+# substituted in from the container's environment — see .env.example for what
+# it's for. `exec` is required here: without it, `/bin/sh -c "..."` keeps the
+# shell itself as PID 1 and uvicorn as its child, so `docker stop`'s SIGTERM
+# never reaches uvicorn directly and every stop has to wait out the full
+# grace period before being force-killed instead of shutting down cleanly.
+# `exec` replaces the shell process with uvicorn in place, restoring the same
+# direct-signal-handling behavior the previous exec-form CMD already had.
+# Defaults to uvicorn's own default (127.0.0.1, i.e. nothing trusted) when
+# TRUSTED_PROXY_IPS is unset, so this is a no-op until it's actually set.
+CMD exec uvicorn app.main:app --host 0.0.0.0 --port 4001 --proxy-headers --forwarded-allow-ips="${TRUSTED_PROXY_IPS:-127.0.0.1}"
