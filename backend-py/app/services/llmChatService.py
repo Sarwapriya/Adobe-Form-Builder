@@ -29,12 +29,18 @@ from typing import Any, Optional
 
 import httpx
 
-from app.services.ai_providers_service import ProviderConfig, chat_completions_url, is_groq_base_url
+from app.services.ai_providers_service import ProviderConfig, chat_completions_url, is_axhub_base_url, is_groq_base_url
 
 # Groq's on-demand tier caps combined prompt+completion tokens per minute.
 GROQ_TOKENS_PER_MINUTE = 7600  # just under the 8000 TPM cap
 # OpenAI's limits are far higher; this only bounds how much history a turn carries.
 OPENAI_PROMPT_TOKEN_BUDGET = 24000
+# Conservative placeholder for the AX Hub Gemma 4 (E2B, Q4_0) llama.cpp
+# server's actual context window, which hasn't been confirmed — adjust to
+# match whatever context size (-c) the controller actually serves at before
+# relying on this in production; too high silently truncates/degrades
+# tool-calling quality rather than erroring.
+AXHUB_PROMPT_TOKEN_BUDGET = 6000
 MIN_COMPLETION_TOKENS = 1024
 MAX_COMPLETION_TOKENS = 3072
 REQUEST_TIMEOUT_SECONDS = 45
@@ -69,13 +75,22 @@ def estimate_tokens(messages: list[dict[str, Any]], tools: Optional[list[dict[st
 
 
 def vendor_label(provider: ProviderConfig) -> str:
-    return "Groq" if is_groq_base_url(provider.baseUrl) else "OpenAI"
+    if is_groq_base_url(provider.baseUrl):
+        return "Groq"
+    if is_axhub_base_url(provider.baseUrl):
+        return "AX Hub Gemma 4"
+    return "OpenAI"
 
 
 def token_budget(provider: ProviderConfig) -> int:
-    """Prompt + completion tokens one call may use: Groq's per-minute cap, or a
+    """Prompt + completion tokens one call may use: Groq's per-minute cap, a
+    conservative placeholder for AX Hub's local context window, or a
     generous context bound for OpenAI."""
-    return GROQ_TOKENS_PER_MINUTE if is_groq_base_url(provider.baseUrl) else OPENAI_PROMPT_TOKEN_BUDGET
+    if is_groq_base_url(provider.baseUrl):
+        return GROQ_TOKENS_PER_MINUTE
+    if is_axhub_base_url(provider.baseUrl):
+        return AXHUB_PROMPT_TOKEN_BUDGET
+    return OPENAI_PROMPT_TOKEN_BUDGET
 
 
 def _is_openai_reasoning_model(model: str) -> bool:
@@ -99,11 +114,16 @@ def build_request_body(
     tool_choice: str = "auto",
 ) -> dict[str, Any]:
     assert_local_function_tools(tools)
-    body: dict[str, Any] = {
-        "model": provider.model,
-        "messages": messages,
-        "max_completion_tokens": _completion_budget(provider, messages, tools),
-    }
+    completion_budget = _completion_budget(provider, messages, tools)
+    body: dict[str, Any] = {"model": provider.model, "messages": messages}
+    if is_axhub_base_url(provider.baseUrl):
+        # llama.cpp's OpenAI-compatible server: max_tokens is the
+        # widest-supported completion-length key (matches
+        # openaiCompatAIService._build_body's "other host" branch) —
+        # max_completion_tokens may not be recognized.
+        body["max_tokens"] = completion_budget
+    else:
+        body["max_completion_tokens"] = completion_budget
     if is_groq_base_url(provider.baseUrl):
         # gpt-oss: keep hidden reasoning short (it counts against the TPM
         # budget) and never send it back to us at all.
@@ -177,7 +197,11 @@ async def chat(
     `{ok: True, content, toolCalls: [{id, name, arguments}], model, tokenUsage}`
     or `{ok: False, kind: "rate_limit"|"auth"|"error", error}`."""
     body = build_request_body(provider, messages, tools, tool_choice=tool_choice)
-    headers = {"Authorization": f"Bearer {provider.apiKey}", "Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json"}
+    if provider.apiKey:
+        # AX Hub's internal controller may not require a token at all; every
+        # other vendor here always has one (filtered out upstream otherwise).
+        headers["Authorization"] = f"Bearer {provider.apiKey}"
     vendor = vendor_label(provider)
     log_prefix = f"[llmChatService] vendor={vendor} model={provider.model}"
 

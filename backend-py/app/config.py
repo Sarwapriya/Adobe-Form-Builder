@@ -76,6 +76,24 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "google/gemma-4-26b-a4b-it:free"
     OPENROUTER_ENABLED: bool = True
 
+    # Pins the chatbot to exactly one provider and disables the normal
+    # OpenAI-then-Groq auto-selection entirely — "openai", "groq", or
+    # "axhub-gemma4". No automatic fallback to another vendor: see
+    # ai_providers_service.get_chat_provider_config. Leave unset/empty for
+    # today's unchanged auto-selection behavior.
+    AI_PROVIDER: Optional[str] = None
+
+    # --- AX Hub Gemma 4 (internal llama.cpp OpenAI-compatible server,
+    # ax-hub-ai.service, reached over the same ax-hub-net Docker network this
+    # backend already runs on — never expose its port publicly). Only used
+    # when AI_PROVIDER=axhub-gemma4. ---
+    AXHUB_AI_URL: Optional[str] = None
+    # Sent as "Authorization: Bearer <token>" only when non-empty — leave
+    # blank if the controller doesn't require one on the internal network.
+    AXHUB_AI_TOKEN: Optional[str] = None
+    AXHUB_MODEL: str = "gemma-4-E2B"
+    AXHUB_ENABLED: bool = True
+
     FORMBUILDER_NOTIFY_EMAIL: Optional[str] = None
 
     # --- MCP-SQL (Model Context Protocol server the AI assistant chat calls

@@ -8,6 +8,7 @@ import json
 import httpx
 import pytest
 
+from app.services import ai_providers_service
 from app.services import llmChatService as groq
 from app.services.ai_providers_service import ProviderConfig
 
@@ -172,6 +173,55 @@ def test_openai_has_a_larger_token_budget_than_groq():
     assert groq.token_budget(_openai_provider()) > groq.token_budget(_provider())
     big = [{"role": "user", "content": "x" * (3 * 6500)}]
     assert groq.build_request_body(_openai_provider(), big)["max_completion_tokens"] == groq.MAX_COMPLETION_TOKENS
+
+
+def _axhub_provider(model: str = "gemma-4-E2B") -> ProviderConfig:
+    return ProviderConfig(id="a", name="AX Hub Gemma 4", baseUrl="http://172.20.0.1:18081", model=model, apiKey="")
+
+
+def test_axhub_is_recognized_only_once_configured(monkeypatch):
+    monkeypatch.setattr(ai_providers_service.env_settings, "AXHUB_AI_URL", "http://172.20.0.1:18081")
+    assert groq.vendor_label(_axhub_provider()) == "AX Hub Gemma 4"
+    assert groq.token_budget(_axhub_provider()) == groq.AXHUB_PROMPT_TOKEN_BUDGET
+
+
+def test_axhub_uses_max_tokens_not_max_completion_tokens(monkeypatch):
+    monkeypatch.setattr(ai_providers_service.env_settings, "AXHUB_AI_URL", "http://172.20.0.1:18081")
+    body = groq.build_request_body(_axhub_provider(), [{"role": "user", "content": "hi"}], TOOLS)
+    assert "max_tokens" in body and "max_completion_tokens" not in body
+    assert "reasoning_effort" not in body and "include_reasoning" not in body
+    assert body["tools"] == TOOLS and body["tool_choice"] == "auto"
+
+
+def test_axhub_request_omits_authorization_header_when_no_token(monkeypatch):
+    monkeypatch.setattr(ai_providers_service.env_settings, "AXHUB_AI_URL", "http://172.20.0.1:18081")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["has_auth"] = "authorization" in request.headers
+        return _ok({"role": "assistant", "content": "hi from gemma"})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(groq.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+
+    result = asyncio.run(groq.chat(_axhub_provider(), [{"role": "user", "content": "hi"}]))
+    assert result["ok"] and captured["has_auth"] is False
+
+
+def test_axhub_request_sends_bearer_token_when_configured(monkeypatch):
+    monkeypatch.setattr(ai_providers_service.env_settings, "AXHUB_AI_URL", "http://172.20.0.1:18081")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["auth"] = request.headers.get("authorization")
+        return _ok({"role": "assistant", "content": "hi"})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(groq.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+
+    provider = ProviderConfig(id="a", name="AX Hub Gemma 4", baseUrl="http://172.20.0.1:18081", model="gemma-4-E2B", apiKey="tok")
+    result = asyncio.run(groq.chat(provider, [{"role": "user", "content": "hi"}]))
+    assert result["ok"] and captured["auth"] == "Bearer tok"
 
 
 def test_openai_errors_are_labelled_openai(monkeypatch):

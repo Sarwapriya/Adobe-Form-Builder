@@ -29,6 +29,7 @@ DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 # Base URL only — chat_completions_url() appends /chat/completions itself.
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENROUTER_MODEL = "google/gemma-4-26b-a4b-it:free"
+DEFAULT_AXHUB_MODEL = "gemma-4-E2B"
 _CHAT_SUFFIX = "/chat/completions"
 
 
@@ -145,6 +146,27 @@ def is_openai_base_url(base_url: str) -> bool:
     return _host(base_url) == "api.openai.com"
 
 
+def is_axhub_base_url(base_url: str) -> bool:
+    """AX Hub has no fixed public hostname (it's a VM-internal address, e.g.
+    172.20.0.1) — matched against whatever AXHUB_AI_URL is actually
+    configured to, rather than a hardcoded host like the Groq/OpenAI checks."""
+    configured = _host(env_settings.AXHUB_AI_URL or "")
+    return bool(configured) and _host(base_url) == configured
+
+
+def _axhub_env_provider_config() -> Optional[ProviderConfig]:
+    url = (env_settings.AXHUB_AI_URL or "").strip()
+    if not url or not env_settings.AXHUB_ENABLED:
+        return None
+    return ProviderConfig(
+        id=None,
+        name="AX Hub Gemma 4",
+        baseUrl=normalize_base_url(url),
+        model=env_settings.AXHUB_MODEL or DEFAULT_AXHUB_MODEL,
+        apiKey=(env_settings.AXHUB_AI_TOKEN or "").strip(),
+    )
+
+
 def _first_enabled_row(db: Session, matches, default_model: str) -> Optional[ProviderConfig]:
     for row in list_ai_providers(db):
         if not row.isEnabled or not matches(row.baseUrl):
@@ -155,14 +177,60 @@ def _first_enabled_row(db: Session, matches, default_model: str) -> Optional[Pro
     return None
 
 
+def _openai_provider_config(db: Session) -> Optional[ProviderConfig]:
+    row = _first_enabled_row(db, is_openai_base_url, DEFAULT_OPENAI_MODEL)
+    if row is not None:
+        return row
+    openai_key = (env_settings.OPENAI_API_KEY or "").strip()
+    if openai_key and env_settings.OPENAI_ENABLED:
+        return ProviderConfig(
+            id=None, name="OpenAI", baseUrl=DEFAULT_OPENAI_BASE_URL,
+            model=env_settings.OPENAI_MODEL or DEFAULT_OPENAI_MODEL, apiKey=openai_key,
+        )
+    return None
+
+
+def _groq_provider_config(db: Session) -> Optional[ProviderConfig]:
+    row = _first_enabled_row(db, is_groq_base_url, DEFAULT_GROQ_MODEL)
+    if row is not None:
+        return row
+    groq_key = (env_settings.GROQ_API_KEY or "").strip()
+    if groq_key and env_settings.GROQ_ENABLED:
+        return ProviderConfig(
+            id=None, name="Groq", baseUrl=DEFAULT_GROQ_BASE_URL,
+            model=env_settings.GROQ_MODEL or DEFAULT_GROQ_MODEL, apiKey=groq_key,
+        )
+    return None
+
+
 def get_chat_provider_config(db: Session) -> Optional[ProviderConfig]:
-    """The ONE provider the AI chatbot uses, in priority order:
+    """The ONE provider the AI chatbot uses.
+
+    If `AI_PROVIDER` is set ("openai" | "groq" | "axhub-gemma4"), it pins the
+    chatbot to exactly that provider — no automatic fallback to a different
+    vendor if it's unset/unreachable/misconfigured (a deliberate switch to
+    axhub-gemma4 must never silently fall back to, and bill, OpenAI/Groq, and
+    vice versa). An unrecognized value fails closed (`None`) rather than
+    silently reverting to auto-selection.
+
+    Otherwise (unset/empty — today's unchanged default), auto-selects in
+    priority order:
     1. the first enabled `fq.AiProviders` row pointing at api.openai.com with a key,
     2. the `OPENAI_*` environment variables,
     3. the first enabled api.groq.com row with a key,
     4. the `GROQ_*` environment variables.
     Never FabriX or any other vendor's row. `None` means the chatbot has no
     usable LLM configured."""
+    forced = (env_settings.AI_PROVIDER or "").strip().lower()
+    if forced:
+        if forced == "openai":
+            return _openai_provider_config(db)
+        if forced == "groq":
+            return _groq_provider_config(db)
+        if forced == "axhub-gemma4":
+            return _axhub_env_provider_config()
+        return None
+
     row = _first_enabled_row(db, is_openai_base_url, DEFAULT_OPENAI_MODEL)
     if row is not None:
         return row
