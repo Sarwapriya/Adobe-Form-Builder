@@ -132,6 +132,24 @@ describe("buildQuestionMasterRows", () => {
     expect(byCode["consentExtra1"].mandatory_yn).toBe("Y");
   });
 
+  it("a builder-authored mobileNumber field (unlike legacy callingCode) defaults mandatory_yn to N, and respects an explicit required: true", () => {
+    const base = sampleForm();
+    const { callingCode: _callingCode, ...fieldsWithoutCallingCode } = base.fields;
+    const builderForm: FormDefinition = {
+      ...base,
+      fields: {
+        ...fieldsWithoutCallingCode,
+        mobileNumber: { labelByLocale: { en_GB: "Mobile number" }, countries: ["AE"], dropdownFirstEntryByLocale: { en_GB: "Select" } },
+      },
+    };
+    const optionalRows = buildQuestionMasterRows(builderForm, "MX", "F2H26").filter((r) => r.locale === "en_GB");
+    expect(optionalRows.find((r) => r.answer_code === "mobileNumber")!.mandatory_yn).toBe("N");
+
+    builderForm.fields.mobileNumber!.required = true;
+    const requiredRows = buildQuestionMasterRows(builderForm, "MX", "F2H26").filter((r) => r.locale === "en_GB");
+    expect(requiredRows.find((r) => r.answer_code === "mobileNumber")!.mandatory_yn).toBe("Y");
+  });
+
   it("uses the generated-HTML input id as answer_code for firstName/lastName/email/mobileNumber, per explicit correction", () => {
     const byCode = Object.fromEntries(enRows.map((r) => [r.question_code, r]));
     expect(byCode["FIRSTNAME"].answer_code).toBe("firstName");

@@ -201,6 +201,22 @@ def test_oc_html_omits_name_email_and_privacy_uses_floating_submit_bar():
     assert idx.class_count.get("container_oc", 0) == 1
 
 
+def test_mobile_number_required_toggles_parsley_required_and_star():
+    form = sample_form_definition()
+    form.fields.mobileNumber = {"labelByLocale": {"en_GB": "Mobile Number"}, "countries": ["AE"], "dropdownFirstEntryByLocale": {}}
+
+    optional_file = _build_ff(form)
+    optional_idx = _index(optional_file.contents)
+    assert "data-parsley-required" not in optional_idx.by_id["mobileNumber"].attrs
+    assert '<p class="form_label"></p>' in optional_file.contents
+
+    form.fields.mobileNumber.required = True
+    required_file = _build_ff(form)
+    required_idx = _index(required_file.contents)
+    assert required_idx.by_id["mobileNumber"].attrs.get("data-parsley-required") == "true"
+    assert '<p class="form_label"><span class="star">*</span></p>' in required_file.contents
+
+
 def _with_privacy(required=None, variants=None):
     from app.form_pipeline.form.definition import PrivacyPolicyMeta
 

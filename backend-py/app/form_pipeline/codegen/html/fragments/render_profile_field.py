@@ -73,15 +73,19 @@ def render_profile_fields(
         parts.append(f'<div class="form_text_group">{"".join(name_fields)}</div>')
 
     if callingCode or mobileNumber:
+        mobile_number_required = bool(mobileNumber and mobileNumber.required)
+        star = '<span class="star">*</span>' if mobile_number_required else ""
+        required_attr = 'data-parsley-required="true" ' if mobile_number_required else ""
         parts.append(
             '<div class="form_text_bx select_bx">'
-            '<p class="form_label"></p>'
+            f'<p class="form_label">{star}</p>'
             '<div class="select_wrap">'
             '<select autocomplete="off" data-parsley-error-message="Select a value" data-parsley-required-if="#mobileNumber" '
             'data-parsley-validate-if-empty="true" data-pt-api="y" id="callingCode" name="callingCode"></select>'
             '<div class="input_wrap">'
             '<input autocapitalize="none" autocomplete="off" autocorrect="off" data-parsley-trigger="blur" '
             'data-parsley-mobile-number-by-country="true" data-parsley-mobile-number-by-country-message="Enter a valid mobile number" '
+            f'{required_attr}'
             'data-parsley-type-message="Digits are allowed" data-parsley-type="digits" data-pt-api="y" id="mobileNumber" '
             'maxlength="10" name="mobileNumber" placeholder="" spellcheck="false" type="text">'
             '<div class="btn_clear"></div></div></div>'

@@ -50,6 +50,7 @@ const mobileNumberFieldMetaSchema = localizedFieldMetaSchema.extend({
   countries: z.array(z.string()),
   countriesByLocale: z.record(z.string(), z.array(z.string())).optional(),
   dropdownFirstEntryByLocale: localeTextMap,
+  required: z.boolean().optional(),
 });
 
 const privacyPolicyMetaSchema = z.object({

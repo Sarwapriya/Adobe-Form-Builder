@@ -105,6 +105,12 @@ export interface MobileNumberFieldMeta extends LocalizedFieldMeta {
    * empty entry means "fall back to `countries`", not "no countries". */
   countriesByLocale?: Partial<Record<LocaleCode, string[]>>;
   dropdownFirstEntryByLocale: Record<LocaleCode, string>;
+  /** Whether a visitor must fill this in before Submit (adds `data-parsley-
+   * required="true"` to the generated `#mobileNumber` input plus a `*` next
+   * to its label — see renderProfileField.ts). Absent means `false` —
+   * mobile number has never actually been enforced as mandatory before this
+   * flag existed, so this preserves that default exactly. Builder-configurable. */
+  required?: boolean;
 }
 
 /** Resolves the effective country list for one locale of a builder-authored

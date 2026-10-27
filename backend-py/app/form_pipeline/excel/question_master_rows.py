@@ -166,7 +166,10 @@ def _build_profile_field_rows(fields: ProfileFieldSet, locale: LocaleCode, defau
                 question_code="HPP_CODE",
                 question_text_full=resolve_localized_text(mobile_field.labelByLocale, locale, default_locale),
                 question_text_alias="mobileNumber",
-                mandatory_yn="Y",
+                # callingCode (Excel-sourced, legacy) has no `required` concept and
+                # has always exported as mandatory; mobileNumber (builder-authored)
+                # defaults to optional absent an explicit required=True.
+                mandatory_yn=_yn(bool(fields.mobileNumber.required) if fields.mobileNumber else True),
                 local_yn="Local",
                 type="Free text",
                 answer_code="mobileNumber",

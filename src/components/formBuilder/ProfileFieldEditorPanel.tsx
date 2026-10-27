@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Autocomplete, Chip, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Autocomplete, Chip, FormControlLabel, Stack, Switch, TextField, Typography } from "@mui/material";
 import type { FormVariant, TranslationTarget } from "@formbuilder/shared";
 import { CALLING_CODES, resolveCountryName, resolveMobileNumberCountries } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
@@ -452,6 +452,23 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
               }
             />
           )}
+        />
+      )}
+
+      {fieldKey === "mobileNumber" && definition?.fields.mobileNumber && (
+        <FormControlLabel
+          control={
+            <Switch
+              checked={!!definition.fields.mobileNumber.required}
+              onChange={(e) =>
+                updateDefinition((d) => ({
+                  ...d,
+                  fields: { ...d.fields, mobileNumber: { ...d.fields.mobileNumber!, required: e.target.checked } },
+                }))
+              }
+            />
+          }
+          label="Required (must be filled in before Submit)"
         />
       )}
     </Stack>

@@ -164,7 +164,10 @@ function buildProfileFieldRows(fields: ProfileFieldSet, locale: LocaleCode, defa
           question_code: "HPP_CODE",
           question_text_full: resolveLocalizedText(mobileField.labelByLocale, locale, defaultLocale),
           question_text_alias: "mobileNumber",
-          mandatory_yn: "Y",
+          // callingCode (Excel-sourced, legacy) has no `required` concept and has
+          // always exported as mandatory; mobileNumber (builder-authored) defaults
+          // to optional absent an explicit `required: true` — see MobileNumberFieldMeta.
+          mandatory_yn: yn(fields.mobileNumber ? fields.mobileNumber.required ?? false : true),
           local_yn: "Local",
         },
         "Free text",

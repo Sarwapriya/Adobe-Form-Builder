@@ -110,6 +110,33 @@ describe("generateSolution", () => {
     expect(first).toContain('[dir="rtl"]');
   });
 
+  it("mobile number required=true adds data-parsley-required and a label star; unset/false does not", () => {
+    const base = sampleFormDefinition();
+    const config = defaultBuilderConfig();
+    const fileNames = resolveFileNames(base, config);
+
+    const withoutRequired = {
+      ...base,
+      fields: {
+        ...base.fields,
+        mobileNumber: { labelByLocale: { en_GB: "Mobile Number" }, countries: ["AE"], dropdownFirstEntryByLocale: { en_GB: "Select" } },
+      },
+    };
+    const optionalHtml = generateSolution(withoutRequired, config).find((f) => f.path === fileNames.ffHtml)!.contents;
+    expect(optionalHtml).toContain('<p class="form_label"></p>'); // no star — unique to the callingCode/mobileNumber block in this fixture
+    const optionalInputTag = optionalHtml.match(/<input[^>]*\bid="mobileNumber"[^>]*>/)![0];
+    expect(optionalInputTag).not.toContain("data-parsley-required");
+
+    const withRequired = {
+      ...base,
+      fields: { ...withoutRequired.fields, mobileNumber: { ...withoutRequired.fields.mobileNumber, required: true } },
+    };
+    const requiredHtml = generateSolution(withRequired, config).find((f) => f.path === fileNames.ffHtml)!.contents;
+    expect(requiredHtml).toContain('<p class="form_label"><span class="star">*</span></p>');
+    const requiredInputTag = requiredHtml.match(/<input[^>]*\bid="mobileNumber"[^>]*>/)![0];
+    expect(requiredInputTag).toContain('data-parsley-required="true"');
+  });
+
   it("matches the reference fixture snapshot (ff.html)", () => {
     const form = sampleFormDefinition();
     const config = defaultBuilderConfig();

@@ -96,6 +96,9 @@ class MobileNumberFieldMeta(LocalizedFieldMeta):
     countries: list[str] = Field(default_factory=list)
     countriesByLocale: Optional[dict[LocaleCode, list[str]]] = None
     dropdownFirstEntryByLocale: dict[LocaleCode, str] = Field(default_factory=dict)
+    # Absent/None means optional — mobile number has never actually been
+    # enforced as mandatory before this flag existed (see renderProfileField.ts).
+    required: Optional[bool] = None
 
 
 def resolve_mobile_number_countries(field: MobileNumberFieldMeta, locale: LocaleCode) -> list[str]:

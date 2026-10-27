@@ -136,6 +136,19 @@ def test_derives_mandatory_yn():
     assert by_code["consentExtra1"]["mandatory_yn"] == "Y"
 
 
+def test_builder_authored_mobile_number_defaults_mandatory_yn_to_n_and_respects_required():
+    form = _sample_form()
+    form.fields.callingCode = None
+    form.fields.mobileNumber = {"labelByLocale": {"en_GB": "Mobile number"}, "countries": ["AE"], "dropdownFirstEntryByLocale": {"en_GB": "Select"}}
+
+    optional_rows = [r for r in build_question_master_rows(form, "MX", "F2H26") if r["locale"] == "en_GB"]
+    assert next(r for r in optional_rows if r["answer_code"] == "mobileNumber")["mandatory_yn"] == "N"
+
+    form.fields.mobileNumber.required = True
+    required_rows = [r for r in build_question_master_rows(form, "MX", "F2H26") if r["locale"] == "en_GB"]
+    assert next(r for r in required_rows if r["answer_code"] == "mobileNumber")["mandatory_yn"] == "Y"
+
+
 def test_uses_generated_html_input_id_as_answer_code():
     rows = build_question_master_rows(_sample_form(), "MX", "F2H26")
     en_rows = [r for r in rows if r["locale"] == "en_GB"]
