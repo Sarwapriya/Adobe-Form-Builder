@@ -44,6 +44,12 @@ AXHUB_PROMPT_TOKEN_BUDGET = 6000
 MIN_COMPLETION_TOKENS = 1024
 MAX_COMPLETION_TOKENS = 3072
 REQUEST_TIMEOUT_SECONDS = 45
+# AX Hub's controller describes itself as "on-demand" — it may load the
+# model into memory on first request after being idle, observed to exceed
+# 10s even just for auth to resolve. A cold start can plausibly take much
+# longer than any hosted vendor's steady-state response time, so this gets
+# its own, longer budget rather than sharing REQUEST_TIMEOUT_SECONDS.
+AXHUB_REQUEST_TIMEOUT_SECONDS = 90
 MAX_ATTEMPTS = 3
 # Waiting longer than this for a rate-limit window to reopen would leave the
 # user staring at a spinner — fail fast with a friendly message instead.
@@ -205,11 +211,12 @@ async def chat(
     vendor = vendor_label(provider)
     log_prefix = f"[llmChatService] vendor={vendor} model={provider.model}"
 
+    timeout_seconds = AXHUB_REQUEST_TIMEOUT_SECONDS if is_axhub_base_url(provider.baseUrl) else REQUEST_TIMEOUT_SECONDS
     last_failure: dict[str, Any] = {"ok": False, "kind": "error", "error": f"{vendor} request failed"}
     for attempt in range(1, MAX_ATTEMPTS + 1):
         started = time.time()
         try:
-            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
                 response = await client.post(chat_completions_url(provider), json=body, headers=headers)
         except httpx.TimeoutException:
             print(f"{log_prefix} attempt={attempt} status=timeout")
