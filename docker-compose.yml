@@ -1,0 +1,60 @@
+# Single-VM deployment for the ax-hub-net shared Docker network (see
+# DEPLOYMENT.md). This locks in every flag that previously had to be
+# retyped by hand on each redeploy -- network, ports, env-file, both
+# backend mounts, the frontend's SUBPATH build arg -- so a wrong or
+# missing flag is a one-time fix to this file instead of a recurring
+# mistake on some future `docker run`.
+#
+# Usage, from the repo root on the VM:
+#   docker compose up -d --build
+#
+# ax-hub-net is NOT created by this file -- it's the VM's shared hub
+# network, already used by unrelated services (mcp-mssql, the ax-hub
+# gateway, etc.), so it's declared external here rather than owned by
+# this compose project; `docker network create ax-hub-net` must already
+# have been run once, outside of this file, before first use.
+#
+# ${HOME} below is read from the shell environment `docker compose` runs
+# in (not from a repo .env file) -- on this VM that's
+# /home/axsdsmeadmin, resolving to the same
+# ~/applications/formIQ/secrets/sftp/adobe_sftp_key path used throughout
+# DEPLOYMENT.md. The backend needs the specific KEY FILE mounted onto
+# /app/keys/adobe_sftp_key, not its parent directory -- see
+# sftp_service.py's os.path.isfile check, which is exactly what broke
+# when that distinction was lost in past manual `docker run` commands.
+
+services:
+  formiq-backend:
+    build:
+      context: .
+      dockerfile: backend-py/Dockerfile
+    container_name: formiq-backend
+    restart: unless-stopped
+    networks:
+      - ax-hub-net
+    ports:
+      - "4001:4001"
+    env_file:
+      - backend-py/.env
+    volumes:
+      - ./backend-py/uploads:/app/uploads
+      - ${HOME}/applications/formIQ/secrets/sftp/adobe_sftp_key:/app/keys/adobe_sftp_key:ro
+
+  formiq:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SUBPATH: /formiq
+    container_name: formiq
+    restart: unless-stopped
+    networks:
+      - ax-hub-net
+    ports:
+      - "8081:80"
+    depends_on:
+      - formiq-backend
+
+networks:
+  ax-hub-net:
+    external: true

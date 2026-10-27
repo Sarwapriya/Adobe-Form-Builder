@@ -33,7 +33,22 @@ It's safe to re-run — it no-ops if an admin already exists (see `backend-py/sc
 
 ## 2. Backend deployment
 
-### Docker (recommended)
+### Single-VM deployment: `docker-compose.yml` (recommended)
+
+For the common case of both containers on one VM, sharing one Docker network (the `ax-hub-net` shared-hub topology this project currently runs under) — use the repo-root `docker-compose.yml` instead of hand-typed `docker run` commands. It locks in every flag (network, ports, env-file, both backend mounts including the SFTP key, the frontend's `SUBPATH` build arg) in one version-controlled place, so a flag typo or a stale copy-pasted command from an old chat/notes can't silently break a redeploy the way it has in the past (see its own header comment for the detail on the SFTP key file-vs-directory mount mistake this was written to prevent).
+
+```bash
+cd ~/applications/formIQ/Adobe-Form-Builder   # must run from here — compose resolves its relative paths against the compose file's own directory
+git pull
+docker network create ax-hub-net   # one-time only, if it doesn't already exist
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail 30 formiq-backend formiq
+```
+
+To redeploy after a code change, the same `docker compose up -d --build` rebuilds and recreates only what changed. The manual, per-container `docker run` instructions below remain accurate (e.g. for a topology where the two containers live on separate hosts, or compose isn't available) but are no longer the recommended path for this project's actual deployment shape.
+
+### Docker (manual `docker run`, see the compose note above)
 
 ```
 docker build -f backend-py/Dockerfile -t formbuilder-backend-py .
