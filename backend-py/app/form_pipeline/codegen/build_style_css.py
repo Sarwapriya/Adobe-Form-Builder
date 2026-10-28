@@ -155,6 +155,33 @@ _SUBHEADING_OVERRIDES = """
 }
 """
 
+# A text/shortText builder question (e.g. a one-line "Company Name" field)
+# keeps the same .form_check_title/<h3> markup every other question type
+# uses -- required so the reference script's generic, hardcoded
+# .form_check_title h3 population loop still finds and fills it (see
+# render_question_module.py's own doc comment) -- but visually it should
+# read like a small field label (.form_label), not a big bold
+# survey-question heading. Only matches .form_check_module_field's own h3,
+# so every other question type is completely unaffected.
+_FIELD_QUESTION_TITLE_OVERRIDES = """
+/* --- text/shortText question title styled like a field label (not present in the
+   reference stylesheet, which never had free-text questions at all) --- */
+.form_check_module_field .form_check_title h3 {
+  color: #555555;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: normal;
+  line-height: 19px;
+  word-break: normal;
+}
+
+@media screen and (max-width:767px) {
+  .form_check_module_field .form_check_title h3 {
+    font-size: 12px;
+  }
+}
+"""
+
 
 def build_style_css(file_names: FileNames, locale: Optional[str] = None) -> GeneratedFile:
     """One stylesheet per language (`<lang>-<projectCode>.css`; the form's default
@@ -162,5 +189,8 @@ def build_style_css(file_names: FileNames, locale: Optional[str] = None) -> Gene
     the same full stylesheet — the `[dir="rtl"]`/`[lang="he"]` rules already
     scope themselves to the page's own attributes, so an English page simply
     never matches them."""
-    contents = f"{_REFERENCE_CSS}\n{_COLOR_SCHEME_OVERRIDE}\n{_FONT_OVERRIDES}\n{_RTL_OVERRIDES}\n{_SUBHEADING_OVERRIDES}"
+    contents = (
+        f"{_REFERENCE_CSS}\n{_COLOR_SCHEME_OVERRIDE}\n{_FONT_OVERRIDES}\n{_RTL_OVERRIDES}\n"
+        f"{_SUBHEADING_OVERRIDES}\n{_FIELD_QUESTION_TITLE_OVERRIDES}"
+    )
     return GeneratedFile(path=language_file_names(file_names, locale).css, contents=contents)

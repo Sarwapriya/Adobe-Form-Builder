@@ -4,6 +4,17 @@ Renders one `.form_check_module` for a question. Markup stays text-empty
 (all text is injected at runtime by the byte-identical reference FF.js/OC.js
 from the data file) — every answer here always wraps its text in a `<p>` and
 only adds an `<img>` when the model actually has image data.
+
+`text`/`shortText` questions keep the exact same `.form_check_title`/`<h3>`/
+`<p>` structure as every other question type on purpose -- the reference
+FF.js/OC.js populates every question's heading/subheading generically via a
+hardcoded `.form_check_title h3`/`.form_check_title p` selector, so changing
+the structure here would silently stop that text from ever being injected at
+runtime. The extra `form_check_module_field` class only drives a CSS
+override (build_style_css.py's FIELD_QUESTION_TITLE_OVERRIDES) making a
+one-line text/shortText field's title render like a small field label
+instead of a full survey-question heading -- visual-only, zero
+behavior-script risk.
 """
 
 from __future__ import annotations
@@ -20,7 +31,7 @@ def render_question_module(q: QuestionDefinition) -> str:
     if q.controlType == "text":
         qid = escape_html(q.id)
         return (
-            f'<div class="form_check_module" id="{qid}">'
+            f'<div class="form_check_module form_check_module_field" id="{qid}">'
             + title_block
             + '<div class="form_text_bx"><div class="input_wrap">'
             + f'<textarea id="{qid}" name="{qid}" rows="3" data-pt-api="y"></textarea>'
@@ -30,7 +41,7 @@ def render_question_module(q: QuestionDefinition) -> str:
     if q.controlType == "shortText":
         qid = escape_html(q.id)
         return (
-            f'<div class="form_check_module" id="{qid}">'
+            f'<div class="form_check_module form_check_module_field" id="{qid}">'
             + title_block
             + '<div class="form_text_bx"><div class="input_wrap">'
             + f'<input type="text" id="{qid}" name="{qid}" data-pt-api="y">'

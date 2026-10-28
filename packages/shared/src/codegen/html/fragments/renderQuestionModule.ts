@@ -14,6 +14,17 @@ import { escapeHtml } from "../../js/escaping";
  * the reference never validates questions through Parsley; the byte-identical script's
  * own `enableDisableSubmit()` is what gates the Submit button (hardcoded to the first
  * question's first three answer ids, unchanged from the reference).
+ *
+ * `text`/`shortText` questions keep the exact same `.form_check_title`/`<h3>`/`<p>`
+ * structure as every other question type on purpose — the reference FF.js/OC.js
+ * populates every question's heading/subheading generically via `.find("div.
+ * form_check_title h3")`/`.find("div.form_check_title p")`, hardcoded to that exact
+ * selector, so changing the structure here would silently stop that text from ever
+ * being injected at runtime (see SGE-EN_F2H26_FF.js's setQuestionData-equivalent
+ * loop). The extra `form_check_module_field` class only drives a CSS override
+ * (buildStyleCss.ts's FIELD_QUESTION_TITLE_OVERRIDES) making a one-line text/
+ * shortText field's title render like a small field label instead of a full
+ * survey-question heading — a visual-only fix, zero behavior-script risk.
  */
 export function renderQuestionModule(q: QuestionDefinition): string {
   const requiredStar = q.required ? '<span class="star">*</span>' : "";
@@ -21,7 +32,7 @@ export function renderQuestionModule(q: QuestionDefinition): string {
 
   if (q.controlType === "text") {
     return (
-      `<div class="form_check_module" id="${escapeHtml(q.id)}">` +
+      `<div class="form_check_module form_check_module_field" id="${escapeHtml(q.id)}">` +
       titleBlock +
       `<div class="form_text_bx"><div class="input_wrap">` +
       `<textarea id="${escapeHtml(q.id)}" name="${escapeHtml(q.id)}" rows="3" data-pt-api="y"></textarea>` +
@@ -31,7 +42,7 @@ export function renderQuestionModule(q: QuestionDefinition): string {
 
   if (q.controlType === "shortText") {
     return (
-      `<div class="form_check_module" id="${escapeHtml(q.id)}">` +
+      `<div class="form_check_module form_check_module_field" id="${escapeHtml(q.id)}">` +
       titleBlock +
       `<div class="form_text_bx"><div class="input_wrap">` +
       `<input type="text" id="${escapeHtml(q.id)}" name="${escapeHtml(q.id)}" data-pt-api="y">` +

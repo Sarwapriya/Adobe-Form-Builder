@@ -175,6 +175,35 @@ const SUBHEADING_OVERRIDES = `
 `;
 
 /**
+ * A `text`/`shortText` builder question (e.g. a one-line "Company Name" field) keeps
+ * the same `.form_check_title`/`<h3>` markup every other question type uses — required
+ * so the reference script's generic, hardcoded `.find("div.form_check_title h3")`
+ * population loop still finds and fills it (see renderQuestionModule.ts's own doc
+ * comment) — but visually it should read like a small field label (`.form_label`,
+ * used by Email/Mobile Number/etc.), not a big bold survey-question heading. This
+ * override only matches `.form_check_module_field`'s own `h3`, so every other
+ * question type (radio/checkbox/dropdown) is completely unaffected.
+ */
+const FIELD_QUESTION_TITLE_OVERRIDES = `
+/* --- text/shortText question title styled like a field label (not present in the
+   reference stylesheet, which never had free-text questions at all) --- */
+.form_check_module_field .form_check_title h3 {
+  color: #555555;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: normal;
+  line-height: 19px;
+  word-break: normal;
+}
+
+@media screen and (max-width:767px) {
+  .form_check_module_field .form_check_title h3 {
+    font-size: 12px;
+  }
+}
+`;
+
+/**
  * One stylesheet per language (`<lang>-<projectCode>.css`; the form's default language when
  * `locale` is omitted). Every language's file currently carries the same full stylesheet —
  * the `[dir="rtl"]`/`[lang="he"]` rules above already scope themselves to the page's own
@@ -184,6 +213,6 @@ const SUBHEADING_OVERRIDES = `
 export function buildStyleCss(fileNames: FileNames, locale?: LocaleCode): GeneratedFile {
   return {
     path: languageFileNames(fileNames, locale).css,
-    contents: `${referenceCss}\n${COLOR_SCHEME_OVERRIDE}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}\n${SUBHEADING_OVERRIDES}`,
+    contents: `${referenceCss}\n${COLOR_SCHEME_OVERRIDE}\n${FONT_OVERRIDES}\n${RTL_OVERRIDES}\n${SUBHEADING_OVERRIDES}\n${FIELD_QUESTION_TITLE_OVERRIDES}`,
   };
 }
