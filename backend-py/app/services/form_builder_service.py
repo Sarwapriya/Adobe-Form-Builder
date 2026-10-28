@@ -488,49 +488,26 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     if len(validation.errors) > 0:
         return {"outcome": "invalid", "validation": validation}
 
-    # A hand-edit made via the Edit Files window (update_generated_file_content)
-    # lives only on the currently-published version's on-disk file — this
-    # publish is about to replace that version with a freshly regenerated
-    # one, which would otherwise silently discard the edit. Carry the edited
-    # content (and who/when edited it) forward by file name onto the newly
-    # generated file of the same name, so a hand-edit survives every
-    # subsequent publish instead of reverting to the plain generated output.
-    # Accepted tradeoff: if the underlying form definition changes in a way
-    # that would also need that specific file's content to change, the
-    # carried-forward edit can go stale — the admin re-edits it in that case,
-    # same as any other hand-edit.
-    edited_by_filename: dict[str, tuple[str, datetime, Optional[str]]] = {}
-    if form.publishedVersionId:
-        previously_edited = db.execute(
-            select(GeneratedFileEntity).where(
-                GeneratedFileEntity.formVersionId == form.publishedVersionId,
-                GeneratedFileEntity.editedAt.isnot(None),
-            )
-        ).scalars()
-        for f in previously_edited:
-            try:
-                with open(absolute_file_path(f.filePath), "r", encoding="utf-8", newline="") as fh:
-                    edited_by_filename[f.fileName] = (fh.read(), f.editedAt, f.editedByUserId)
-            except OSError:
-                continue
-
+    # The form definition is the single source of truth: every publish
+    # regenerates every file purely from it, full stop. A hand-edit made via
+    # the Edit Files window (update_generated_file_content) never survives a
+    # subsequent publish — there is deliberately no "carry forward the old
+    # edited content" step here any more (there used to be; it caused a
+    # config-level change, like a newly-required field, to silently keep
+    # producing stale output for any file that happened to have an old
+    # hand-edit, which is exactly the two-versions-of-one-campaign problem
+    # this form shouldn't have). A hand-edit is still useful between
+    # publishes (e.g. a quick post-publish patch pushed via Deploy without a
+    # full republish) — it's just never preserved across the next publish.
+    #
     # Files already generated directly on this draft (via a pre-publish Edit
     # Files session — see ensure_draft_generated_files) share draft_version.id
     # with what's about to be inserted below, so they'd otherwise become
-    # duplicate rows for the same (formVersionId, fileName); delete them
-    # first. Any hand-edit among them is more recent than whatever the
-    # previous published version carried above, so it's applied last here
-    # and wins on conflict.
+    # duplicate rows for the same (formVersionId, fileName); delete them first.
     existing_draft_files = list(
         db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == draft_version.id)).scalars()
     )
     for f in existing_draft_files:
-        if f.editedAt is not None:
-            try:
-                with open(absolute_file_path(f.filePath), "r", encoding="utf-8", newline="") as fh:
-                    edited_by_filename[f.fileName] = (fh.read(), f.editedAt, f.editedByUserId)
-            except OSError:
-                continue
         db.delete(f)
     db.flush()
 
@@ -538,18 +515,12 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     file_names: FileNames = generation["fileNames"]
     saved = save_form_version_generated_files(form.subsidiaryId, draft_version.id, files)
     for f in saved:
-        edited = edited_by_filename.get(f.fileName)
-        if edited is not None:
-            with open(absolute_file_path(f.relativePath), "w", encoding="utf-8", newline="") as fh:
-                fh.write(edited[0])
         db.add(
             GeneratedFileEntity(
                 formVersionId=draft_version.id,
                 fileName=f.fileName,
                 filePath=f.relativePath,
                 fileType=classify_file_type(f.fileName, file_names),
-                editedAt=edited[1] if edited is not None else None,
-                editedByUserId=edited[2] if edited is not None else None,
             )
         )
     db.flush()
@@ -663,9 +634,9 @@ def _editable_form_version_id(form: Form) -> Optional[str]:
     a never-yet-published draft targets `currentDraftVersionId` instead, so
     hand-editing can start before the first Publish. Once published, further
     edits here intentionally stay on the published version, not the fresh
-    draft publish_form clones afterward — see that function's own carry-
-    forward logic for how a published hand-edit survives into the next
-    publish regardless."""
+    draft publish_form clones afterward — and a future Publish always
+    regenerates every file fresh from the definition regardless, so a
+    hand-edit made here only lasts until the next publish (see publish_form)."""
     if form.status == "published" and form.publishedVersionId:
         return form.publishedVersionId
     if form.status == "draft" and form.currentDraftVersionId:

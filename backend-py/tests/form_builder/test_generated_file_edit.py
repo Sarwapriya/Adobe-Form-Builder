@@ -150,15 +150,18 @@ class TestUpdateGeneratedFileContent:
             form_builder_service.get_generated_file_content(db_session, form_id, "00000000-0000-0000-0000-000000000000")
 
 
-class TestHandEditSurvivesRepublish:
-    """A hand-edit lives only on the published version's on-disk file —
-    re-publishing used to fully regenerate every file from the
-    FormDefinition and silently discard it. publish_form now carries a
-    hand-edited file's content (and who/when edited it) forward by file
-    name onto the freshly generated file replacing it."""
+class TestHandEditDoesNotSurviveRepublish:
+    """The form definition is the single source of truth — every publish
+    regenerates every file purely from it, full stop. A hand-edit made via
+    Edit Files only lasts until the next publish; it is never carried
+    forward (an earlier version of publish_form did carry it forward, which
+    meant a config-level change, like a newly-required field, could keep
+    silently producing stale output for any file that happened to have an
+    old hand-edit — exactly the "two versions of one campaign" problem a
+    form shouldn't have)."""
 
-    def test_republishing_keeps_the_hand_edited_content(
-        self, client: TestClient, admin_headers: dict, admin_user, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    def test_republishing_discards_the_hand_edited_content(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
     ):
         form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
         files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
@@ -172,8 +175,8 @@ class TestHandEditSurvivesRepublish:
         assert resp.status_code == 200, resp.text
 
         # Re-publish the same form (e.g. after an unrelated draft change) —
-        # this clones a brand new FormVersion/GeneratedFiles and used to
-        # regenerate every file from scratch, wiping the edit above out.
+        # every file, including this hand-edited one, must come back purely
+        # freshly generated.
         publish_resp = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
         assert publish_resp.status_code == 200, publish_resp.text
 
@@ -183,13 +186,14 @@ class TestHandEditSurvivesRepublish:
         # "the first js file", since list ordering isn't guaranteed.
         republished_js = next(f for f in republished_files if f["fileName"] == js_file["fileName"])
         assert republished_js["id"] != js_file["id"], "publish must have produced a new GeneratedFile row"
-        assert republished_js["editedAt"] is not None
-        assert republished_js["editedByUserId"] == admin_user.id
+        assert republished_js["editedAt"] is None
+        assert republished_js["editedByUserId"] is None
 
         republished_content = client.get(
             f"/api/v1/admin/forms/{form_id}/files/{republished_js['id']}", headers=admin_headers
         ).json()["content"]
-        assert republished_content == edited_content
+        assert republished_content == original
+        assert republished_content != edited_content
 
     def test_republishing_a_never_edited_file_stays_freshly_generated(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
@@ -207,10 +211,11 @@ class TestDraftFiles:
     """Edit Files also works before a form is ever published — GET
     /{id}/files generates the file list from the draft definition the first
     time it's needed (ensure_draft_generated_files), a hand-edit survives
-    further Save Draft calls untouched, "Regenerate" explicitly discards
-    hand-edits and rebuilds fresh, and a pre-publish hand-edit carries
-    forward into the form's first publish the same way a republish already
-    carries forward an edit made on a previously published version."""
+    further Save Draft calls untouched (Save Draft never regenerates while
+    files already exist), "Regenerate" explicitly discards hand-edits and
+    rebuilds fresh, and a pre-publish hand-edit is discarded by the form's
+    first Publish the same way any later republish also discards one — see
+    TestHandEditDoesNotSurviveRepublish."""
 
     def test_listing_a_draft_generates_files_on_first_access(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
@@ -287,11 +292,10 @@ class TestDraftFiles:
         resp = client.post(f"/api/v1/admin/forms/{form_id}/files/regenerate", headers=standard_headers)
         assert resp.status_code == 403
 
-    def test_draft_hand_edit_carries_into_first_publish(
+    def test_draft_hand_edit_does_not_carry_into_first_publish(
         self,
         client: TestClient,
         admin_headers: dict,
-        admin_user,
         db_session: Session,
         subsidiary_row: Subsidiary,
         project_code_row: ProjectCode,
@@ -299,9 +303,8 @@ class TestDraftFiles:
         form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
         files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         js_file = next(f for f in files if f["fileType"] == "js")
-        edited_content = client.get(
-            f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers
-        ).json()["content"] + "\n// hand-added pre-publish\n"
+        original_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
+        edited_content = original_content + "\n// hand-added pre-publish\n"
         client.put(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": edited_content}, headers=admin_headers)
 
         pre_publish_draft_version_id = db_session.get(Form, form_id).currentDraftVersionId
@@ -311,12 +314,13 @@ class TestDraftFiles:
 
         published_files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         published_js = next(f for f in published_files if f["fileName"] == js_file["fileName"])
-        assert published_js["editedAt"] is not None
-        assert published_js["editedByUserId"] == admin_user.id
+        assert published_js["editedAt"] is None
+        assert published_js["editedByUserId"] is None
         published_content = client.get(
             f"/api/v1/admin/forms/{form_id}/files/{published_js['id']}", headers=admin_headers
         ).json()["content"]
-        assert published_content == edited_content
+        assert published_content == original_content
+        assert published_content != edited_content
 
         # The pre-publish draft's own GeneratedFile rows (same formVersionId
         # as what's now published, since publish_form promotes that row in
