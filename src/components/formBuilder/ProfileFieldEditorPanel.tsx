@@ -9,6 +9,7 @@ import { localeDir } from "../../utils/localeDir";
 import { MISSING_TRANSLATION_HELPER_TEXT, missingTranslationSx } from "../common/missingTranslationSx";
 import { PENDING_TRANSLATION_HELPER_TEXT, pendingTranslationFor } from "./pendingTranslationHint";
 import { getSubsidiaryPrivacyLinks } from "../../api/subsidiaryPrivacyLinksApi";
+import { listSubsidiaries } from "../../api/subsidiariesApi";
 
 export type ProfileFieldKey =
   | "firstName"
@@ -32,13 +33,14 @@ const FIELD_LABEL: Record<ProfileFieldKey, string> = {
 };
 
 /** Config drawer content for a predefined profile field. Mobile Number gets an
- * extra country picker: every country (CALLING_CODES) is always selectable —
- * a campaign copied into a different subsidiary (e.g. a pan-regional FIFA-WC
- * campaign cloned from SELV into SEEG, whose own real country list is Egypt
- * only) still needs to add whatever countries that specific campaign serves,
- * not just the owning subsidiary's own default one. subsidiaryCountryCodes
- * only drives which countries are pre-selected/suggested by default on a
- * fresh field, never a hard restriction on what can be added — driving both
+ * extra country picker: its options are restricted to the owning subsidiary's
+ * own admin-managed country list (Configuration > Subsidiaries — the same
+ * `Subsidiary.countries` assignment that drives the subsidiary's logo), e.g.
+ * SGE only offers UAE/Qatar/Bahrain/Oman/Kuwait, not the full ~19-country
+ * generic list — so an admin/subsidiary user can't accidentally pick a
+ * country the form's own subsidiary doesn't actually serve. Falls back to the
+ * full generic CALLING_CODES list only when the subsidiary has no countries
+ * assigned yet (an empty picker would otherwise be unusable). Driving both
  * the generated form's calling-code dropdown and its runtime validation
  * (see buildDataJs.ts's synthesized "BUILDER" subsidiary table); Privacy Policy
  * has its own shape (consent text + link text + link URL, not a plain label —
@@ -67,6 +69,22 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
     getSubsidiaryPrivacyLinks(subsidiaryName)
       .then(setPrivacyLinks)
       .catch(() => setPrivacyLinks({}));
+  }, [subsidiaryName]);
+
+  // Restricts the Mobile Number "Countries" picker to this form's own
+  // subsidiary (see this component's doc comment above).
+  const [subsidiaryCountryCodes, setSubsidiaryCountryCodes] = useState<string[]>([]);
+  useEffect(() => {
+    if (!subsidiaryName) {
+      setSubsidiaryCountryCodes([]);
+      return;
+    }
+    listSubsidiaries()
+      .then((subs) => {
+        const match = subs.find((s) => s.name === subsidiaryName);
+        setSubsidiaryCountryCodes(match?.countries.map((c) => c.isoCode) ?? []);
+      })
+      .catch(() => setSubsidiaryCountryCodes([]));
   }, [subsidiaryName]);
 
   useEffect(() => {
@@ -389,10 +407,8 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
     });
   }
 
-  // Always every known country — never restricted to the owning subsidiary's
-  // own list, since a campaign (e.g. copied from another subsidiary) can
-  // legitimately need countries beyond the subsidiary's own default ones.
-  const countryOptions = CALLING_CODES.map((c) => c.countryCode);
+  const countryOptions =
+    subsidiaryCountryCodes.length > 0 ? subsidiaryCountryCodes : CALLING_CODES.map((c) => c.countryCode);
 
   return (
     <Stack spacing={2}>
@@ -447,7 +463,9 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
               placeholder="Add a country"
               helperText={
                 activeLocale === defaultLocale
-                  ? "Shared default for every locale without its own override. Any country can be added."
+                  ? subsidiaryCountryCodes.length > 0
+                    ? "Shared default for every locale without its own override. Limited to this subsidiary's assigned countries (Configuration > Subsidiaries)."
+                    : "Shared default for every locale without its own override. This subsidiary has no countries assigned yet, so every country is selectable."
                   : `Override for ${activeLocale} only — clear it to fall back to the default locale's list.`
               }
             />
