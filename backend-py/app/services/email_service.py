@@ -409,6 +409,90 @@ def send_contribution_submitted_notification(
         print(f"[email_service] Failed to send contribution-submitted email: {err}")
 
 
+# --- Admin-created form published for a subsidiary --------------------------
+
+
+def _build_form_published_message(form_name: str, subsidiary_id: str) -> EmailContent:
+    link = f"{settings.FRONTEND_URL or ''}/my-forms"
+    subject = f"New form ready for your subsidiary: {form_name}"
+    text = (
+        f'An admin published a new form for subsidiary "{subsidiary_id}".\n\n'
+        f"Form: {form_name}\n\n"
+        f"Review it and add translations, questions, or consents as needed: {link}\n"
+    )
+    html = _render_email_html(
+        title="A new form is ready for your subsidiary",
+        intro="An admin published this form — review it and add translations, questions, or consents as needed.",
+        rows=[("Form", form_name), ("Subsidiary", subsidiary_id)],
+        cta_label="Open My Forms",
+        cta_url=link,
+    )
+    return EmailContent(subject=subject, text=text, html=html)
+
+
+def send_form_published_notification(db: Session, recipients: list[str], form_name: str, subsidiary_id: str) -> None:
+    """Never raises — a notification failure can't fail the publish itself."""
+    if not recipients:
+        return
+    try:
+        result = send_email(db, recipients, _build_form_published_message(form_name, subsidiary_id))
+        if not result.ok:
+            print(f"[email_service] Failed to send form-published email: {result.error}")
+    except Exception as err:  # noqa: BLE001
+        print(f"[email_service] Failed to send form-published email: {err}")
+
+
+# --- Deployment verified on the Adobe frontal servers ------------------------
+
+
+def _build_resource_check_succeeded_message(form_id: str, form_name: str, subsidiary_id: str, form_origin: str, urls: list[str]) -> EmailContent:
+    # Ad-hoc forms' own editor lives at a different path than an admin-created
+    # (HR) form's Translate & Extend page — see App.tsx's `my-forms/*` routes.
+    path = f"/my-forms/adhoc/{form_id}" if form_origin == "adhoc" else f"/my-forms/{form_id}"
+    link = f"{settings.FRONTEND_URL or ''}{path}"
+    subject = f"Your campaign is live: {form_name}"
+    intro = "Your campaign's files are confirmed live on the Adobe Campaign servers. Here's the final URL" + (
+        "s" if len(urls) != 1 else ""
+    ) + ":"
+    rows = [("Form", form_name), ("Subsidiary", subsidiary_id)]
+    text = (
+        f"{intro}\n\n"
+        + "".join(f"{label}: {value}\n" for label, value in rows)
+        + "\n"
+        + "".join(f"- {url}\n" for url in urls)
+    )
+    html = _render_email_html(
+        title="Your campaign is live",
+        intro=intro,
+        rows=rows,
+        items=urls,
+        cta_label="Open in FormIQ",
+        cta_url=link,
+    )
+    return EmailContent(subject=subject, text=text, html=html)
+
+
+def send_resource_check_succeeded_notification(
+    db: Session, *, form_id: str, form_name: str, subsidiary_id: str, form_origin: str, urls: list[str]
+) -> bool:
+    """Emails the owning subsidiary's own users (resolve_subsidiary_recipients)
+    once the automatic post-deploy check confirms the files are actually
+    being served. Returns whether it was sent. Never raises."""
+    try:
+        from app.services.subsidiary_recipients import resolve_subsidiary_recipients
+
+        recipients = resolve_subsidiary_recipients(db, subsidiary_id)
+        if not recipients or not urls:
+            return False
+        result = send_email(db, recipients, _build_resource_check_succeeded_message(form_id, form_name, subsidiary_id, form_origin, urls))
+        if not result.ok:
+            print(f"[email_service] Failed to send resource-check success email: {result.error}")
+        return result.ok
+    except Exception as err:  # noqa: BLE001
+        print(f"[email_service] Failed to send resource-check success email: {err}")
+        return False
+
+
 # --- Project code locked -----------------------------------------------------
 
 

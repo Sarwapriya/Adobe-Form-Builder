@@ -57,6 +57,7 @@ from app.utils.background import run_in_background
 from app.services.generation_service import classify_file_type
 from app.services.sftp_service import SftpDeployFile, deploy_generated_files
 from app.services.subsidiary_locale_service import list_subsidiary_locales
+from app.services.subsidiary_recipients import resolve_subsidiary_recipients
 from app.services.zip_service import ZipEntry, build_zip
 from app.utils.query_parsing import resolve_paging
 
@@ -463,6 +464,7 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
     if form is None or not form.currentDraftVersionId:
         return {"outcome": "not_found"}
+    was_already_published = form.status == "published"
 
     draft_version = db.get(FormVersion, form.currentDraftVersionId)
     if draft_version is None:
@@ -573,6 +575,22 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     db.flush()
     form.currentDraftVersionId = new_draft.id
     db.commit()
+
+    # An admin-created form (HR, or an ad-hoc form an admin made directly)
+    # going live for the first time — let that subsidiary's own users know
+    # there's something for them to review/contribute to. Scoped to
+    # origin == "admin" only: an origin == "adhoc" form published via
+    # approve_adhoc_form was submitted by that subsidiary itself, so they
+    # already know about it (see the ad-hoc-submitted notification instead).
+    # First publish only — a later republish after an edit stays silent.
+    if not was_already_published and form.origin == "admin":
+        form_name = form.name
+        subsidiary_id = form.subsidiaryId
+        run_in_background(
+            lambda bg_db: email_service.send_form_published_notification(
+                bg_db, resolve_subsidiary_recipients(bg_db, subsidiary_id), form_name, subsidiary_id
+            )
+        )
 
     return {"outcome": "ok", "validation": validation}
 

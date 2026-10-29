@@ -2,7 +2,7 @@
 Adobe Campaign MENA frontal servers.
 
 Flow:
-  * `schedule_after_deploy` — called by `form_builder_service.publish_form`
+  * `schedule_after_deploy` — called by `form_builder_service.deploy_form`
     after a successful SFTP push: stores a `ResourceCheck` due
     `delayMinutes` later (default 20) with the exact file names deployed.
     Persisted, so a backend restart doesn't lose it.
@@ -17,6 +17,10 @@ Flow:
     it completes (default 5 — Adobe's servers may still be syncing). If the
     re-check — or a manual "Check now" — still fails, every admin gets an
     email listing the failing files and servers.
+  * A passing *automatic* check (the original scheduled one, or its
+    re-check) emails the owning subsidiary the final live URL(s) for the
+    deployed HTML pages. A passing manual "Check now" stays silent — the
+    subsidiary was already notified by the automatic check.
 
 Settings (Configuration > Deployment, AdminSettings rows): on/off, the
 server list, the first-check delay and the re-check delay.
@@ -347,6 +351,10 @@ def run_check(db: Session, check_id: str) -> Optional[ResourceCheck]:
 
         if check.status == "failed":
             _after_failure(db, check)
+        elif check.trigger in ("scheduled", "recheck"):
+            # Manual "Check now" re-runs stay silent — the subsidiary was
+            # already notified by the original automatic check that passed.
+            _notify_subsidiary_success(db, check)
         return check
     except Exception as err:  # noqa: BLE001 - a background check must never crash the process
         print(f"[resource_check] check {check_id} errored: {type(err).__name__}: {err}")
@@ -377,6 +385,31 @@ def _after_failure(db: Session, check: ResourceCheck) -> None:
         print(f"[resource_check] check {check.id} failed; re-check {recheck.id} in {config.recheckDelayMinutes} min")
         return
     _notify_admins(db, check)
+
+
+def _notify_subsidiary_success(db: Session, check: ResourceCheck) -> None:
+    """Emails the owning subsidiary once an automatic post-deploy check (or
+    its one re-check) confirms every deployed file is actually being served
+    — the final live URL(s) for the HTML pages among the checked files, one
+    representative host per file (every configured host is a load-balanced
+    mirror serving identical content, same as the check itself assumes)."""
+    from app.services import email_service
+
+    form = db.get(Form, check.formId)
+    if form is None:
+        return
+    file_names: list[str] = json.loads(check.fileNames)
+    hosts: list[str] = json.loads(check.hosts)
+    if not hosts:
+        return
+    html_files = sorted(f for f in file_names if f.endswith(".html"))
+    urls = [build_url(hosts[0], f) for f in html_files]
+    sent = email_service.send_resource_check_succeeded_notification(
+        db, form_id=check.formId, form_name=form.name, subsidiary_id=form.subsidiaryId, form_origin=form.origin, urls=urls,
+    )
+    if sent:
+        check.notifiedAt = _now()
+        db.commit()
 
 
 def _notify_admins(db: Session, check: ResourceCheck) -> None:

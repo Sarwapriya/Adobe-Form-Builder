@@ -49,6 +49,18 @@ def sent_emails(monkeypatch):
     return sent
 
 
+@pytest.fixture
+def sent_success_emails(monkeypatch):
+    sent = []
+
+    def fake_send(db, **kwargs):
+        sent.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_service, "send_resource_check_succeeded_notification", fake_send)
+    return sent
+
+
 def _form_id() -> str:
     return str(uuid.uuid4())
 
@@ -181,6 +193,53 @@ def test_recheck_delay_is_its_own_setting(db_session, fake_http, sent_emails):
     recheck = _checks_for(db_session, check.formId)[1]
     due = recheck.scheduledFor if recheck.scheduledFor.tzinfo else recheck.scheduledFor.replace(tzinfo=timezone.utc)
     assert timedelta(minutes=2, seconds=50) < due - datetime.now(timezone.utc) <= timedelta(minutes=3)
+
+
+def test_passing_scheduled_check_notifies_subsidiary_with_html_urls_only(
+    client, db_session, admin_headers, subsidiary_row, fake_http, sent_emails, sent_success_emails
+):
+    form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)
+    check = _schedule(db_session, form_id=form_id)
+    done = svc.run_check(db_session, check.id)
+    assert done.status == "passed" and done.notifiedAt is not None
+    assert sent_emails == []
+    assert len(sent_success_emails) == 1
+    sent = sent_success_emails[0]
+    assert sent["form_id"] == form_id and sent["subsidiary_id"] == subsidiary_row.name and sent["form_origin"] == "admin"
+    assert sent["urls"] == [svc.build_url(svc.DEFAULT_PRODUCTION_HOSTS[0], FILES[0])]  # only the .html file
+
+
+def test_passing_recheck_notifies_subsidiary_once(client, db_session, admin_headers, subsidiary_row, fake_http, sent_emails, sent_success_emails):
+    form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)
+    failing_url = svc.build_url(svc.DEFAULT_PRODUCTION_HOSTS[0], FILES[0])
+    fake_http["failing"].add(failing_url)
+    first = _schedule(db_session, form_id=form_id)
+    svc.run_check(db_session, first.id)
+    assert sent_success_emails == []  # the failing first check never notifies success
+
+    recheck = _checks_for(db_session, form_id)[1]
+    recheck.scheduledFor = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+    fake_http["failing"].discard(failing_url)  # resolved before the re-check runs
+    done = svc.run_check(db_session, recheck.id)
+    assert done.status == "passed"
+    assert len(sent_success_emails) == 1
+
+
+def test_passing_manual_check_does_not_notify_subsidiary(
+    client, db_session, admin_headers, subsidiary_row, fake_http, sent_emails, sent_success_emails, monkeypatch
+):
+    import app.utils.background as background
+
+    queued = []
+    monkeypatch.setattr(background, "run_in_background", lambda work: queued.append(work))
+    form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)
+    resp = client.post(f"/api/v1/admin/forms/{form_id}/resource-checks", headers=admin_headers)
+    assert resp.status_code == 202, resp.text
+    queued[0](db_session)
+    latest = client.get(f"/api/v1/admin/forms/{form_id}/resource-checks", headers=admin_headers).json()["checks"][0]
+    assert latest["status"] == "passed" and latest["trigger"] == "manual"
+    assert sent_success_emails == []
 
 
 def test_failed_recheck_emails_admins(db_session, fake_http, sent_emails):
