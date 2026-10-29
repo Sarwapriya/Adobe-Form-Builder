@@ -76,12 +76,16 @@ class CreateFormWithQuestionsBody(BaseModel):
 
 class CreateAdHocFormBody(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    projectCode: str = Field(min_length=1)
+    # Optional — a subsidiary user can create a campaign before an admin has
+    # assigned a project code; see create_form's own doc comment and
+    # approve_adhoc_form, which requires one (the subsidiary user's own pick
+    # or the admin's override) by approval time, not before.
+    projectCode: Optional[str] = None
     copyFromFormId: Optional[str] = None
     copyFromTemplateId: Optional[str] = None
 
     _v_name = field_validator("name")(classmethod(lambda cls, v: _trim_required(v)))
-    _v_project_code = field_validator("projectCode")(classmethod(lambda cls, v: _trim_required(v)))
+    _v_project_code = field_validator("projectCode")(classmethod(lambda cls, v: _trim_optional(v)))
     _v_copy_from = field_validator("copyFromFormId")(classmethod(lambda cls, v: _trim_optional(v)))
     _v_copy_from_template = field_validator("copyFromTemplateId")(classmethod(lambda cls, v: _trim_optional(v)))
 

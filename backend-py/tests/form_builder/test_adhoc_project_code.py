@@ -1,10 +1,12 @@
-"""A subsidiary user now picks a project code when creating their own ad-hoc
-form (`POST /api/v1/forms/adhoc`) instead of an admin only assigning one at
-approval — see `form_builder_service.create_form`/`approve_adhoc_form`'s own
-doc comments. Covers: the field is required and validated the same way any
-other project-code attachment is (open, not expired, not blocked for this
-subsidiary), and an admin approving the form can still override it but isn't
-required to."""
+"""A subsidiary user may optionally pick a project code when creating their
+own ad-hoc form (`POST /api/v1/forms/adhoc`) — or leave it unset and let an
+admin assign one at approval time instead — see
+`form_builder_service.create_form`/`approve_adhoc_form`'s own doc comments.
+Covers: an omitted code is accepted at creation, a *provided* one is still
+validated the same way any other project-code attachment is (open, not
+expired, not blocked for this subsidiary), an admin approving the form can
+still override it but isn't required to, and approval itself is rejected
+once no code is available from either source."""
 
 from __future__ import annotations
 
@@ -18,10 +20,11 @@ from app.models.subsidiary import Subsidiary
 from tests.form_builder.conftest import unique_name
 
 
-class TestCreateRequiresProjectCode:
-    def test_missing_project_code_is_rejected(self, client: TestClient, standard_headers: dict):
+class TestCreateProjectCodeIsOptional:
+    def test_missing_project_code_is_accepted_and_left_unset(self, client: TestClient, standard_headers: dict):
         resp = client.post("/api/v1/forms/adhoc", json={"name": unique_name("Adhoc")}, headers=standard_headers)
-        assert resp.status_code == 400
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["projectCode"] is None
 
     def test_unknown_project_code_is_rejected(self, client: TestClient, standard_headers: dict):
         resp = client.post(
@@ -84,6 +87,25 @@ class TestApproveReusesTheFormsOwnProjectCode:
         # (a validation 422 proves the code was accepted and attached, not rejected).
         client.post(f"/api/v1/forms/adhoc/{created['id']}/submit-for-review", headers=standard_headers)
         resp = client.post(f"/api/v1/admin/forms/{created['id']}/adhoc/approve", json={}, headers=admin_headers)
+        assert resp.status_code in (204, 422)
+        assert resp.status_code != 400  # 400 would mean "no_project_code"/gate failure
+
+    def test_approve_without_any_project_code_is_rejected(self, client: TestClient, admin_headers: dict, standard_headers: dict):
+        created = client.post("/api/v1/forms/adhoc", json={"name": unique_name("Adhoc")}, headers=standard_headers).json()
+        assert created["projectCode"] is None
+        client.post(f"/api/v1/forms/adhoc/{created['id']}/submit-for-review", headers=standard_headers)
+        resp = client.post(f"/api/v1/admin/forms/{created['id']}/adhoc/approve", json={}, headers=admin_headers)
+        assert resp.status_code == 400
+
+    def test_approve_accepts_a_project_code_the_form_never_had(
+        self, client: TestClient, admin_headers: dict, standard_headers: dict, project_code_row: ProjectCode
+    ):
+        created = client.post("/api/v1/forms/adhoc", json={"name": unique_name("Adhoc")}, headers=standard_headers).json()
+        assert created["projectCode"] is None
+        client.post(f"/api/v1/forms/adhoc/{created['id']}/submit-for-review", headers=standard_headers)
+        resp = client.post(
+            f"/api/v1/admin/forms/{created['id']}/adhoc/approve", json={"projectCode": project_code_row.code}, headers=admin_headers
+        )
         assert resp.status_code in (204, 422)
         assert resp.status_code != 400  # 400 would mean "no_project_code"/gate failure
 

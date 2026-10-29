@@ -165,10 +165,15 @@ export function MyAdHocFormsListPage() {
   }
 
   async function handleCreate() {
-    if (!newName.trim() || !newProjectCode) return;
+    if (!newName.trim()) return;
     setCreating(true);
     try {
-      const created = await createAdHocForm(newName.trim(), newProjectCode, copySourceForm?.id, copySourceTemplate?.id);
+      const created = await createAdHocForm(
+        newName.trim(),
+        newProjectCode || undefined,
+        copySourceForm?.id,
+        copySourceTemplate?.id,
+      );
       closeCreateDialog();
       navigate(`/my-forms/adhoc/${created.id}`);
     } catch (err) {
@@ -309,15 +314,18 @@ export function MyAdHocFormsListPage() {
               select
               fullWidth
               size="small"
-              label="Project code"
+              label="Project code (optional)"
               value={newProjectCode}
               onChange={(e) => setNewProjectCode(e.target.value)}
               helperText={
                 projectCodes.length === 0
-                  ? "No open project codes yet — an admin needs to create one before you can start a new campaign."
-                  : "An admin must create the project code first; closed, locked, or expired codes aren't offered here."
+                  ? "No open project codes yet — you can still create this campaign; an admin will assign one when reviewing it."
+                  : "Leave blank if you're not sure — an admin can assign or change it when reviewing your submission."
               }
             >
+              <MenuItem value="">
+                <em>None yet</em>
+              </MenuItem>
               {projectCodes.map((pc) => (
                 <MenuItem key={pc.id} value={pc.code}>
                   {pc.code}
@@ -330,7 +338,7 @@ export function MyAdHocFormsListPage() {
           <Button onClick={closeCreateDialog} disabled={creating}>
             Cancel
           </Button>
-          <Button variant="contained" disabled={!newName.trim() || !newProjectCode || creating} onClick={handleCreate}>
+          <Button variant="contained" disabled={!newName.trim() || creating} onClick={handleCreate}>
             {creating ? "Creating..." : "Create"}
           </Button>
         </DialogActions>

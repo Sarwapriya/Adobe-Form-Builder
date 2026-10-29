@@ -34,9 +34,12 @@ export function getMyFormDetail(formId: string): Promise<FormDetail> {
  * `copyFromTemplateId` clones a saved template's content instead (mutually
  * exclusive with copyFromFormId) — visibility-checked server-side the same
  * way (`form_template_service.get_template_if_visible`). */
+/** `projectCode` is optional — a subsidiary user can create a campaign
+ * before an admin has assigned one; see AdHocReviewPanel.tsx, where an admin
+ * picks (or confirms) it at approval time instead. */
 export function createAdHocForm(
   name: string,
-  projectCode: string,
+  projectCode?: string,
   copyFromFormId?: string,
   copyFromTemplateId?: string,
 ): Promise<FormListItem> {
