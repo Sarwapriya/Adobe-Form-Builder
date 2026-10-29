@@ -80,7 +80,7 @@ export function SubsidiaryDashboardPage() {
         title={user ? `Welcome back, ${user.firstName || user.username}` : "Dashboard"}
         subtitle={user?.subsidiaryId ? `Here's what's happening with your campaigns — ${user.subsidiaryId}` : "Here's what's happening with your campaigns"}
         action={
-          <Button component={RouterLink} to="/my-forms/adhoc" variant="contained" startIcon={<AddIcon />}>
+          <Button component={RouterLink} to="/my-forms/adhoc?new=1" variant="contained" startIcon={<AddIcon />}>
             New Campaign
           </Button>
         }

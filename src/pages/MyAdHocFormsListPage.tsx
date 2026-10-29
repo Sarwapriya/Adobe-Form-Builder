@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -84,6 +84,7 @@ function adHocProgress(form: FormListItem): ContributionProgress | null {
  */
 export function MyAdHocFormsListPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const subsidiaryName = useAuthStore((s) => s.user?.subsidiaryId ?? null);
   const [adHocForms, setAdHocForms] = useState<FormListItem[]>([]);
   const responsiveDialogProps = useResponsiveDialogProps();
@@ -119,6 +120,23 @@ export function MyAdHocFormsListPage() {
   useEffect(() => {
     refresh();
   }, []);
+
+  // Lets the Dashboard's "New Campaign" button (SubsidiaryDashboardPage.tsx)
+  // link straight to `?new=1` and land with the creation dialog already open,
+  // instead of a plain navigate followed by a second "New Ad-hoc Form" click.
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setCreateOpen(true);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("new");
+        return next;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
     if (!subsidiaryName) return;
