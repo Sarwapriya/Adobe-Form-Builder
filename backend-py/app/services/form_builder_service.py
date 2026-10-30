@@ -50,6 +50,7 @@ from app.models.generated_file import GeneratedFile as GeneratedFileEntity
 from app.services import (
     consent_document_service,
     email_service,
+    notification_service,
     page_error_locale_default_service,
     project_code_service,
     sftp_settings_service,
@@ -654,11 +655,18 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     if not was_already_published and form.origin == "admin":
         form_name = form.name
         subsidiary_id = form.subsidiaryId
-        run_in_background(
-            lambda bg_db: email_service.send_form_published_notification(
+
+        def _notify(bg_db: Session) -> None:
+            email_service.send_form_published_notification(
                 bg_db, resolve_subsidiary_recipients(bg_db, subsidiary_id), form_name, subsidiary_id
             )
-        )
+            notification_service.notify_subsidiary(
+                bg_db, subsidiary_id, "form_published", "New form ready for your subsidiary",
+                f'"{form_name}" was published — review it and add translations, questions, or consents as needed.',
+                link="/my-forms",
+            )
+
+        run_in_background(_notify)
 
     return {"outcome": "ok", "validation": validation}
 
@@ -1000,7 +1008,15 @@ def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) 
 
     form_name = form.name
     submitted_at = form.submittedForReviewAt
-    run_in_background(lambda bg_db: email_service.send_adhoc_review_submitted_notification(bg_db, form_name, subsidiary_id, submitted_at))
+
+    def _notify(bg_db: Session) -> None:
+        email_service.send_adhoc_review_submitted_notification(bg_db, form_name, subsidiary_id, submitted_at)
+        notification_service.notify_admins(
+            bg_db, "adhoc_submitted", "Ad-hoc form submitted for review", f'"{form_name}" ({subsidiary_id}) is awaiting your review.',
+            link="/admin/form-builder/adhoc",
+        )
+
+    run_in_background(_notify)
     return "ok"
 
 

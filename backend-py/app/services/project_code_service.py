@@ -22,7 +22,7 @@ PROJECT_CODE_CATEGORIES = ("adhoc", "handRaiser")
 from app.models.form import Form
 from app.models.project_code import ProjectCode
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
-from app.services import email_service
+from app.services import email_service, notification_service
 from app.services.subsidiary_recipients import resolve_subsidiary_recipients
 from app.utils.background import run_in_background
 
@@ -191,12 +191,17 @@ def set_project_code_locked(db: Session, id: str, is_locked: bool) -> Optional[P
     if is_locked and not was_locked:
         code = existing.code
         cutoff_date = existing.cutoffDate
-        for subsidiary_id in _list_subsidiaries_under_project_code(db, code):
-            run_in_background(
-                lambda bg_db, sid=subsidiary_id: email_service.send_project_locked_notification(
-                    bg_db, resolve_subsidiary_recipients(bg_db, sid), code, cutoff_date
-                )
+        def _notify(bg_db: Session, sid: str) -> None:
+            email_service.send_project_locked_notification(bg_db, resolve_subsidiary_recipients(bg_db, sid), code, cutoff_date)
+            cutoff_note = f" Campaign cutoff: {cutoff_date.isoformat()}." if cutoff_date else ""
+            notification_service.notify_subsidiary(
+                bg_db, sid, "project_locked", f'Project "{code}" has been locked',
+                f"No further uploads, form edits, or translation submissions can be made against it.{cutoff_note}",
+                link="/my-forms",
             )
+
+        for subsidiary_id in _list_subsidiaries_under_project_code(db, code):
+            run_in_background(lambda bg_db, sid=subsidiary_id: _notify(bg_db, sid))
 
     return existing
 

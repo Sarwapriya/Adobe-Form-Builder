@@ -45,6 +45,7 @@ from app.routers.subsidiary_locales import router as subsidiary_locales_router
 from app.routers.subsidiary_privacy_links import router as subsidiary_privacy_links_router
 from app.routers.templates import router as templates_router
 from app.routers.ai import router as ai_router
+from app.routers.notifications import router as notifications_router
 
 app = FastAPI(title="FormBuilder Backend (Python port)")
 
@@ -138,6 +139,7 @@ app.include_router(subsidiary_privacy_links_router, prefix="/api/v1/subsidiary-p
 app.include_router(subsidiary_forms_router, prefix="/api/v1/forms", tags=["subsidiary-forms"])
 app.include_router(templates_router, prefix="/api/v1/templates", tags=["templates"])
 app.include_router(ai_router, prefix="/api/v1/ai", tags=["ai"])
+app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
 
 
 @app.on_event("startup")

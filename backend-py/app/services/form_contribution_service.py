@@ -18,7 +18,7 @@ from app.models.form_version import FormVersion
 from app.models.project_code import ProjectCode
 from app.models.user import User
 from app.security import dkms_client
-from app.services import email_service
+from app.services import email_service, notification_service
 from app.services.form_access_service import get_accessible_form_detail
 from app.services.form_builder_service import update_draft
 from app.utils.background import run_in_background
@@ -112,8 +112,9 @@ def submit_contribution(
         submitter_username = submitter.username
         submitter_email_ciphertext = submitter.email
         note_value = note or None
-        run_in_background(
-            lambda bg_db: email_service.send_contribution_submitted_notification(
+
+        def _notify(bg_db: Session) -> None:
+            email_service.send_contribution_submitted_notification(
                 bg_db,
                 form_name,
                 subsidiary_id,
@@ -121,7 +122,13 @@ def submit_contribution(
                 dkms_client.decrypt_or_none(submitter_email_ciphertext) or "",
                 note_value,
             )
-        )
+            notification_service.notify_admins(
+                bg_db, "contribution_submitted", "Translation/extension submitted for review",
+                f'"{form_name}" — {submitter_username} ({subsidiary_id}) submitted a contribution for review.',
+                link="/admin/form-builder",
+            )
+
+        run_in_background(_notify)
 
     return {"outcome": "ok", "contribution": _to_summary(row), "validation": validation}
 

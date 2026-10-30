@@ -397,7 +397,7 @@ def _notify_subsidiary_success(db: Session, check: ResourceCheck) -> None:
     — the final live URL(s) for the HTML pages among the checked files, one
     representative host per file (every configured host is a load-balanced
     mirror serving identical content, same as the check itself assumes)."""
-    from app.services import email_service
+    from app.services import email_service, notification_service
 
     form = db.get(Form, check.formId)
     if form is None:
@@ -411,13 +411,26 @@ def _notify_subsidiary_success(db: Session, check: ResourceCheck) -> None:
     sent = email_service.send_resource_check_succeeded_notification(
         db, form_id=check.formId, form_name=form.name, subsidiary_id=form.subsidiaryId, form_origin=form.origin, urls=urls,
     )
+    if urls:
+        # Same admin-vs-subsidiary editor paths App.tsx routes to for each
+        # role — see this file's own _notify_admins' admin link below and
+        # email_service._build_resource_check_succeeded_message's subsidiary one.
+        subsidiary_path = f"/my-forms/adhoc/{check.formId}" if form.origin == "adhoc" else f"/my-forms/{check.formId}"
+        message = f'"{form.name}" is confirmed live. ' + (urls[0] if len(urls) == 1 else f"{len(urls)} pages are now live.")
+        notification_service.notify_subsidiary(
+            db, form.subsidiaryId, "deploy_verified", "Your campaign is live", message, link=subsidiary_path
+        )
+        notification_service.notify_admins(
+            db, "deploy_verified", "Campaign is live", f'"{form.name}" ({form.subsidiaryId}) is confirmed live.',
+            link=f"/admin/form-builder/{check.formId}",
+        )
     if sent:
         check.notifiedAt = _now()
         db.commit()
 
 
 def _notify_admins(db: Session, check: ResourceCheck) -> None:
-    from app.services import email_service
+    from app.services import email_service, notification_service
 
     form = db.get(Form, check.formId)
     failures = db.execute(
@@ -440,6 +453,12 @@ def _notify_admins(db: Session, check: ResourceCheck) -> None:
             for f in failures
         ],
     )
+    if form is not None:
+        notification_service.notify_admins(
+            db, "deploy_check_failed", "Published files missing on Adobe servers",
+            f'"{form.name}" ({form.subsidiaryId}) — some deployed files could not be verified on the Adobe Campaign servers.',
+            link=f"/admin/form-builder/{check.formId}",
+        )
     if sent:
         check.notifiedAt = _now()
         db.commit()

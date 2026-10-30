@@ -57,6 +57,7 @@ import { useFormBuilderStore } from "../store/formBuilderStore";
 import { useFormContributionStore } from "../store/formContributionStore";
 import { AIChatButton } from "../components/ai/AIChatButton";
 import { AIChatPanel } from "../components/ai/AIChatPanel";
+import { NotificationBell } from "../components/common/NotificationBell";
 import { PALETTES, SIDEBAR_DARK_BASE } from "./theme";
 
 const EXPANDED_WIDTH = 260;
@@ -478,9 +479,10 @@ export function AppLayout() {
             <IconButton edge="start" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
               <MenuIcon />
             </IconButton>
-            <Typography variant="h6" fontWeight={700} sx={{ ml: 1 }}>
+            <Typography variant="h6" fontWeight={700} sx={{ ml: 1, flexGrow: 1 }}>
               FormIQ
             </Typography>
+            <NotificationBell />
           </Toolbar>
         </AppBar>
       )}
@@ -566,6 +568,11 @@ export function AppLayout() {
                   "& .MuiChip-label": { px: 0.75 },
                 }}
               />
+            </Box>
+          )}
+          {!collapsed && (
+            <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0 }}>
+              <NotificationBell color={sidebarTokens.text} />
             </Box>
           )}
         </Box>

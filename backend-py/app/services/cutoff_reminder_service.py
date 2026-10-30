@@ -21,7 +21,7 @@ from app.form_pipeline import FormDefinition
 from app.models.form import Form
 from app.models.form_version import FormVersion
 from app.models.project_code import ProjectCode
-from app.services import email_service
+from app.services import email_service, notification_service
 from app.services.admin_settings_service import get_admin_setting
 from app.services.auth_service import list_admin_notification_emails
 from app.services.form_contribution_service import list_contributions_for_form
@@ -121,11 +121,20 @@ def run_cutoff_reminders(db: Session) -> None:
                     code.cutoffDate,
                     [email_service.CutoffReminderItem(form_name=p.form_name, reasons=p.reasons) for p in pending_for_subsidiary],
                 )
+            form_list = "; ".join(f"{p.form_name} ({', '.join(p.reasons)})" for p in pending_for_subsidiary)
+            notification_service.notify_subsidiary(
+                db, subsidiary_id, "cutoff_reminder", f'Forms pending before cutoff — "{code.code}"', form_list, link="/my-forms"
+            )
 
     if all_pending_items:
         admin_recipients = list_admin_notification_emails(db)
         if admin_recipients:
             email_service.send_admin_pending_items_summary(db, admin_recipients, all_pending_items)
+        notification_service.notify_admins(
+            db, "cutoff_reminder_summary", f"{len(all_pending_items)} form(s) pending before cutoff",
+            "; ".join(f'{p.form_name} ({p.subsidiary_id}, "{p.project_code}")' for p in all_pending_items),
+            link="/admin/form-builder",
+        )
 
 
 _last_run_date_key: str | None = None
