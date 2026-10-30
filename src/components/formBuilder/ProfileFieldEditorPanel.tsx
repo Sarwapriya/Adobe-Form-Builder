@@ -305,11 +305,15 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
                 }))
               }
               onRejected={() =>
+                // Reverts to the subsidiary's own default Privacy Policy
+                // link (privacyLinks, fetched above) rather than leaving it
+                // blank — Privacy Policy always has a sensible fallback;
+                // Terms & Conditions doesn't, so that one clears to blank.
                 updateDefinition((d) => ({
                   ...d,
                   fields: {
                     ...d.fields,
-                    privacyPolicy: { ...d.fields.privacyPolicy!, uploadedFileName: undefined, linkUrlByLocale: {} },
+                    privacyPolicy: { ...d.fields.privacyPolicy!, uploadedFileName: undefined, linkUrlByLocale: { ...privacyLinks } },
                   },
                 }))
               }

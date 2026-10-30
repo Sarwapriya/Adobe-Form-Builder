@@ -564,6 +564,12 @@ export interface SftpTargetConfig {
    * data JS file (`param.apiEndpoint`) at publish time for this environment —
    * see backend form_builder_service._resolve_analytics_param_updates. */
   apiEndpoint: string;
+  /** Adobe Campaign frontal-server base URL an uploaded Terms & Conditions /
+   * Privacy Policy PDF resolves under for this environment (see
+   * ConsentDocumentUpload.tsx / backend consent_document_service.py) —
+   * resolved at upload time against whichever environment is active, same
+   * tradeoff apiEndpoint above already accepts. */
+  resourceTrackingBaseUrl: string;
 }
 
 export interface SftpTargetView extends SftpTargetConfig {

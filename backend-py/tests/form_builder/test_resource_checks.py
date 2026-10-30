@@ -400,3 +400,48 @@ def test_settings_api(client, admin_headers, standard_headers):
                      json={"enabled": True, "staging": ["x"], "production": ["x"], "delayMinutes": 0})
     assert bad.status_code == 400  # this app maps request-body validation errors to 400
     assert client.get("/api/v1/admin/resource-check-settings", headers=standard_headers).status_code == 403
+
+
+# --- consent documents included in the check -------------------------------------
+
+
+def test_manual_check_includes_the_latest_uploaded_consent_document(
+    client, db_session, admin_headers, subsidiary_row, monkeypatch
+):
+    import app.utils.background as background
+
+    form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)
+    from tests.form_builder.test_consent_documents import _pdf_bytes
+
+    upload_resp = client.post(
+        f"/api/v1/admin/forms/{form_id}/consent-documents",
+        data={"kind": "privacyPolicy"},
+        files={"file": ("policy.pdf", _pdf_bytes(), "application/pdf")},
+        headers=admin_headers,
+    )
+    file_name = upload_resp.json()["fileName"]
+    # The upload alone only touches the draft — republish so it's part of
+    # the *published* version start_manual_check reads.
+    assert client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers).status_code == 200
+
+    queued = []
+    monkeypatch.setattr(background, "run_in_background", lambda work: queued.append(work))
+    resp = client.post(f"/api/v1/admin/forms/{form_id}/resource-checks", headers=admin_headers)
+    assert resp.status_code == 202, resp.text
+    assert file_name in resp.json()["fileNames"]
+
+
+def test_success_notification_goes_to_both_subsidiary_and_admins(db_session, monkeypatch):
+    import app.services.subsidiary_recipients as subsidiary_recipients_module
+
+    monkeypatch.setattr(subsidiary_recipients_module, "resolve_subsidiary_recipients", lambda db, sub: ["sub@example.com"])
+    monkeypatch.setattr(email_service, "_resolve_admin_recipients", lambda db: ["admin@example.com"])
+
+    sent = []
+    monkeypatch.setattr(email_service, "send_email", lambda db, to, content: sent.append(to) or email_service.SendResult(ok=True))
+
+    sent_ok = email_service.send_resource_check_succeeded_notification(
+        db_session, form_id="f1", form_name="Test Form", subsidiary_id="SGE", form_origin="admin", urls=["https://example.com/a.html"]
+    )
+    assert sent_ok is True
+    assert set(sent[0]) == {"sub@example.com", "admin@example.com"}

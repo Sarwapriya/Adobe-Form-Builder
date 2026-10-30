@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Chip,
+  Divider,
   FormControlLabel,
   Paper,
   Radio,
@@ -63,6 +64,7 @@ function SftpTargetPanel({
         privateKeyPath: form.privateKeyPath,
         remotePath: form.remotePath,
         apiEndpoint: form.apiEndpoint,
+        resourceTrackingBaseUrl: form.resourceTrackingBaseUrl,
       });
       onSaved(settings);
       showToast("Saved.", "success");
@@ -143,11 +145,36 @@ function SftpTargetPanel({
             helperText="Baked into every form's master data JS file (param.apiEndpoint) the next time it's published while this environment is active"
           />
         </Stack>
+
+        <Divider sx={{ my: 1.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            Uploaded documents
+          </Typography>
+        </Divider>
+        <Stack spacing={1.5} sx={{ mb: 1.5 }}>
+          <TextField
+            label="Resource Tracking Base URL"
+            size="small"
+            value={form.resourceTrackingBaseUrl}
+            onChange={(e) => setForm((f) => ({ ...f, resourceTrackingBaseUrl: e.target.value }))}
+            required
+            placeholder="https://res6.mena2p.crm.samsung.com/res/tracking/"
+            helperText="Where an uploaded Terms & Conditions / Privacy Policy PDF resolves once deployed, for whichever campaign has this environment active at upload time"
+          />
+        </Stack>
+
         <Button
           type="submit"
           size="small"
           variant="contained"
-          disabled={!form.host.trim() || !form.username.trim() || !form.privateKeyPath.trim() || !form.apiEndpoint.trim() || saving}
+          disabled={
+            !form.host.trim() ||
+            !form.username.trim() ||
+            !form.privateKeyPath.trim() ||
+            !form.apiEndpoint.trim() ||
+            !form.resourceTrackingBaseUrl.trim() ||
+            saving
+          }
         >
           {saving ? "Saving..." : `Save ${label}`}
         </Button>

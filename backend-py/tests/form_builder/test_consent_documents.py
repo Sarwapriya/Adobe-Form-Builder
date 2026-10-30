@@ -54,8 +54,13 @@ def test_build_file_name_follows_the_convention():
     assert svc.build_file_name("x.pdf", "SGE", "privacyPolicy").split("_")[-2] == "PVC"
 
 
-def test_resolve_sample_url_uses_the_adobe_tracking_base():
-    assert svc.resolve_sample_url("a.pdf") == "https://res6.mena2p.crm.samsung.com/res/tracking/a.pdf"
+def test_resolve_sample_url_joins_the_given_base_url():
+    assert svc.resolve_sample_url("a.pdf", "https://res6.mena2p.crm.samsung.com/res/tracking/") == (
+        "https://res6.mena2p.crm.samsung.com/res/tracking/a.pdf"
+    )
+    assert svc.resolve_sample_url("a.pdf", "https://res6.mena2p.crm.samsung.com/res/tracking") == (
+        "https://res6.mena2p.crm.samsung.com/res/tracking/a.pdf"
+    )  # trailing slash optional on the configured base URL
 
 
 def test_validate_pdf_accepts_a_real_readable_pdf():
@@ -99,7 +104,9 @@ def test_admin_upload_sets_url_for_every_locale(client, db_session, admin_header
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["fileName"].startswith("policy_") and body["fileName"].endswith(".pdf")
-    assert body["url"] == svc.resolve_sample_url(body["fileName"])
+    # Default active environment (no deployment-settings configured in this
+    # fresh test DB) is "staging" — see sftp_settings_service.get_sftp_deployment_settings.
+    assert body["url"] == svc.resolve_sample_url(body["fileName"], "https://res5.africa2s.crm.samsung.com/res/tracking/")
 
     definition = _draft_definition(db_session, form_id)
     assert definition.fields.privacyPolicy.uploadedFileName == body["fileName"]

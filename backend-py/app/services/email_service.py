@@ -475,13 +475,15 @@ def _build_resource_check_succeeded_message(form_id: str, form_name: str, subsid
 def send_resource_check_succeeded_notification(
     db: Session, *, form_id: str, form_name: str, subsidiary_id: str, form_origin: str, urls: list[str]
 ) -> bool:
-    """Emails the owning subsidiary's own users (resolve_subsidiary_recipients)
-    once the automatic post-deploy check confirms the files are actually
-    being served. Returns whether it was sent. Never raises."""
+    """Emails both the owning subsidiary's own users
+    (resolve_subsidiary_recipients) and every admin (_resolve_admin_recipients
+    — same recipients as every other admin notification) once the automatic
+    post-deploy check confirms the files are actually being served. Returns
+    whether it was sent. Never raises."""
     try:
         from app.services.subsidiary_recipients import resolve_subsidiary_recipients
 
-        recipients = resolve_subsidiary_recipients(db, subsidiary_id)
+        recipients = list({*resolve_subsidiary_recipients(db, subsidiary_id), *_resolve_admin_recipients(db)})
         if not recipients or not urls:
             return False
         result = send_email(db, recipients, _build_resource_check_succeeded_message(form_id, form_name, subsidiary_id, form_origin, urls))

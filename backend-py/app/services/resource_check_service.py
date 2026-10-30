@@ -246,11 +246,15 @@ def start_manual_check(db: Session, form_id: str, user_id: str) -> ResourceCheck
         raise NotFoundError("Form not found")
     if form.status != "published" or not form.publishedVersionId:
         raise ConflictError("Only a published form can be checked")
-    file_names = sorted({
-        row for row in db.execute(
-            select(GeneratedFile.fileName).where(GeneratedFile.formVersionId == form.publishedVersionId)
-        ).scalars().all()
-    })
+    from app.services.form_builder_service import published_consent_document_file_names
+
+    file_names = sorted(
+        {
+            row
+            for row in db.execute(select(GeneratedFile.fileName).where(GeneratedFile.formVersionId == form.publishedVersionId)).scalars().all()
+        }
+        | set(published_consent_document_file_names(db, form))
+    )
     if not file_names:
         raise ConflictError("The published version has no generated files to check")
     in_progress = db.execute(

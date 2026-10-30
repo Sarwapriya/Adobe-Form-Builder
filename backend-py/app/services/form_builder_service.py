@@ -481,7 +481,16 @@ def upload_consent_document(
 
     file_name = consent_document_service.build_file_name(original_file_name, form.subsidiaryId, kind)
     consent_document_service.save_consent_document(form.subsidiaryId, form_id, file_name, data)
-    url = consent_document_service.resolve_sample_url(file_name)
+    # Resolved against whichever environment is currently active — same
+    # accepted tradeoff as _resolve_analytics_param_updates's apiEndpoint
+    # above: if the active environment (or its base URL) changes between
+    # this upload and the eventual Deploy, this URL keeps whatever was
+    # active at upload time rather than being re-resolved later.
+    deployment_settings = sftp_settings_service.get_sftp_deployment_settings(db)
+    active_target = (
+        deployment_settings.production if deployment_settings.activeEnvironment == "production" else deployment_settings.staging
+    )
+    url = consent_document_service.resolve_sample_url(file_name, active_target.resourceTrackingBaseUrl)
 
     draft_version = db.get(FormVersion, form.currentDraftVersionId)
     assert draft_version is not None
@@ -654,6 +663,22 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     return {"outcome": "ok", "validation": validation}
 
 
+def published_consent_document_file_names(db: Session, form: Form) -> list[str]:
+    """Every uploaded consent-document file name (Terms & Conditions/Privacy
+    Policy) the form's currently *published* definition references — see
+    consent_document_service.uploaded_file_names, which this just points at
+    the right FormVersion. Shared by deploy_form (SFTP push) and
+    resource_check_service.start_manual_check (availability check), so both
+    only ever act on the current upload, never a stale earlier one."""
+    if not form.publishedVersionId:
+        return []
+    published_version = db.get(FormVersion, form.publishedVersionId)
+    if published_version is None:
+        return []
+    definition = FormDefinition.model_validate_json(published_version.definition)
+    return consent_document_service.uploaded_file_names(definition)
+
+
 DeployOutcome = Literal["ok", "not_found", "not_published", "no_files"]
 
 
@@ -686,16 +711,10 @@ def deploy_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     # the generated solution files, into the same Adobe frontal-server
     # namespace its own resolve_sample_url already points at — this is the
     # one point that URL actually goes from "sample" to live.
-    published_version = db.get(FormVersion, form.publishedVersionId)
-    if published_version is not None:
-        published_definition = FormDefinition.model_validate_json(published_version.definition)
-        for meta in (published_definition.fields.termsAndConditions, published_definition.fields.privacyPolicy):
-            if meta is not None and meta.uploadedFileName:
-                relative_path = os.path.join(
-                    consent_document_service.consent_documents_dir(form.subsidiaryId, form_id), meta.uploadedFileName
-                )
-                deploy_files.append(SftpDeployFile(absolutePath=absolute_file_path(relative_path), remoteFileName=meta.uploadedFileName))
-                file_names.append(meta.uploadedFileName)
+    for uploaded_name in published_consent_document_file_names(db, form):
+        relative_path = os.path.join(consent_document_service.consent_documents_dir(form.subsidiaryId, form_id), uploaded_name)
+        deploy_files.append(SftpDeployFile(absolutePath=absolute_file_path(relative_path), remoteFileName=uploaded_name))
+        file_names.append(uploaded_name)
 
     deployment = deploy_generated_files(db, deploy_files)
 

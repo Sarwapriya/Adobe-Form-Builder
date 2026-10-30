@@ -24,6 +24,7 @@ from typing import Literal, Optional
 
 from pypdf import PdfReader
 
+from app.form_pipeline import FormDefinition
 from app.services.file_service import absolute_file_path
 from app.utils.sanitize import sanitize_file_name, sanitize_subsidiary_id
 
@@ -34,8 +35,11 @@ _KIND_SUFFIX: dict[ConsentDocumentKind, str] = {"termsAndConditions": "TnC", "pr
 # The real Adobe Campaign frontal-server path every generated HTML/JS/CSS
 # file is already served from (see resource_check_service.build_url /
 # page_template.py's favicon reference) — an uploaded consent document is
-# deployed into that same namespace.
-ADOBE_RES_TRACKING_BASE_URL = "https://res6.mena2p.crm.samsung.com/res/tracking/"
+# deployed into that same namespace. Admin-editable per environment (staging
+# differs from production) — see sftp_settings_service.SftpTargetConfig.
+# resourceTrackingBaseUrl; resolve_sample_url below takes it as a parameter
+# rather than hardcoding one value, since the caller knows which
+# environment this upload is for.
 
 # Generous for a policy document; bounds memory use while reading the upload
 # into memory for validation (there's no streaming need at this size).
@@ -70,8 +74,8 @@ def build_file_name(original_file_name: str, subsidiary_id: str, kind: ConsentDo
     return f"{stem}_{safe_subsidiary}_{_KIND_SUFFIX[kind]}_{timestamp}.pdf"
 
 
-def resolve_sample_url(file_name: str) -> str:
-    return f"{ADOBE_RES_TRACKING_BASE_URL}{file_name}"
+def resolve_sample_url(file_name: str, base_url: str) -> str:
+    return f"{base_url.rstrip('/')}/{file_name}"
 
 
 def validate_pdf(original_file_name: str, data: bytes) -> Optional[str]:
@@ -100,6 +104,22 @@ def validate_pdf(original_file_name: str, data: bytes) -> Optional[str]:
     except Exception:
         return UNREADABLE_MESSAGE
     return None
+
+
+def uploaded_file_names(definition: FormDefinition) -> list[str]:
+    """Every currently-uploaded consent-document file name this definition
+    references (0, 1, or 2 — Terms & Conditions and/or Privacy Policy), each
+    always the *latest* upload since `uploadedFileName` only ever holds one
+    value per field, overwritten on every new upload — never a history of
+    old ones. Shared by deploy_form (which SFTP-pushes these alongside the
+    generated solution files) and resource_check_service.start_manual_check
+    (which checks these are actually being served), so both only ever check
+    the current file, never a stale one left over from an earlier upload."""
+    names = []
+    for meta in (definition.fields.termsAndConditions, definition.fields.privacyPolicy):
+        if meta is not None and meta.uploadedFileName:
+            names.append(meta.uploadedFileName)
+    return names
 
 
 def save_consent_document(subsidiary_id: str, form_id: str, file_name: str, data: bytes) -> str:

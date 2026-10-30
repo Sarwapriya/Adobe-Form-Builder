@@ -34,6 +34,16 @@ _DEFAULT_API_ENDPOINT = {
     "production": "https://res6.mena2p.crm.samsung.com/ingest",
 }
 
+# Adobe Campaign frontal-server path a consent-document PDF (Terms &
+# Conditions / Privacy Policy upload — see consent_document_service.py)
+# resolves at once deployed, same convention as _DEFAULT_API_ENDPOINT above:
+# admin-editable, pre-filled with the real current values rather than
+# hardcoded, since this host has already changed once in production use.
+_DEFAULT_RESOURCE_TRACKING_BASE_URL = {
+    "staging": "https://res5.africa2s.crm.samsung.com/res/tracking/",
+    "production": "https://res6.mena2p.crm.samsung.com/res/tracking/",
+}
+
 
 @dataclass
 class SftpTargetConfig:
@@ -43,6 +53,7 @@ class SftpTargetConfig:
     privateKeyPath: str
     remotePath: str
     apiEndpoint: str
+    resourceTrackingBaseUrl: str
 
 
 @dataclass
@@ -64,6 +75,7 @@ def _get_target(db: Session, environment: SftpEnvironment) -> SftpTargetConfig:
     private_key_path = get_admin_setting(db, f"{prefix}PrivateKeyPath")
     remote_path = get_admin_setting(db, f"{prefix}RemotePath")
     api_endpoint = get_admin_setting(db, f"{prefix}ApiEndpoint")
+    resource_tracking_base_url = get_admin_setting(db, f"{prefix}ResourceTrackingBaseUrl")
     try:
         port_num = int(port) if port else DEFAULT_PORT
     except ValueError:
@@ -75,6 +87,7 @@ def _get_target(db: Session, environment: SftpEnvironment) -> SftpTargetConfig:
         privateKeyPath=private_key_path or "",
         remotePath=remote_path or DEFAULT_REMOTE_PATH,
         apiEndpoint=api_endpoint or _DEFAULT_API_ENDPOINT[environment],
+        resourceTrackingBaseUrl=resource_tracking_base_url or _DEFAULT_RESOURCE_TRACKING_BASE_URL[environment],
     )
 
 
@@ -94,6 +107,9 @@ def save_sftp_target(db: Session, environment: SftpEnvironment, input: SftpTarge
     set_admin_setting(db, f"{prefix}PrivateKeyPath", input.privateKeyPath)
     set_admin_setting(db, f"{prefix}RemotePath", input.remotePath or DEFAULT_REMOTE_PATH)
     set_admin_setting(db, f"{prefix}ApiEndpoint", input.apiEndpoint or _DEFAULT_API_ENDPOINT[environment])
+    set_admin_setting(
+        db, f"{prefix}ResourceTrackingBaseUrl", input.resourceTrackingBaseUrl or _DEFAULT_RESOURCE_TRACKING_BASE_URL[environment]
+    )
 
 
 def set_active_sftp_environment(db: Session, environment: SftpEnvironment) -> None:

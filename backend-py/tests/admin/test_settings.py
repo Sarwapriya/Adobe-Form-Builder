@@ -310,6 +310,7 @@ class TestSftpDeploymentSettings:
                 "privateKeyPath": "/keys/id_rsa",
                 "remotePath": "/incoming",
                 "apiEndpoint": "https://res5.africa2s.crm.samsung.com/ingest",
+                "resourceTrackingBaseUrl": "https://res5.africa2s.crm.samsung.com/res/tracking/",
             },
             headers=admin_headers,
         )
@@ -329,6 +330,7 @@ class TestSftpDeploymentSettings:
             "username": "deploy",
             "remotePath": "/incoming",
             "apiEndpoint": "https://res5.africa2s.crm.samsung.com/ingest",
+            "resourceTrackingBaseUrl": "https://res5.africa2s.crm.samsung.com/res/tracking/",
         }
 
         found = client.patch(
