@@ -304,6 +304,15 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
                   },
                 }))
               }
+              onRejected={() =>
+                updateDefinition((d) => ({
+                  ...d,
+                  fields: {
+                    ...d.fields,
+                    privacyPolicy: { ...d.fields.privacyPolicy!, uploadedFileName: undefined, linkUrlByLocale: {} },
+                  },
+                }))
+              }
             />
             {privacyPolicy.uploadedFileName && <ConsentUrlSampleNote />}
           </Stack>
@@ -402,6 +411,15 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
                       uploadedFileName: fileName,
                       urlByLocale: Object.fromEntries(d.locales.map((l) => [l.code, uploadedUrl])),
                     },
+                  },
+                }))
+              }
+              onRejected={() =>
+                updateDefinition((d) => ({
+                  ...d,
+                  fields: {
+                    ...d.fields,
+                    termsAndConditions: { ...d.fields.termsAndConditions!, uploadedFileName: undefined, urlByLocale: {} },
                   },
                 }))
               }

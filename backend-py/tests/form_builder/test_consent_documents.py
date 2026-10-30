@@ -63,11 +63,13 @@ def test_validate_pdf_accepts_a_real_readable_pdf():
 
 
 def test_validate_pdf_rejects_wrong_extension():
-    assert svc.validate_pdf("doc.docx", _pdf_bytes()) == "Only PDF files are supported."
+    assert svc.validate_pdf("doc.docx", _pdf_bytes()) == svc.WRONG_FORMAT_MESSAGE
 
 
 def test_validate_pdf_rejects_wrong_magic_bytes():
-    assert svc.validate_pdf("doc.pdf", b"not a pdf at all") == "Only PDF files are supported."
+    # Named .pdf but isn't one — this is an "unreadable" case, not a "wrong
+    # format" one; WRONG_FORMAT_MESSAGE is reserved for the extension check.
+    assert svc.validate_pdf("doc.pdf", b"not a pdf at all") == svc.UNREADABLE_MESSAGE
 
 
 def test_validate_pdf_rejects_oversized_file():

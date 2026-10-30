@@ -26,12 +26,23 @@ export function ConsentDocumentUpload({
   kind,
   disabled = false,
   onUploaded,
+  onRejected,
 }: {
   formId: string;
   mode: "admin" | "adhoc";
   kind: ConsentDocumentKind;
   disabled?: boolean;
   onUploaded: (fileName: string, url: string) => void;
+  /** Called when a replacement attempt is rejected for being the wrong
+   * format or genuinely unreadable (a 400 from either the client-side
+   * extension check or the server's own validation) — never for a plain
+   * network/server error, which says nothing about whether a previously
+   * uploaded document is still valid. The caller clears the previously
+   * shown Link URL/sample-URL note so a failed re-upload never leaves a
+   * stale "this is the correct file" state next to a fresh error — see
+   * ProfileFieldEditorPanel.tsx's own doc comment on why no history is
+   * kept here. */
+  onRejected: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -42,6 +53,7 @@ export function ConsentDocumentUpload({
     setError(null);
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setError("Only PDF files are supported.");
+      onRejected();
       return;
     }
     setUploading(true);
@@ -50,7 +62,12 @@ export function ConsentDocumentUpload({
         mode === "adhoc" ? await uploadAdHocConsentDocument(formId, kind, file) : await uploadConsentDocument(formId, kind, file);
       onUploaded(result.fileName, result.url);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Upload failed — please try again.");
+      if (err instanceof ApiError && err.status === 400) {
+        setError(err.message);
+        onRejected();
+      } else {
+        setError(err instanceof ApiError ? err.message : "Upload failed — please try again.");
+      }
     } finally {
       setUploading(false);
     }

@@ -41,7 +41,8 @@ ADOBE_RES_TRACKING_BASE_URL = "https://res6.mena2p.crm.samsung.com/res/tracking/
 # into memory for validation (there's no streaming need at this size).
 MAX_SIZE_BYTES = 20 * 1024 * 1024
 
-UNREADABLE_MESSAGE = "Please send document to system administrator"
+UNREADABLE_MESSAGE = "This file cannot be read — please contact the system administrator."
+WRONG_FORMAT_MESSAGE = "Only PDF files are supported."
 
 
 @dataclass
@@ -75,18 +76,18 @@ def resolve_sample_url(file_name: str) -> str:
 
 def validate_pdf(original_file_name: str, data: bytes) -> Optional[str]:
     """Returns an error message if the upload should be rejected, else
-    None. Checks, in order: extension, PDF magic bytes, size, then the
-    actual "can we read this" check — pypdf must be able to open it, decrypt
-    it (the only automatic unlock available for a password-protected file —
-    anything that still doesn't decrypt is unreadable to us the same way a
-    corrupt file is), and extract its first page's content. Any failure
-    along the way — encrypted, corrupt, zero pages — reports the same
-    UNREADABLE_MESSAGE, matching "any unreadable or protected file", not
-    just password-protected ones specifically."""
+    None. WRONG_FORMAT_MESSAGE is reserved for the one check on the file's
+    *extension* — anything that looks like a PDF by name but isn't readable
+    as one (wrong magic bytes, too large, encrypted, corrupt, zero pages)
+    reports UNREADABLE_MESSAGE instead, including the actual "can we read
+    this" check: pypdf must be able to open it, decrypt it (the only
+    automatic unlock available for a password-protected file — anything
+    that still doesn't decrypt is unreadable to us the same way a corrupt
+    file is), and extract its first page's content."""
     if not original_file_name.lower().endswith(".pdf"):
-        return "Only PDF files are supported."
+        return WRONG_FORMAT_MESSAGE
     if not data.startswith(b"%PDF-"):
-        return "Only PDF files are supported."
+        return UNREADABLE_MESSAGE
     if len(data) > MAX_SIZE_BYTES:
         return "This file is too large (20MB max)."
     try:
