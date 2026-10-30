@@ -73,7 +73,7 @@ export function FormBuilderPreviewDialog({ open, onClose }: { open: boolean; onC
   return (
     <Dialog {...responsiveDialogProps} open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: "90vh" } }}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-        <Box sx={{ flexGrow: 1 }}>Preview</Box>
+        <Box sx={{ flexGrow: 1 }}>Preview only</Box>
         {availableVariants.length > 1 && (
           <TextField select size="small" label="Variant" value={variant} onChange={(e) => setVariant(e.target.value as FormVariant)} sx={{ minWidth: 140 }}>
             <MenuItem value="ff">Full Form</MenuItem>

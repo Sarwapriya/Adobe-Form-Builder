@@ -1,6 +1,6 @@
 import type { BuilderConfig, ContributionContent, FormDefinition, ValidationResult } from "@formbuilder/shared";
 import { apiClient, ApiError } from "./apiClient";
-import type { FormDetail, FormListItem, QuestionSeed } from "./formBuilderApi";
+import type { ConsentDocumentKind, ConsentDocumentUploadResult, FormDetail, FormListItem, QuestionSeed } from "./formBuilderApi";
 
 /**
  * Standard-user-facing counterpart to formBuilderApi.ts — `/api/v1/forms`
@@ -69,6 +69,16 @@ export function updateMyAdHocFormDraft(formId: string, definition: FormDefinitio
 
 export function submitAdHocFormForReview(formId: string): Promise<void> {
   return apiClient.post<void>(`/api/v1/forms/adhoc/${formId}/submit-for-review`);
+}
+
+/** Same edit window as updateMyAdHocFormDraft above (not pending review, not
+ * yet published) — the server enforces it; see
+ * subsidiary_forms.py's upload_adhoc_consent_document. */
+export function uploadAdHocConsentDocument(formId: string, kind: ConsentDocumentKind, file: File): Promise<ConsentDocumentUploadResult> {
+  const formData = new FormData();
+  formData.append("kind", kind);
+  formData.append("file", file);
+  return apiClient.postForm<ConsentDocumentUploadResult>(`/api/v1/forms/adhoc/${formId}/consent-documents`, formData);
 }
 
 /** Allowed while still draft or pending review; the server rejects this with a

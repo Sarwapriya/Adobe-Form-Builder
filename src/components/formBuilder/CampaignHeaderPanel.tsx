@@ -73,7 +73,7 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
       )}
       <Stack spacing={2}>
         <TextField
-          label="Campaign heading (One-Click)"
+          label="Form heading (One-Click)"
           size="small"
           fullWidth
           value={heading}
@@ -95,7 +95,7 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
           }
         />
         <TextField
-          label="Campaign subheading (One-Click)"
+          label="Form subheading (One-Click)"
           size="small"
           fullWidth
           value={subheading}
@@ -127,7 +127,7 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
             page — blank is these two fields' own normal, invited state ("leave
             blank to use..."), not a translation gap. */}
         <TextField
-          label="Campaign heading (Full Form)"
+          label="Form heading (Full Form)"
           size="small"
           fullWidth
           value={headingFF}
@@ -142,7 +142,7 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
           }
         />
         <TextField
-          label="Campaign subheading (Full Form)"
+          label="Form subheading (Full Form)"
           size="small"
           fullWidth
           value={subheadingFF}

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -139,6 +139,25 @@ def deploy_form(id: str, db: Session = Depends(get_db), auth: dict = Depends(req
     if result["outcome"] == "no_files":
         raise HTTPException(status_code=409, detail="no generated files to deploy")
     return {"deployment": result["deployment"]}
+
+
+@router.post("/{id}/consent-documents")
+async def upload_consent_document(
+    id: str, kind: str = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)
+) -> dict:
+    """Admin "upload a PDF for Terms & Conditions / Privacy Policy" action —
+    admin can do this anytime the form has a draft (status aside), unlike
+    the matching subsidiary_forms.py route, which is also gated by the
+    ad-hoc edit window. See form_builder_service.upload_consent_document."""
+    if kind not in ("termsAndConditions", "privacyPolicy"):
+        raise HTTPException(status_code=400, detail="kind must be termsAndConditions or privacyPolicy")
+    data = await file.read()
+    result = form_builder_service.upload_consent_document(db, id, kind, file.filename or "document.pdf", data)  # type: ignore[arg-type]
+    if result["outcome"] == "not_found":
+        raise HTTPException(status_code=404, detail="form not found")
+    if result["outcome"] == "invalid":
+        raise HTTPException(status_code=400, detail=result["reason"])
+    return {"fileName": result["fileName"], "url": result["url"]}
 
 
 @router.get("/{id}/files")

@@ -195,6 +195,26 @@ export function deployForm(formId: string): Promise<DeployResponse> {
   return apiClient.post<DeployResponse>(`/api/v1/admin/forms/${formId}/deploy`);
 }
 
+export interface ConsentDocumentUploadResult {
+  fileName: string;
+  /** A *sample* URL — only resolves once the next Deploy actually pushes
+   * this file to Adobe over SFTP (see deploy_form). */
+  url: string;
+}
+
+export type ConsentDocumentKind = "termsAndConditions" | "privacyPolicy";
+
+/** POST /api/v1/admin/forms/:id/consent-documents — uploads a PDF backing
+ * the form's Terms & Conditions / Privacy Policy Link URL, validated and
+ * renamed server-side (see backend's consent_document_service.py). Admin
+ * can do this anytime the form has a draft. */
+export function uploadConsentDocument(formId: string, kind: ConsentDocumentKind, file: File): Promise<ConsentDocumentUploadResult> {
+  const formData = new FormData();
+  formData.append("kind", kind);
+  formData.append("file", file);
+  return apiClient.postForm<ConsentDocumentUploadResult>(`/api/v1/admin/forms/${formId}/consent-documents`, formData);
+}
+
 /** One post-deployment availability check of a published form's files on the
  * Adobe Campaign frontal servers — see backend's resource_check_service.py. */
 export type ResourceCheckStatus = "scheduled" | "running" | "passed" | "failed" | "error";

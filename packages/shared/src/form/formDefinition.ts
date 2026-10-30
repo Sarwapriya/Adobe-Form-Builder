@@ -145,6 +145,13 @@ export interface PrivacyPolicyMeta {
    * (and every consent created before this field existed) have always rendered Full
    * Form only, so absent means `["ff"]`, not both — see pageTemplate.ts. */
   visibleInVariants?: Array<"ff" | "oc">;
+  /** The renamed file name (see consentDocumentService.ts's naming convention) of a PDF
+   * an admin/subsidiary user uploaded for this field, if any — `linkUrlByLocale` above is
+   * set to that document's resolved Adobe frontal-server URL for every locale at upload
+   * time, and this is kept alongside it purely so the publish/deploy pipeline knows which
+   * on-disk file to push over SFTP next to the generated solution files. `undefined` means
+   * `linkUrlByLocale` was typed by hand (or never set) — the normal, pre-existing case. */
+  uploadedFileName?: string;
 }
 
 /** An informational Terms & Conditions link — unlike PrivacyPolicyMeta/ConsentToggleMeta,
@@ -159,6 +166,8 @@ export interface PrivacyPolicyMeta {
 export interface TermsAndConditionsMeta {
   textByLocale: Record<LocaleCode, string>;
   urlByLocale: Record<LocaleCode, string>;
+  /** Same uploaded-PDF convention as PrivacyPolicyMeta.uploadedFileName — see there. */
+  uploadedFileName?: string;
 }
 
 /** Marketing Opt-in's own shape — a LocalizedFieldMeta (just a label, like

@@ -13,6 +13,7 @@ them directly and let FastAPI's own JSON encoding handle datetimes etc.
 
 from __future__ import annotations
 
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -28,7 +29,9 @@ from app.form_pipeline import (
     GeneratedFile,
     LocaleInfo,
     PageCopy,
+    PrivacyPolicyMeta,
     QuestionDefinition,
+    TermsAndConditionsMeta,
     ValidationResult,
     default_builder_config,
     generate_solution,
@@ -45,6 +48,7 @@ from app.models.form_template import FormTemplate
 from app.models.form_version import FormVersion, FormVersionStatus
 from app.models.generated_file import GeneratedFile as GeneratedFileEntity
 from app.services import (
+    consent_document_service,
     email_service,
     page_error_locale_default_service,
     project_code_service,
@@ -448,6 +452,61 @@ def update_draft(db: Session, form_id: str, definition: FormDefinition, config: 
     return "ok"
 
 
+ConsentDocumentOutcome = Literal["ok", "not_found", "invalid"]
+
+
+def upload_consent_document(
+    db: Session, form_id: str, kind: consent_document_service.ConsentDocumentKind, original_file_name: str, data: bytes
+) -> dict[str, Any]:
+    """Admin/subsidiary "upload a PDF for Terms & Conditions / Privacy
+    Policy" action. Validates and renames the file (consent_document_service),
+    saves it to disk, then patches the form's *current draft* definition —
+    `uploadedFileName` plus every one of the form's locales' URL to the
+    document's resolved (not-yet-live, see the returned `url`) Adobe
+    frontal-server address, scoped to this form only, same as every other
+    draft field edit (update_draft). The actual SFTP push happens later, at
+    Deploy time (see deploy_form) — this never touches Adobe itself.
+
+    Caller (the two routers — form_builder.py for admin, subsidiary_forms.py
+    for a subsidiary's own ad-hoc form) is responsible for
+    ownership/permission checks before calling this; this function only
+    knows about the form, not who's allowed to edit it."""
+    form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
+    if form is None or not form.currentDraftVersionId:
+        return {"outcome": "not_found"}
+
+    rejection = consent_document_service.validate_pdf(original_file_name, data)
+    if rejection:
+        return {"outcome": "invalid", "reason": rejection}
+
+    file_name = consent_document_service.build_file_name(original_file_name, form.subsidiaryId, kind)
+    consent_document_service.save_consent_document(form.subsidiaryId, form_id, file_name, data)
+    url = consent_document_service.resolve_sample_url(file_name)
+
+    draft_version = db.get(FormVersion, form.currentDraftVersionId)
+    assert draft_version is not None
+    definition = FormDefinition.model_validate_json(draft_version.definition)
+    locale_codes = [l.code for l in definition.locales]
+
+    if kind == "termsAndConditions":
+        current_tc = definition.fields.termsAndConditions or TermsAndConditionsMeta()
+        updated_tc = current_tc.model_copy(
+            update={"uploadedFileName": file_name, "urlByLocale": {**current_tc.urlByLocale, **{l: url for l in locale_codes}}}
+        )
+        definition = definition.model_copy(update={"fields": definition.fields.model_copy(update={"termsAndConditions": updated_tc})})
+    else:
+        current_pp = definition.fields.privacyPolicy or PrivacyPolicyMeta()
+        updated_pp = current_pp.model_copy(
+            update={"uploadedFileName": file_name, "linkUrlByLocale": {**current_pp.linkUrlByLocale, **{l: url for l in locale_codes}}}
+        )
+        definition = definition.model_copy(update={"fields": definition.fields.model_copy(update={"privacyPolicy": updated_pp})})
+
+    draft_version.definition = definition.model_dump_json()
+    form.updatedAt = _now()
+    db.commit()
+    return {"outcome": "ok", "fileName": file_name, "url": url}
+
+
 PublishOutcome = Literal["ok", "not_found", "invalid"]
 
 
@@ -619,9 +678,26 @@ def deploy_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     if not saved:
         return {"outcome": "no_files"}
 
-    deployment = deploy_generated_files(
-        db, [SftpDeployFile(absolutePath=absolute_file_path(f.filePath), remoteFileName=f.fileName) for f in saved]
-    )
+    deploy_files = [SftpDeployFile(absolutePath=absolute_file_path(f.filePath), remoteFileName=f.fileName) for f in saved]
+    file_names = [f.fileName for f in saved]
+
+    # Any Terms & Conditions / Privacy Policy PDF uploaded onto the
+    # *published* version (see upload_consent_document) deploys alongside
+    # the generated solution files, into the same Adobe frontal-server
+    # namespace its own resolve_sample_url already points at — this is the
+    # one point that URL actually goes from "sample" to live.
+    published_version = db.get(FormVersion, form.publishedVersionId)
+    if published_version is not None:
+        published_definition = FormDefinition.model_validate_json(published_version.definition)
+        for meta in (published_definition.fields.termsAndConditions, published_definition.fields.privacyPolicy):
+            if meta is not None and meta.uploadedFileName:
+                relative_path = os.path.join(
+                    consent_document_service.consent_documents_dir(form.subsidiaryId, form_id), meta.uploadedFileName
+                )
+                deploy_files.append(SftpDeployFile(absolutePath=absolute_file_path(relative_path), remoteFileName=meta.uploadedFileName))
+                file_names.append(meta.uploadedFileName)
+
+    deployment = deploy_generated_files(db, deploy_files)
 
     # Once Adobe has had time to pick the files up, check they're actually
     # served by every frontal server (resource_check_service; never raises).
@@ -629,7 +705,7 @@ def deploy_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
         from app.services import resource_check_service
 
         resource_check_service.schedule_after_deploy(
-            db, form_id, form.publishedVersionId, [f.fileName for f in saved], user_id, deployment.environment
+            db, form_id, form.publishedVersionId, file_names, user_id, deployment.environment
         )
 
     return {"outcome": "ok", "deployment": deployment}

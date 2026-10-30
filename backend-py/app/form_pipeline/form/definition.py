@@ -117,11 +117,16 @@ class PrivacyPolicyMeta(_Model):
     linkTextByLocale: Optional[dict[LocaleCode, str]] = None
     required: Optional[bool] = None
     visibleInVariants: Optional[list[FormVariant]] = None
+    # The renamed file name (see consent_document_service.py) of an uploaded PDF
+    # backing linkUrlByLocale, if any — None means linkUrlByLocale was typed by
+    # hand. See formDefinition.ts's own doc comment on this field.
+    uploadedFileName: Optional[str] = None
 
 
 class TermsAndConditionsMeta(_Model):
     textByLocale: dict[LocaleCode, str] = Field(default_factory=dict)
     urlByLocale: dict[LocaleCode, str] = Field(default_factory=dict)
+    uploadedFileName: Optional[str] = None
 
 
 class ConsentToggleMeta(LocalizedFieldMeta):

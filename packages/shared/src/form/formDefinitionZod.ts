@@ -59,6 +59,7 @@ const privacyPolicyMetaSchema = z.object({
   linkTextByLocale: localeTextMap.optional(),
   required: z.boolean().optional(),
   visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
+  uploadedFileName: z.string().optional(),
 });
 
 const consentToggleMetaSchema = localizedFieldMetaSchema.extend({
@@ -69,6 +70,7 @@ const consentToggleMetaSchema = localizedFieldMetaSchema.extend({
 const termsAndConditionsMetaSchema = z.object({
   textByLocale: localeTextMap,
   urlByLocale: localeTextMap,
+  uploadedFileName: z.string().optional(),
 });
 
 export const consentDefinitionSchema = z.object({

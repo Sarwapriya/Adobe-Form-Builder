@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -137,6 +137,33 @@ def update_adhoc_draft(id: str, body: DraftUpdateBody, db: Session = Depends(get
     if owned.status == "published":
         raise HTTPException(status_code=409, detail="This campaign has been approved and published — it can only be viewed")
     form_builder_service.update_draft(db, id, body.definition, body.config)
+
+
+@router.post("/adhoc/{id}/consent-documents")
+async def upload_adhoc_consent_document(
+    id: str, kind: str = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db), auth: dict = Depends(require_auth)
+) -> dict:
+    """Subsidiary user's own "upload a PDF for Terms & Conditions / Privacy
+    Policy" action — same ownership + edit-window gate as update_adhoc_draft
+    above (not yet pending review, not yet published), never a new one. See
+    form_builder_service.upload_consent_document."""
+    if kind not in ("termsAndConditions", "privacyPolicy"):
+        raise HTTPException(status_code=400, detail="kind must be termsAndConditions or privacyPolicy")
+    subsidiary_id = auth.get("subsidiaryId")
+    owned = form_builder_service.find_owned_adhoc_form(db, id, subsidiary_id) if subsidiary_id else None
+    if owned is None:
+        raise HTTPException(status_code=404, detail="form not found")
+    if owned.pendingReview:
+        raise HTTPException(status_code=409, detail="This form is awaiting admin review — it can't be edited until reviewed")
+    if owned.status == "published":
+        raise HTTPException(status_code=409, detail="This campaign has been approved and published — it can only be viewed")
+    data = await file.read()
+    result = form_builder_service.upload_consent_document(db, id, kind, file.filename or "document.pdf", data)  # type: ignore[arg-type]
+    if result["outcome"] == "not_found":
+        raise HTTPException(status_code=404, detail="form not found")
+    if result["outcome"] == "invalid":
+        raise HTTPException(status_code=400, detail=result["reason"])
+    return {"fileName": result["fileName"], "url": result["url"]}
 
 
 @router.post("/adhoc/{id}/submit-for-review", status_code=status.HTTP_204_NO_CONTENT)

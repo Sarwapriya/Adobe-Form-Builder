@@ -3,6 +3,7 @@ import { Alert, Autocomplete, Chip, FormControlLabel, Stack, Switch, TextField, 
 import type { FormVariant, TranslationTarget } from "@formbuilder/shared";
 import { CALLING_CODES, resolveCountryName, resolveMobileNumberCountries } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { ConsentDocumentUpload } from "./ConsentDocumentUpload";
 import { ConsentVisibilityControls } from "./ConsentVisibilityControls";
 import { consentVariants } from "./formBuilderHelpers";
 import { localeDir } from "../../utils/localeDir";
@@ -32,6 +33,19 @@ const FIELD_LABEL: Record<ProfileFieldKey, string> = {
   submitButton: "Submit Button",
 };
 
+/** Shown under the Link URL field once it's been set from an uploaded PDF
+ * (see ConsentDocumentUpload) — the URL is real (the exact Adobe frontal-
+ * server address this file will live at), but the file itself isn't there
+ * yet: it only actually deploys the next time someone clicks Deploy (see
+ * backend's deploy_form), so the link won't resolve until then. */
+function ConsentUrlSampleNote() {
+  return (
+    <Alert severity="info" sx={{ borderRadius: 2 }}>
+      This is a sample URL — it will go live the next time this campaign is deployed.
+    </Alert>
+  );
+}
+
 /** Config drawer content for a predefined profile field. Mobile Number gets an
  * extra country picker: its options are restricted to the owning subsidiary's
  * own admin-managed country list (Configuration > Subsidiaries — the same
@@ -56,6 +70,16 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
   const activeLocale = useFormBuilderStore((s) => s.activeLocale) || defaultLocale;
   const contributions = useFormBuilderStore((s) => s.contributions);
   const field = fieldKey === "submitButton" ? definition?.fields.submitButton : definition?.fields[fieldKey];
+
+  // Consent-document (PDF) upload gating — admin can upload anytime; a
+  // subsidiary user's own ad-hoc form reuses the exact same edit window
+  // AdHocActionBar/MyAdHocFormEditorPage already enforce elsewhere (not yet
+  // pending review, not yet published), never a new one.
+  const formId = useFormBuilderStore((s) => s.formId);
+  const builderMode = useFormBuilderStore((s) => s.mode);
+  const formStatus = useFormBuilderStore((s) => s.status);
+  const formPendingReview = useFormBuilderStore((s) => s.pendingReview);
+  const consentUploadDisabled = builderMode === "adhoc" && (formPendingReview || formStatus === "published");
 
   // Subsidiary-wise Privacy Policy URL lookup (admin-managed, Configuration >
   // Access & Locales — see SubsidiaryPrivacyLinkManager.tsx) — auto-fills the
@@ -260,6 +284,30 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
             }))
           }
         />
+        {formId && (
+          <Stack spacing={1}>
+            <ConsentDocumentUpload
+              formId={formId}
+              mode={builderMode}
+              kind="privacyPolicy"
+              disabled={consentUploadDisabled}
+              onUploaded={(fileName, url) =>
+                updateDefinition((d) => ({
+                  ...d,
+                  fields: {
+                    ...d.fields,
+                    privacyPolicy: {
+                      ...d.fields.privacyPolicy!,
+                      uploadedFileName: fileName,
+                      linkUrlByLocale: Object.fromEntries(d.locales.map((l) => [l.code, url])),
+                    },
+                  },
+                }))
+              }
+            />
+            {privacyPolicy.uploadedFileName && <ConsentUrlSampleNote />}
+          </Stack>
+        )}
         <ConsentVisibilityControls
           required={privacyPolicy.required !== false}
           visibleInVariants={consentVariants(privacyPolicy)}
@@ -337,6 +385,30 @@ export function ProfileFieldEditorPanel({ fieldKey }: { fieldKey: ProfileFieldKe
             }))
           }
         />
+        {formId && (
+          <Stack spacing={1}>
+            <ConsentDocumentUpload
+              formId={formId}
+              mode={builderMode}
+              kind="termsAndConditions"
+              disabled={consentUploadDisabled}
+              onUploaded={(fileName, uploadedUrl) =>
+                updateDefinition((d) => ({
+                  ...d,
+                  fields: {
+                    ...d.fields,
+                    termsAndConditions: {
+                      ...d.fields.termsAndConditions!,
+                      uploadedFileName: fileName,
+                      urlByLocale: Object.fromEntries(d.locales.map((l) => [l.code, uploadedUrl])),
+                    },
+                  },
+                }))
+              }
+            />
+            {termsAndConditions.uploadedFileName && <ConsentUrlSampleNote />}
+          </Stack>
+        )}
       </Stack>
     );
   }
