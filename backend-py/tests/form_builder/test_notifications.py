@@ -9,8 +9,8 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.models.notification import Notification
-from app.services import form_builder_service, notification_service
-from tests.form_builder.conftest import sample_config_json, sample_definition_json, unique_name
+from app.services import form_builder_service, form_contribution_service, notification_service
+from tests.form_builder.conftest import create_and_publish_admin_form, sample_config_json, sample_definition_json, unique_name
 
 
 def _notifications_for(db, user_id: str) -> list[Notification]:
@@ -116,3 +116,36 @@ def test_adhoc_submit_for_review_notifies_admins(client, db_session, admin_user,
 
     rows = [n for n in _notifications_for(db_session, admin_user.id) if n.type == "adhoc_submitted"]
     assert len(rows) == 1 and created["name"] in rows[0].message
+    # The link must point at this specific form's editor, not the generic
+    # ad-hoc list page — that was the actual bug reported.
+    assert rows[0].link == f"/admin/form-builder/{created['id']}"
+
+
+def test_contribution_submitted_notification_links_to_the_specific_form(
+    client, db_session, admin_user, standard_headers, subsidiary_row, admin_headers, monkeypatch
+):
+    queued = []
+    monkeypatch.setattr(form_contribution_service, "run_in_background", lambda work: queued.append(work))
+
+    form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)
+    resp = client.post(f"/api/v1/forms/{form_id}/contributions", json={"content": {}}, headers=standard_headers)
+    assert resp.status_code == 201, resp.text
+    assert len(queued) == 1
+    queued[0](db_session)
+
+    rows = [n for n in _notifications_for(db_session, admin_user.id) if n.type == "contribution_submitted"]
+    assert len(rows) == 1
+    assert rows[0].link == f"/admin/form-builder/{form_id}"
+
+
+def test_form_published_notification_links_to_the_specific_form(client, db_session, admin_headers, standard_user, subsidiary_row, monkeypatch):
+    queued = []
+    monkeypatch.setattr(form_builder_service, "run_in_background", lambda work: queued.append(work))
+
+    form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name)
+    assert len(queued) == 1
+    queued[0](db_session)
+
+    rows = [n for n in _notifications_for(db_session, standard_user.id) if n.type == "form_published"]
+    assert len(rows) == 1
+    assert rows[0].link == f"/my-forms/{form_id}"

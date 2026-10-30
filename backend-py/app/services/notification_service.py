@@ -17,6 +17,7 @@ same discipline email_service.py already follows.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select, update
@@ -42,8 +43,20 @@ def _create_for(db: Session, user_ids: list[str], type_: str, title: str, messag
     if not user_ids:
         return
     try:
-        for user_id in user_ids:
-            db.add(Notification(userId=user_id, type=type_, title=title, message=message, link=link))
+        # Explicit, Python-side createdAt (rather than relying solely on the
+        # column's SYSDATETIMEOFFSET() server_default) with a strictly
+        # increasing microsecond nudge per row — two notifications created
+        # moments apart (even within the same fan-out batch, or two back-to-
+        # back notify_*() calls) must never tie on createdAt, since
+        # list_my_notifications's "newest first" ordering depends on it and
+        # SQL Server doesn't guarantee a stable secondary order for ties.
+        now = datetime.now(timezone.utc)
+        for i, user_id in enumerate(user_ids):
+            db.add(
+                Notification(
+                    userId=user_id, type=type_, title=title, message=message, link=link, createdAt=now + timedelta(microseconds=i)
+                )
+            )
         db.commit()
     except Exception as err:  # noqa: BLE001 — a notification failure must never break the caller
         print(f"[notification_service] Failed to create notifications: {err}")

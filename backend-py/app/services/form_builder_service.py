@@ -658,12 +658,12 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
 
         def _notify(bg_db: Session) -> None:
             email_service.send_form_published_notification(
-                bg_db, resolve_subsidiary_recipients(bg_db, subsidiary_id), form_name, subsidiary_id
+                bg_db, resolve_subsidiary_recipients(bg_db, subsidiary_id), form_id, form_name, subsidiary_id
             )
             notification_service.notify_subsidiary(
                 bg_db, subsidiary_id, "form_published", "New form ready for your subsidiary",
                 f'"{form_name}" was published — review it and add translations, questions, or consents as needed.',
-                link="/my-forms",
+                link=f"/my-forms/{form_id}",
             )
 
         run_in_background(_notify)
@@ -1010,10 +1010,10 @@ def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) 
     submitted_at = form.submittedForReviewAt
 
     def _notify(bg_db: Session) -> None:
-        email_service.send_adhoc_review_submitted_notification(bg_db, form_name, subsidiary_id, submitted_at)
+        email_service.send_adhoc_review_submitted_notification(bg_db, form_id, form_name, subsidiary_id, submitted_at)
         notification_service.notify_admins(
             bg_db, "adhoc_submitted", "Ad-hoc form submitted for review", f'"{form_name}" ({subsidiary_id}) is awaiting your review.',
-            link="/admin/form-builder/adhoc",
+            link=f"/admin/form-builder/{form_id}",
         )
 
     run_in_background(_notify)

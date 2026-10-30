@@ -34,8 +34,8 @@ def queued_background(monkeypatch):
 def sent_published_emails(monkeypatch):
     sent = []
 
-    def fake_send(db, recipients, form_name, subsidiary_id):
-        sent.append({"recipients": recipients, "form_name": form_name, "subsidiary_id": subsidiary_id})
+    def fake_send(db, recipients, form_id, form_name, subsidiary_id):
+        sent.append({"recipients": recipients, "form_id": form_id, "form_name": form_name, "subsidiary_id": subsidiary_id})
 
     monkeypatch.setattr(email_service, "send_form_published_notification", fake_send)
     return sent

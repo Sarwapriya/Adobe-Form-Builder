@@ -357,8 +357,8 @@ def send_resource_check_failed_notification(
 # --- Ad-hoc form submitted for review ---------------------------------------
 
 
-def _build_adhoc_review_submitted_message(form_name: str, subsidiary_id: str, submitted_at: datetime) -> EmailContent:
-    link = _app_link("/admin/form-builder/adhoc")
+def _build_adhoc_review_submitted_message(form_id: str, form_name: str, subsidiary_id: str, submitted_at: datetime) -> EmailContent:
+    link = _app_link(f"/admin/form-builder/{form_id}")
     subject = f"Ad-hoc form submitted for review: {form_name}"
     text = (
         f"A subsidiary user submitted an ad-hoc form for review.\n\n"
@@ -374,14 +374,14 @@ def _build_adhoc_review_submitted_message(form_name: str, subsidiary_id: str, su
     return EmailContent(subject=subject, text=text, html=html)
 
 
-def send_adhoc_review_submitted_notification(db: Session, form_name: str, subsidiary_id: str, submitted_at: datetime) -> None:
+def send_adhoc_review_submitted_notification(db: Session, form_id: str, form_name: str, subsidiary_id: str, submitted_at: datetime) -> None:
     """Never raises — a notification failure can't fail the "submit for
     review" request itself."""
     try:
         recipients = _resolve_admin_recipients(db)
         if not recipients:
             return
-        result = send_email(db, recipients, _build_adhoc_review_submitted_message(form_name, subsidiary_id, submitted_at))
+        result = send_email(db, recipients, _build_adhoc_review_submitted_message(form_id, form_name, subsidiary_id, submitted_at))
         if not result.ok:
             print(f"[email_service] Failed to send ad-hoc review-submitted email: {result.error}")
     except Exception as err:  # noqa: BLE001
@@ -391,8 +391,8 @@ def send_adhoc_review_submitted_notification(db: Session, form_name: str, subsid
 # --- Contribution ("Translate & Extend") submitted for review --------------
 
 
-def _build_contribution_submitted_message(form_name: str, subsidiary_id: str, submitted_by_user_name: str, submitted_by_user_email: str, note: Optional[str]) -> EmailContent:
-    link = _app_link("/admin/form-builder")
+def _build_contribution_submitted_message(form_id: str, form_name: str, subsidiary_id: str, submitted_by_user_name: str, submitted_by_user_email: str, note: Optional[str]) -> EmailContent:
+    link = _app_link(f"/admin/form-builder/{form_id}")
     subject = f"Translation/extension submitted for review: {form_name}"
     text = (
         f"A subsidiary user submitted a translation/extension for review.\n\n"
@@ -409,14 +409,14 @@ def _build_contribution_submitted_message(form_name: str, subsidiary_id: str, su
 
 
 def send_contribution_submitted_notification(
-    db: Session, form_name: str, subsidiary_id: str, submitted_by_user_name: str, submitted_by_user_email: str, note: Optional[str]
+    db: Session, form_id: str, form_name: str, subsidiary_id: str, submitted_by_user_name: str, submitted_by_user_email: str, note: Optional[str]
 ) -> None:
     """Never raises — same best-effort discipline as every other notification here."""
     try:
         recipients = _resolve_admin_recipients(db)
         if not recipients:
             return
-        result = send_email(db, recipients, _build_contribution_submitted_message(form_name, subsidiary_id, submitted_by_user_name, submitted_by_user_email, note))
+        result = send_email(db, recipients, _build_contribution_submitted_message(form_id, form_name, subsidiary_id, submitted_by_user_name, submitted_by_user_email, note))
         if not result.ok:
             print(f"[email_service] Failed to send contribution-submitted email: {result.error}")
     except Exception as err:  # noqa: BLE001
@@ -426,8 +426,8 @@ def send_contribution_submitted_notification(
 # --- Admin-created form published for a subsidiary --------------------------
 
 
-def _build_form_published_message(form_name: str, subsidiary_id: str) -> EmailContent:
-    link = _app_link("/my-forms")
+def _build_form_published_message(form_id: str, form_name: str, subsidiary_id: str) -> EmailContent:
+    link = _app_link(f"/my-forms/{form_id}")
     subject = f"New form ready for your subsidiary: {form_name}"
     text = (
         f'An admin published a new form for subsidiary "{subsidiary_id}".\n\n'
@@ -444,12 +444,12 @@ def _build_form_published_message(form_name: str, subsidiary_id: str) -> EmailCo
     return EmailContent(subject=subject, text=text, html=html)
 
 
-def send_form_published_notification(db: Session, recipients: list[str], form_name: str, subsidiary_id: str) -> None:
+def send_form_published_notification(db: Session, recipients: list[str], form_id: str, form_name: str, subsidiary_id: str) -> None:
     """Never raises — a notification failure can't fail the publish itself."""
     if not recipients:
         return
     try:
-        result = send_email(db, recipients, _build_form_published_message(form_name, subsidiary_id))
+        result = send_email(db, recipients, _build_form_published_message(form_id, form_name, subsidiary_id))
         if not result.ok:
             print(f"[email_service] Failed to send form-published email: {result.error}")
     except Exception as err:  # noqa: BLE001

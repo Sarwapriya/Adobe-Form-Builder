@@ -116,6 +116,7 @@ def submit_contribution(
         def _notify(bg_db: Session) -> None:
             email_service.send_contribution_submitted_notification(
                 bg_db,
+                form_id,
                 form_name,
                 subsidiary_id,
                 submitter_username,
@@ -125,7 +126,7 @@ def submit_contribution(
             notification_service.notify_admins(
                 bg_db, "contribution_submitted", "Translation/extension submitted for review",
                 f'"{form_name}" — {submitter_username} ({subsidiary_id}) submitted a contribution for review.',
-                link="/admin/form-builder",
+                link=f"/admin/form-builder/{form_id}",
             )
 
         run_in_background(_notify)
