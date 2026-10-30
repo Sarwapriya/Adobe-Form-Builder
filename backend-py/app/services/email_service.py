@@ -22,6 +22,20 @@ from app.config import settings
 from app.services.smtp_settings_service import get_smtp_settings
 
 
+def _app_link(path: str) -> str:
+    """Builds a clickable link to a frontend page for a notification email.
+    `FRONTEND_URL` alone is wrong on a subpath deployment (e.g. this app
+    served under /formiq): it must stay the bare origin for CORS
+    (app/main.py's allow_origins does exact string matching against the
+    browser's Origin header, which never includes a path), so the subpath
+    has to be added back in here — settings.SUBPATH already exists for
+    exactly this (see its own doc comment — originally added for the
+    refresh-token cookie's Path attribute, same underlying problem).
+    Without it, every link in this file 404s (or, worse, lands on an
+    unrelated app sharing the same domain) on any subpath deployment."""
+    return f"{settings.FRONTEND_URL or ''}{settings.SUBPATH}{path}"
+
+
 @dataclass
 class _ResolvedSmtpConfig:
     host: str
@@ -205,7 +219,7 @@ class CutoffReminderItem:
 
 
 def _build_cutoff_reminder_message(subsidiary_id: str, project_code: str, cutoff_date: datetime, items: list[CutoffReminderItem]) -> EmailContent:
-    link = f"{settings.FRONTEND_URL or ''}/my-forms"
+    link = _app_link("/my-forms")
     cutoff = _format_date_only(cutoff_date)
     subject = f'Reminder: forms pending for "{project_code}" (cutoff {cutoff})'
     body_lines = "\n".join(f"- {item.form_name}: {'; '.join(item.reasons)}" for item in items)
@@ -242,7 +256,7 @@ class AdminPendingItem:
 
 
 def _build_admin_pending_summary_message(items: list[AdminPendingItem]) -> EmailContent:
-    link = f"{settings.FRONTEND_URL or ''}/admin/form-builder"
+    link = _app_link("/admin/form-builder")
     subject = f"Reminder: {len(items)} form{'' if len(items) == 1 else 's'} pending before cutoff"
     body_lines = "\n".join(
         f'- {item.form_name} (subsidiary "{item.subsidiary_id}", project "{item.project_code}", '
@@ -289,7 +303,7 @@ def _build_resource_check_failed_message(
     form_id: str, form_name: str, subsidiary_id: str, project_code: Optional[str], trigger: str,
     total_urls: int, failures: list[ResourceCheckFailure],
 ) -> EmailContent:
-    link = f"{settings.FRONTEND_URL or ''}/admin/form-builder/{form_id}"
+    link = _app_link(f"/admin/form-builder/{form_id}")
     subject = f"Published files missing on Adobe servers: {form_name}"
     when = "on both automatic checks after deployment" if trigger == "recheck" else "on a manual check"
     intro = (
@@ -344,7 +358,7 @@ def send_resource_check_failed_notification(
 
 
 def _build_adhoc_review_submitted_message(form_name: str, subsidiary_id: str, submitted_at: datetime) -> EmailContent:
-    link = f"{settings.FRONTEND_URL or ''}/admin/form-builder/adhoc"
+    link = _app_link("/admin/form-builder/adhoc")
     subject = f"Ad-hoc form submitted for review: {form_name}"
     text = (
         f"A subsidiary user submitted an ad-hoc form for review.\n\n"
@@ -378,7 +392,7 @@ def send_adhoc_review_submitted_notification(db: Session, form_name: str, subsid
 
 
 def _build_contribution_submitted_message(form_name: str, subsidiary_id: str, submitted_by_user_name: str, submitted_by_user_email: str, note: Optional[str]) -> EmailContent:
-    link = f"{settings.FRONTEND_URL or ''}/admin/form-builder"
+    link = _app_link("/admin/form-builder")
     subject = f"Translation/extension submitted for review: {form_name}"
     text = (
         f"A subsidiary user submitted a translation/extension for review.\n\n"
@@ -413,7 +427,7 @@ def send_contribution_submitted_notification(
 
 
 def _build_form_published_message(form_name: str, subsidiary_id: str) -> EmailContent:
-    link = f"{settings.FRONTEND_URL or ''}/my-forms"
+    link = _app_link("/my-forms")
     subject = f"New form ready for your subsidiary: {form_name}"
     text = (
         f'An admin published a new form for subsidiary "{subsidiary_id}".\n\n'
@@ -449,7 +463,7 @@ def _build_resource_check_succeeded_message(form_id: str, form_name: str, subsid
     # Ad-hoc forms' own editor lives at a different path than an admin-created
     # (HR) form's Translate & Extend page — see App.tsx's `my-forms/*` routes.
     path = f"/my-forms/adhoc/{form_id}" if form_origin == "adhoc" else f"/my-forms/{form_id}"
-    link = f"{settings.FRONTEND_URL or ''}{path}"
+    link = _app_link(path)
     subject = f"Your campaign is live: {form_name}"
     intro = "Your campaign's files are confirmed live on the Adobe Campaign servers. Here's the final URL" + (
         "s" if len(urls) != 1 else ""
@@ -499,7 +513,7 @@ def send_resource_check_succeeded_notification(
 
 
 def _build_project_locked_message(project_code: str, cutoff_date: Optional[datetime]) -> EmailContent:
-    link = f"{settings.FRONTEND_URL or ''}/my-forms"
+    link = _app_link("/my-forms")
     subject = f'Project "{project_code}" has been locked'
     cutoff_line = f" The campaign cutoff date is {_format_date_only(cutoff_date)}." if cutoff_date else ""
     text = (
