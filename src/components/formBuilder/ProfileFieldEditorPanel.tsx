@@ -35,13 +35,17 @@ const FIELD_LABEL: Record<ProfileFieldKey, string> = {
 
 /** Shown under the Link URL field once it's been set from an uploaded PDF
  * (see ConsentDocumentUpload) — the URL is real (the exact Adobe frontal-
- * server address this file will live at), but the file itself isn't there
- * yet: it only actually deploys the next time someone clicks Deploy (see
- * backend's deploy_form), so the link won't resolve until then. */
+ * server address this file will live at), but uploading only patches the
+ * *draft* definition (see upload_consent_document): the generated files
+ * (and this field's own value, if you were to Preview/Download right now)
+ * only pick it up on the next Publish, and the file itself isn't actually
+ * on Adobe's servers until the next Deploy after that — both steps, not
+ * just one. */
 function ConsentUrlSampleNote() {
   return (
     <Alert severity="info" sx={{ borderRadius: 2 }}>
-      This is a sample URL — it will go live the next time this campaign is deployed.
+      This is a sample URL — it only takes effect in the generated form once you click <strong>Publish</strong>, and
+      only goes live on Adobe's servers once the campaign is then <strong>Deploy</strong>ed.
     </Alert>
   );
 }

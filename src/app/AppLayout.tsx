@@ -570,22 +570,22 @@ export function AppLayout() {
               />
             </Box>
           )}
-          {!collapsed && (
-            <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0 }}>
-              <NotificationBell color={sidebarTokens.text} />
-            </Box>
-          )}
         </Box>
 
         <Divider sx={{ borderColor: sidebarTokens.divider }} />
 
         <List sx={{ px: 1.25, py: 1.5, flexGrow: 1 }}>
-          {dashboardNavItem && (
-            <Box sx={{ mb: 1.5 }}>
-              {renderNavItem(dashboardNavItem)}
-              <Divider sx={{ borderColor: sidebarTokens.divider, mt: 1 }} />
+          <Box sx={{ mb: 1.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              {dashboardNavItem && <Box sx={{ flexGrow: 1, minWidth: 0 }}>{renderNavItem(dashboardNavItem)}</Box>}
+              {!collapsed && (
+                <Box sx={{ flexShrink: 0 }}>
+                  <NotificationBell color={sidebarTokens.text} />
+                </Box>
+              )}
             </Box>
-          )}
+            <Divider sx={{ borderColor: sidebarTokens.divider, mt: 1 }} />
+          </Box>
           {sections.map((section, i) => {
             const sectionOpen = openSections[section.label] ?? true;
             return (
