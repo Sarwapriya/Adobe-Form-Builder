@@ -453,6 +453,20 @@ def update_draft(db: Session, form_id: str, definition: FormDefinition, config: 
 
     draft_version = db.get(FormVersion, form.currentDraftVersionId)
     assert draft_version is not None
+    # A version created before structureFingerprint existed has never had one
+    # stamped, and publish_form treats a null fingerprint as "nothing to
+    # compare against, so no conflict" (see its own doc comment) — correct
+    # for a version that's never been touched since, but wrong the moment
+    # this specific save is itself a structural change: with no baseline,
+    # that change would go undetected and silently reset a hand-edited HTML
+    # file with no warning. Backfilling from the OLD (about-to-be-replaced)
+    # definition, right here before it's overwritten, establishes "this is
+    # what the files on disk currently match" as the baseline, so THIS
+    # save's own structural change (if any) is correctly caught at the next
+    # Publish instead of slipping through for free.
+    if draft_version.structureFingerprint is None:
+        old_definition = FormDefinition.model_validate_json(draft_version.definition)
+        draft_version.structureFingerprint = compute_structure_fingerprint(old_definition)
     draft_version.definition = definition.model_dump_json()
     draft_version.config = _enforce_variants_for_origin(form.origin, config).model_dump_json()
     form.updatedAt = _now()
@@ -539,6 +553,12 @@ def upload_consent_document(
         version = db.get(FormVersion, version_id)
         assert version is not None
         definition = FormDefinition.model_validate_json(version.definition)
+        # Same backfill-before-overwrite as update_draft, for a version that
+        # predates structureFingerprint — see that function's own doc
+        # comment for why this has to happen before `version.definition` is
+        # replaced below.
+        if version.structureFingerprint is None:
+            version.structureFingerprint = compute_structure_fingerprint(definition)
         version.definition = _apply_consent_upload_to_definition(definition, kind, file_name, url).model_dump_json()
     form.updatedAt = _now()
     db.commit()
@@ -661,6 +681,16 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
     if form is None or not form.currentDraftVersionId:
         return {"outcome": "not_found"}
     was_already_published = form.status == "published"
+    # Captured before anything below mutates form.status/publishedVersionId —
+    # this is the FormVersion Edit Files has actually been writing hand-edits
+    # to all along (_editable_form_version_id's own doc comment: a published
+    # form keeps editing its live publishedVersionId directly, never the
+    # draft). The draft (form.currentDraftVersionId) only ever gets
+    # hand-edited via Edit Files while the form has never been published yet
+    # — once published, the two diverge, and hand-edit preservation below
+    # must read from wherever Edit Files actually wrote, not blindly from
+    # the draft.
+    editable_version_id = _editable_form_version_id(form) or form.currentDraftVersionId
 
     draft_version = db.get(FormVersion, form.currentDraftVersionId)
     if draft_version is None:
@@ -707,19 +737,39 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
     # on which questions/fields exist. Treating it as structurally affected
     # would reset a hand-edit (e.g. a redirect URL) for no reason every time
     # a question is added — only HTML genuinely embeds per-question markup.
-    existing_draft_files = list(
-        db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == draft_version.id)).scalars()
+    #
+    # Hand-edits are read from `editable_version_id`'s own files, NOT
+    # unconditionally from draft_version.id — for an already-published form
+    # those are two different FormVersion rows (Edit Files writes straight
+    # to the live publishedVersionId; the design-screen builder writes to
+    # the draft), so reading only from the draft would silently miss every
+    # hand-edit made on the form an admin is actually looking at.
+    editable_version = draft_version if editable_version_id == draft_version.id else db.get(FormVersion, editable_version_id)
+    assert editable_version is not None
+    existing_editable_files = list(
+        db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == editable_version_id)).scalars()
     )
+    # A version published before structureFingerprint existed has never had
+    # one stamped — same backfill rationale as update_draft's own doc
+    # comment, but using THIS version's own (frozen, since a published
+    # version's definition is never mutated again) stored definition as the
+    # baseline, since that's exactly the structure its on-disk files were
+    # actually generated to match.
+    if editable_version.structureFingerprint is None:
+        editable_version.structureFingerprint = compute_structure_fingerprint(
+            definition if editable_version_id == draft_version.id else FormDefinition.model_validate_json(editable_version.definition)
+        )
+
     new_fingerprint = compute_structure_fingerprint(definition)
-    structural_change = draft_version.structureFingerprint is not None and draft_version.structureFingerprint != new_fingerprint
+    structural_change = editable_version.structureFingerprint is not None and editable_version.structureFingerprint != new_fingerprint
     if structural_change:
         affected = sorted(
-            f.fileName for f in existing_draft_files if f.fileType == "html" and f.editedAt is not None
+            f.fileName for f in existing_editable_files if f.fileType == "html" and f.editedAt is not None
         )
         if affected and not force:
             return {"outcome": "structural_conflict", "affectedFiles": affected}
 
-    existing_by_name = {f.fileName: f for f in existing_draft_files}
+    existing_by_name = {f.fileName: f for f in existing_editable_files}
     resolved_files: list[GeneratedFile] = []
     preserved_edits: dict[str, tuple[Any, Optional[str]]] = {}
     for f in files:
@@ -739,13 +789,22 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
         else:
             resolved_files.append(f)
 
-    # Files already generated directly on this draft (via a pre-publish Edit
-    # Files session — see ensure_draft_generated_files) share draft_version.id
-    # with what's about to be inserted below, so they'd otherwise become
-    # duplicate rows for the same (formVersionId, fileName); delete them first
-    # (their content, where preserved, was already read into resolved_files
-    # above).
-    for f in existing_draft_files:
+    # The fresh set above is about to be (re)inserted under draft_version.id
+    # (promoted to be the new published version below) — delete whatever
+    # rows already exist there first, so there's no duplicate-row conflict
+    # for the same (formVersionId, fileName). This is a *different* set from
+    # existing_editable_files whenever the form was already published (the
+    # draft's own rows are just whatever the last publish cloned into it,
+    # never hand-edited directly while published — see
+    # _editable_form_version_id's own doc comment) — the editable version's
+    # rows above were only ever read from, never targeted for deletion here;
+    # they're left in place as that old version's own historical record.
+    existing_draft_own_files = (
+        existing_editable_files
+        if editable_version_id == draft_version.id
+        else list(db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == draft_version.id)).scalars())
+    )
+    for f in existing_draft_own_files:
         db.delete(f)
     db.flush()
 
@@ -938,9 +997,12 @@ def _editable_form_version_id(form: Form) -> Optional[str]:
     a never-yet-published draft targets `currentDraftVersionId` instead, so
     hand-editing can start before the first Publish. Once published, further
     edits here intentionally stay on the published version, not the fresh
-    draft publish_form clones afterward — and a future Publish always
-    regenerates every file fresh from the definition regardless, so a
-    hand-edit made here only lasts until the next publish (see publish_form)."""
+    draft publish_form clones afterward — publish_form itself reads THIS
+    function's own result to find those hand-edits (not the draft's own
+    files) precisely because of that split, so a hand-edit made here
+    carries forward into the next publish unless the form's structure
+    (which questions/fields exist) actually changed since (see
+    publish_form's own doc comment on structureFingerprint)."""
     if form.status == "published" and form.publishedVersionId:
         return form.publishedVersionId
     if form.status == "draft" and form.currentDraftVersionId:

@@ -150,33 +150,36 @@ class TestUpdateGeneratedFileContent:
             form_builder_service.get_generated_file_content(db_session, form_id, "00000000-0000-0000-0000-000000000000")
 
 
-class TestHandEditDoesNotSurviveRepublish:
-    """The form definition is the single source of truth — every publish
-    regenerates every file purely from it, full stop. A hand-edit made via
-    Edit Files only lasts until the next publish; it is never carried
-    forward (an earlier version of publish_form did carry it forward, which
-    meant a config-level change, like a newly-required field, could keep
-    silently producing stale output for any file that happened to have an
-    old hand-edit — exactly the "two versions of one campaign" problem a
-    form shouldn't have)."""
+class TestHandEditOnAnAlreadyPublishedFormSurvivesRepublish:
+    """Edit Files, for an already-published form, writes straight to the
+    *live* publishedVersionId (see `_editable_form_version_id`'s own doc
+    comment) — a different FormVersion row than `currentDraftVersionId`,
+    which is what the design-screen builder edits and what the next Publish
+    reads its definition from. publish_form reads hand-edit state from
+    `_editable_form_version_id`'s own result specifically so a hand-edit made
+    here is carried into the next publish the same way a pre-publish one is
+    (see TestDraftFiles) — unless the form's structure (which questions/
+    fields exist) actually changed, in which case only the files that
+    genuinely need to change are reset, after the admin confirms (see
+    TestDraftFiles's structural-conflict test for that half)."""
 
-    def test_republishing_discards_the_hand_edited_content(
+    def test_republishing_preserves_a_hand_edit_made_on_the_live_published_form(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
     ):
         form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
         files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         js_file = next(f for f in files if f["fileType"] == "js")
         original = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
-        edited_content = original + "\n// hand-added by an admin\n"
+        edited_content = original + "\n// hand-added by an admin, e.g. a redirect URL\n"
 
         resp = client.put(
             f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": edited_content}, headers=admin_headers
         )
         assert resp.status_code == 200, resp.text
 
-        # Re-publish the same form (e.g. after an unrelated draft change) —
-        # every file, including this hand-edited one, must come back purely
-        # freshly generated.
+        # Re-publish the same form (e.g. after an unrelated draft change,
+        # with nothing structural about it) — the hand-edit must carry
+        # straight through, same as a pre-publish hand-edit does.
         publish_resp = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
         assert publish_resp.status_code == 200, publish_resp.text
 
@@ -185,15 +188,59 @@ class TestHandEditDoesNotSurviveRepublish:
         # match on the exact file name the edit was made against, not just
         # "the first js file", since list ordering isn't guaranteed.
         republished_js = next(f for f in republished_files if f["fileName"] == js_file["fileName"])
-        assert republished_js["id"] != js_file["id"], "publish must have produced a new GeneratedFile row"
-        assert republished_js["editedAt"] is None
-        assert republished_js["editedByUserId"] is None
-
+        assert republished_js["editedAt"] is not None
         republished_content = client.get(
             f"/api/v1/admin/forms/{form_id}/files/{republished_js['id']}", headers=admin_headers
         ).json()["content"]
-        assert republished_content == original
-        assert republished_content != edited_content
+        assert republished_content == edited_content
+
+    def test_a_structural_change_blocks_republish_of_an_already_published_hand_edit_until_confirmed(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        html_file = next(f for f in files if f["fileType"] == "html")
+        js_file = next(f for f in files if f["fileType"] == "js")
+        html_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", headers=admin_headers).json()["content"]
+        js_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", json={"content": html_original + "\n<!-- hand-edit -->\n"}, headers=admin_headers)
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": js_original + "\n// redirect URL\n"}, headers=admin_headers)
+
+        # Now add a new question via the design/configuration panel (saves to
+        # the DRAFT — a different FormVersion than the one just hand-edited).
+        definition = sample_definition_json(subsidiary_row.name)
+        next_order = len(definition["questions"]) + 1
+        definition["questions"].append(
+            {
+                "id": "Q99", "order": next_order, "controlType": "radio", "required": False,
+                "headingByLocale": {"en_GB": "New?"}, "answers": [
+                    {"id": "A99", "order": 1, "textByLocale": {"en_GB": "Yes"}},
+                    {"id": "A100", "order": 2, "textByLocale": {"en_GB": "No"}},
+                ],
+            }
+        )
+        draft_resp = client.patch(
+            f"/api/v1/admin/forms/{form_id}/draft",
+            json={"definition": definition, "config": sample_config_json(["ff", "oc"])},
+            headers=admin_headers,
+        )
+        assert draft_resp.status_code == 204, draft_resp.text
+
+        conflict = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert conflict.status_code == 409, conflict.text
+        assert set(conflict.json()["affectedFiles"]) == {html_file["fileName"]}
+
+        forced = client.post(f"/api/v1/admin/forms/{form_id}/publish", json={"force": True}, headers=admin_headers)
+        assert forced.status_code == 200, forced.text
+
+        after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        after_html = next(f for f in after if f["fileName"] == html_file["fileName"])
+        assert after_html["editedAt"] is None  # reset — the question list changed
+
+        after_js = next(f for f in after if f["fileName"] == js_file["fileName"])
+        assert after_js["editedAt"] is not None  # redirect-URL edit untouched throughout
+        after_js_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_js['id']}", headers=admin_headers).json()["content"]
+        assert after_js_content == js_original + "\n// redirect URL\n"
 
     def test_republishing_a_never_edited_file_stays_freshly_generated(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
@@ -213,13 +260,14 @@ class TestDraftFiles:
     time it's needed (ensure_draft_generated_files), a hand-edit survives
     further Save Draft calls untouched (Save Draft never regenerates while
     files already exist), "Regenerate" explicitly discards hand-edits and
-    rebuilds fresh, and — unlike TestHandEditDoesNotSurviveRepublish's two
-    scenarios, where the edit was made directly on an *already-published*
-    version that the next publish never reads from in the first place — a
-    hand-edit made on the draft that's actually about to be published DOES
-    carry into that publish, as long as nothing structural (which
-    questions/fields exist) changed since. See publish_form's own doc
-    comment on structureFingerprint."""
+    rebuilds fresh, and a hand-edit made on the draft that's actually about
+    to be published DOES carry into that publish, as long as nothing
+    structural (which questions/fields exist) changed since. See
+    publish_form's own doc comment on structureFingerprint, and
+    TestHandEditOnAnAlreadyPublishedFormSurvivesRepublish for the equivalent
+    coverage once a form has already been published at least once (where
+    Edit Files targets a *different* FormVersion than the draft — see
+    `_editable_form_version_id`)."""
 
     def test_listing_a_draft_generates_files_on_first_access(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
