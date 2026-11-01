@@ -135,7 +135,7 @@ export function BuilderActionBar() {
                 <li key={f}>{f}</li>
               ))}
             </ul>
-            Every other file (including any hand-edited CSS) is unaffected. Continue?
+            Every other file (including any hand-edited CSS or behavior script) is unaffected. Continue?
           </>
         ),
         confirmLabel: "Publish anyway",

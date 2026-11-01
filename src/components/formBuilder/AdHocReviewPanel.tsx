@@ -107,7 +107,7 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
                   <li key={f}>{f}</li>
                 ))}
               </ul>
-              Every other file (including any hand-edited CSS) is unaffected. Continue?
+              Every other file (including any hand-edited CSS or behavior script) is unaffected. Continue?
             </>
           ),
           confirmLabel: "Approve anyway",

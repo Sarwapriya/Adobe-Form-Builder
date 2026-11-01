@@ -362,10 +362,16 @@ class TestDraftFiles:
     ):
         form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
         files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        html_file = next(f for f in files if f["fileType"] == "html")
         js_file = next(f for f in files if f["fileType"] == "js")
         css_file = next(f for f in files if f["fileType"] == "css")
+        html_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", headers=admin_headers).json()["content"]
         js_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
         css_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{css_file['id']}", headers=admin_headers).json()["content"]
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", json={"content": html_original + "\n<!-- hand-edit -->\n"}, headers=admin_headers)
+        # JS (the per-language behavior script) is byte-identical regardless of
+        # question/field structure — a hand-edit to it (e.g. a redirect URL)
+        # must never be reset by a structural change, same as CSS.
         client.put(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": js_original + "\n// hand-edit\n"}, headers=admin_headers)
         client.put(f"/api/v1/admin/forms/{form_id}/files/{css_file['id']}", json={"content": css_original + "\n.hand-edit{}\n"}, headers=admin_headers)
 
@@ -396,14 +402,21 @@ class TestDraftFiles:
         conflict = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
         assert conflict.status_code == 409, conflict.text
         affected = set(conflict.json()["affectedFiles"])
-        assert js_file["fileName"] in affected and css_file["fileName"] not in affected  # css is never fingerprint-checked
+        # Only HTML embeds per-question markup, so only it is fingerprint-checked.
+        assert affected == {html_file["fileName"]}
 
         forced = client.post(f"/api/v1/admin/forms/{form_id}/publish", json={"force": True}, headers=admin_headers)
         assert forced.status_code == 200, forced.text
 
         after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        after_html = next(f for f in after if f["fileName"] == html_file["fileName"])
+        assert after_html["editedAt"] is None  # reset — the question list changed
+
         after_js = next(f for f in after if f["fileName"] == js_file["fileName"])
-        assert after_js["editedAt"] is None  # reset — the question list changed
+        assert after_js["editedAt"] is not None  # js hand-edit untouched throughout
+        after_js_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_js['id']}", headers=admin_headers).json()["content"]
+        assert after_js_content == js_original + "\n// hand-edit\n"
+
         after_css = next(f for f in after if f["fileName"] == css_file["fileName"])
         after_css_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_css['id']}", headers=admin_headers).json()["content"]
         assert after_css_content == css_original + "\n.hand-edit{}\n"  # css hand-edit untouched throughout

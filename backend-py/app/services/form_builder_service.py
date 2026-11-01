@@ -552,14 +552,18 @@ def upload_consent_document(
 def compute_structure_fingerprint(definition: FormDefinition) -> str:
     """A deterministic digest of "which question ids exist, which optional
     profile fields are present" — the parts of a FormDefinition that change
-    the generated HTML/behavior-JS's actual *shape* (a new/removed
-    `.form_check_module`/`.form_top_group`/consent-checkbox block), as
-    opposed to just their text/data content, which lives entirely in
-    data.js and never requires the HTML to change at all — see
-    renderQuestionModule.ts/renderProfileField.ts's own doc comments on why
-    the HTML is text-empty. Compared at Publish time (see publish_form) to
-    decide whether a hand-edited HTML/behavior-JS file is still structurally
-    valid or needs the admin's confirmation before being reset."""
+    the generated HTML's actual *shape* (a new/removed `.form_check_module`/
+    `.form_top_group`/consent-checkbox block), as opposed to just their
+    text/data content, which lives entirely in data.js and never requires
+    the HTML to change at all — see renderQuestionModule.ts/
+    renderProfileField.ts's own doc comments on why the HTML is text-empty.
+    The per-language behavior-JS files (buildFfJs.ts/buildOcJs.ts) are NOT
+    affected by this at all — each is the reference script embedded byte-
+    identical regardless of form structure, tagged only with a language pin
+    — so this fingerprint is never compared against them. Compared at
+    Publish time (see publish_form) to decide whether a hand-edited HTML
+    file is still structurally valid or needs the admin's confirmation
+    before being reset."""
     f = definition.fields
     present_fields = sorted(
         name
@@ -687,15 +691,22 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
 
     # The form definition is the single source of truth for every file's
     # *content*, full stop — but a hand-edit made via the Edit Files window
-    # (update_generated_file_content) to an HTML/behavior-JS file is now
-    # preserved across a publish *unless* the form's structure (which
-    # questions/fields exist — see compute_structure_fingerprint) actually
-    # changed since that file was last generated, in which case publishing
-    # requires the admin's explicit confirmation (`force`) before any
-    # hand-edited file is reset. data.js is never part of this: it's pure
-    # data, always safely regenerated fresh (and already kept in sync
-    # continuously by sync_editable_data_js well before Publish is even
-    # clicked — see update_draft/upload_consent_document).
+    # (update_generated_file_content) to an HTML file is now preserved across
+    # a publish *unless* the form's structure (which questions/fields exist —
+    # see compute_structure_fingerprint) actually changed since that file was
+    # last generated, in which case publishing requires the admin's explicit
+    # confirmation (`force`) before any hand-edited HTML file is reset.
+    # data.js is never part of this: it's pure data, always safely
+    # regenerated fresh (and already kept in sync continuously by
+    # sync_editable_data_js well before Publish is even clicked — see
+    # update_draft/upload_consent_document). The behavior-JS files
+    # (buildFfJs/buildOcJs) are NOT part of this check either, even though
+    # they're also classified "js" — see their own doc comments: each is the
+    # reference script embedded byte-identical, tagged only with a one-line
+    # language pin, so its freshly generated content never actually depends
+    # on which questions/fields exist. Treating it as structurally affected
+    # would reset a hand-edit (e.g. a redirect URL) for no reason every time
+    # a question is added — only HTML genuinely embeds per-question markup.
     existing_draft_files = list(
         db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == draft_version.id)).scalars()
     )
@@ -703,7 +714,7 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
     structural_change = draft_version.structureFingerprint is not None and draft_version.structureFingerprint != new_fingerprint
     if structural_change:
         affected = sorted(
-            f.fileName for f in existing_draft_files if f.fileType in ("html", "js") and f.editedAt is not None
+            f.fileName for f in existing_draft_files if f.fileType == "html" and f.editedAt is not None
         )
         if affected and not force:
             return {"outcome": "structural_conflict", "affectedFiles": affected}
@@ -715,11 +726,11 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
         existing_row = existing_by_name.get(f.path)
         file_type = classify_file_type(f.path, file_names)
         hand_edited = existing_row is not None and existing_row.editedAt is not None
-        # CSS is never structurally tied to which questions/fields exist
-        # (see compute_structure_fingerprint's own doc comment), so a CSS
-        # hand-edit is always preserved, structural change or not — only
-        # html/js ever need the fingerprint comparison at all.
-        keep_hand_edit = hand_edited and (file_type == "css" or (file_type in ("html", "js") and not structural_change))
+        # CSS and behavior-JS are never structurally tied to which
+        # questions/fields exist (see the doc comment above), so a hand-edit
+        # to either is always preserved, structural change or not — only
+        # html ever needs the fingerprint comparison at all.
+        keep_hand_edit = hand_edited and (file_type in ("css", "js") or (file_type == "html" and not structural_change))
         if keep_hand_edit:
             assert existing_row is not None
             with open(absolute_file_path(existing_row.filePath), "r", encoding="utf-8", newline="") as fh:
