@@ -26,6 +26,7 @@ import {
   FormInvalidError,
   publishForm as apiPublishForm,
   rejectContribution,
+  StructuralConflictError,
   type ContributionSummary,
 } from "../../api/formBuilderApi";
 import { ApiError } from "../../api/apiClient";
@@ -35,6 +36,7 @@ import { ContributionDetails } from "./ContributionDetails";
 import { QaRunDialog } from "../admin/QaRunDialog";
 import { showToast } from "../../store/toastStore";
 import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
+import { useConfirm } from "../../hooks/useConfirm";
 
 type RowStatus = "pending" | "awaitingPublish" | "published" | "rejected";
 
@@ -104,6 +106,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
   const loading = useFormBuilderStore((s) => s.contributionsLoading);
   const refresh = useFormBuilderStore((s) => s.refreshContributions);
   const responsiveDialogProps = useResponsiveDialogProps();
+  const { confirm, confirmDialog } = useConfirm();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewContribution, setPreviewContribution] = useState<ContributionSummary | null>(null);
   const [qaContribution, setQaContribution] = useState<ContributionSummary | null>(null);
@@ -132,12 +135,34 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
     }
   }
 
-  async function handlePublish() {
+  async function handlePublish(force = false) {
     setBusyId("__publish__");
     try {
-      await apiPublishForm(formId);
+      await apiPublishForm(formId, { force });
       await Promise.all([refresh(), reloadForm(formId)]);
     } catch (err) {
+      if (err instanceof StructuralConflictError) {
+        const { affectedFiles } = err;
+        const confirmed = await confirm({
+          title: "Hand-edited code will be reset",
+          message: (
+            <>
+              A question or field was added or removed since these files were last generated, so the following
+              hand-edited file{affectedFiles.length > 1 ? "s" : ""} will be reset to the newly generated code:
+              <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                {affectedFiles.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+              Every other file (including any hand-edited CSS) is unaffected. Continue?
+            </>
+          ),
+          confirmLabel: "Publish anyway",
+          confirmColor: "warning",
+        });
+        if (confirmed) await handlePublish(true);
+        return;
+      }
       if (err instanceof FormInvalidError) {
         showToast("Publish failed — the current draft has validation errors (see the panel above). Fix them and try again.", "error");
       } else {
@@ -208,7 +233,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
                 variant="contained"
                 startIcon={<RocketLaunchIcon />}
                 disabled={busyId === "__publish__"}
-                onClick={handlePublish}
+                onClick={() => void handlePublish()}
               >
                 {busyId === "__publish__" ? "Publishing..." : "Publish"}
               </Button>
@@ -363,6 +388,7 @@ export function ContributionReviewPanel({ formId }: { formId: string }) {
           </Button>
         </DialogActions>
       </Dialog>
+      {confirmDialog}
     </Paper>
   );
 }

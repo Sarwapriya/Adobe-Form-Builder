@@ -19,6 +19,7 @@ from app.schemas.form_builder import (
     CreateFormBody,
     CreateFormWithQuestionsBody,
     DraftUpdateBody,
+    PublishBody,
     ReviewNoteBody,
     UpdateGeneratedFileBody,
 )
@@ -117,13 +118,21 @@ def update_draft(id: str, body: DraftUpdateBody, db: Session = Depends(get_db)) 
 
 
 @router.post("/{id}/publish")
-def publish_form(id: str, db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> dict:
-    result = form_builder_service.publish_form(db, id, auth["sub"])
+def publish_form(id: str, body: PublishBody = PublishBody(), db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> dict:
+    result = form_builder_service.publish_form(db, id, auth["sub"], force=body.force)
     if result["outcome"] == "not_found":
         raise HTTPException(status_code=404, detail="form not found")
     if result["outcome"] == "invalid":
         validation: ValidationResult = result["validation"]
         raise HTTPException(status_code=422, detail={"error": "form is not valid", "validation": validation.model_dump()})
+    if result["outcome"] == "structural_conflict":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "Publishing would reset hand-edited code in these files — confirm to continue",
+                "affectedFiles": result["affectedFiles"],
+            },
+        )
     return {"validation": result["validation"]}
 
 
@@ -261,7 +270,7 @@ def list_contributions(id: str, db: Session = Depends(get_db)) -> list[dict]:
 
 @router.post("/{id}/adhoc/approve", status_code=status.HTTP_204_NO_CONTENT)
 def approve_adhoc(id: str, body: ApproveAdHocBody, db: Session = Depends(get_db), auth: dict = Depends(require_admin)) -> None:
-    result = form_builder_service.approve_adhoc_form(db, id, body.projectCode, auth["sub"])
+    result = form_builder_service.approve_adhoc_form(db, id, body.projectCode, auth["sub"], force=body.force)
     if result["outcome"] == "not_found":
         raise HTTPException(status_code=404, detail="form not found")
     if result["outcome"] == "not_adhoc":
@@ -273,6 +282,14 @@ def approve_adhoc(id: str, body: ApproveAdHocBody, db: Session = Depends(get_db)
     if result["outcome"] == "invalid":
         validation: ValidationResult = result["validation"]
         raise HTTPException(status_code=422, detail={"error": "form is not valid", "validation": validation.model_dump()})
+    if result["outcome"] == "structural_conflict":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "Approving would reset hand-edited code in these files — confirm to continue",
+                "affectedFiles": result["affectedFiles"],
+            },
+        )
 
 
 @router.post("/{id}/adhoc/reject", status_code=status.HTTP_204_NO_CONTENT)

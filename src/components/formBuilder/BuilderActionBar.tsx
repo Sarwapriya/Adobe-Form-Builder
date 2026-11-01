@@ -118,7 +118,33 @@ export function BuilderActionBar() {
 
   async function handlePublish() {
     const result = await publish();
-    if (result.ok) showToast("Published.", "success");
+    if (result.ok) {
+      showToast("Published.", "success");
+      return;
+    }
+    if (result.structuralConflict) {
+      const { affectedFiles } = result.structuralConflict;
+      const confirmed = await confirm({
+        title: "Hand-edited code will be reset",
+        message: (
+          <>
+            A question or field was added or removed since these files were last generated, so the following hand-edited
+            file{affectedFiles.length > 1 ? "s" : ""} will be reset to the newly generated code:
+            <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+              {affectedFiles.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
+            Every other file (including any hand-edited CSS) is unaffected. Continue?
+          </>
+        ),
+        confirmLabel: "Publish anyway",
+        confirmColor: "warning",
+      });
+      if (!confirmed) return;
+      const retryResult = await publish({ force: true });
+      if (retryResult.ok) showToast("Published.", "success");
+    }
   }
 
   async function handleUnpublish() {

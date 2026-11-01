@@ -15,13 +15,14 @@ import {
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import { approveAdHocForm, FormInvalidError, rejectAdHocForm } from "../../api/formBuilderApi";
+import { approveAdHocForm, FormInvalidError, rejectAdHocForm, StructuralConflictError } from "../../api/formBuilderApi";
 import { listOpenProjectCodes, type ProjectCode } from "../../api/projectCodesApi";
 import { ApiError } from "../../api/apiClient";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
 import { QaRunDialog } from "../admin/QaRunDialog";
 import { showToast } from "../../store/toastStore";
 import { useResponsiveDialogProps } from "../../hooks/useResponsiveDialog";
+import { useConfirm } from "../../hooks/useConfirm";
 
 /**
  * Admin review queue for a subsidiary user's own "ad-hoc" form submission (see
@@ -39,6 +40,7 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
   const existingProjectCode = useFormBuilderStore((s) => s.projectCode);
 
   const responsiveDialogProps = useResponsiveDialogProps();
+  const { confirm, confirmDialog } = useConfirm();
   const [projectCodes, setProjectCodes] = useState<ProjectCode[]>([]);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -67,9 +69,11 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
     if (!selectedProjectCode) return;
     setBusy(true);
     try {
-      await approveAdHocForm(formId, selectedProjectCode);
-      setApproveOpen(false);
-      await loadForm(formId);
+      const ok = await approveAndPublish();
+      if (ok) {
+        setApproveOpen(false);
+        await loadForm(formId);
+      }
     } catch (err) {
       if (err instanceof FormInvalidError) {
         showToast("Approve failed — this draft has validation errors. Open the form below, fix them, then try again.", "error");
@@ -78,6 +82,41 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Separated from handleApproveConfirm so a structural conflict's follow-up
+   * confirm dialog can retry with `{ force: true }` without re-running the
+   * outer try/catch's error toasting — a confirmed force-retry either
+   * succeeds or throws a real error, same as the first attempt. */
+  async function approveAndPublish(force = false): Promise<boolean> {
+    try {
+      await approveAdHocForm(formId, selectedProjectCode, { force });
+      return true;
+    } catch (err) {
+      if (err instanceof StructuralConflictError) {
+        const { affectedFiles } = err;
+        const confirmed = await confirm({
+          title: "Hand-edited code will be reset",
+          message: (
+            <>
+              A question or field was added or removed since these files were last generated, so the following
+              hand-edited file{affectedFiles.length > 1 ? "s" : ""} will be reset to the newly generated code:
+              <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                {affectedFiles.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+              Every other file (including any hand-edited CSS) is unaffected. Continue?
+            </>
+          ),
+          confirmLabel: "Approve anyway",
+          confirmColor: "warning",
+        });
+        if (!confirmed) return false;
+        return approveAndPublish(true);
+      }
+      throw err;
     }
   }
 
@@ -188,6 +227,7 @@ export function AdHocReviewPanel({ formId }: { formId: string }) {
           </Button>
         </DialogActions>
       </Dialog>
+      {confirmDialog}
     </Paper>
   );
 }

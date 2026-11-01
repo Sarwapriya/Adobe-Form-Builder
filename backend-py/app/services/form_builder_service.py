@@ -13,6 +13,7 @@ them directly and let FastAPI's own JSON encoding handle datetimes etc.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import uuid
@@ -439,7 +440,13 @@ UpdateDraftOutcome = Literal["ok", "not_found"]
 
 def update_draft(db: Session, form_id: str, definition: FormDefinition, config: BuilderConfig) -> UpdateDraftOutcome:
     """Saves the draft FormVersion's content in place ("Save Draft") — no
-    validation gate here; validation only blocks Publish."""
+    validation gate here; validation only blocks Publish. Only ever touches
+    the draft, never a currently-live published version (the design-screen
+    builder always edits toward the *next* publish, same as before) — then
+    syncs the draft's own data.js (see sync_editable_data_js) if it already
+    has generated files (e.g. from a pre-publish Edit Files session), so a
+    design-screen change is reflected there immediately rather than only on
+    the next Publish, without ever touching any hand-edited HTML/JS."""
     form = db.execute(select(Form).where(Form.id == form_id, Form.isDeleted == False)).scalar_one_or_none()  # noqa: E712
     if form is None or not form.currentDraftVersionId:
         return "not_found"
@@ -450,10 +457,34 @@ def update_draft(db: Session, form_id: str, definition: FormDefinition, config: 
     draft_version.config = _enforce_variants_for_origin(form.origin, config).model_dump_json()
     form.updatedAt = _now()
     db.commit()
+    sync_editable_data_js(db, form_id, form.currentDraftVersionId)
     return "ok"
 
 
 ConsentDocumentOutcome = Literal["ok", "not_found", "invalid"]
+
+
+def _apply_consent_upload_to_definition(
+    definition: FormDefinition, kind: consent_document_service.ConsentDocumentKind, file_name: str, url: str
+) -> FormDefinition:
+    """Pure patch: sets `uploadedFileName` plus every one of *this specific*
+    definition's own locales' URL for the given kind. Applied independently
+    to each `FormVersion.definition` that needs it (see upload_consent_document)
+    — never cross-copies one definition's content onto another, since a
+    draft can legitimately have other in-progress, not-yet-published changes
+    the published version doesn't have yet, and vice versa."""
+    locale_codes = [l.code for l in definition.locales]
+    if kind == "termsAndConditions":
+        current_tc = definition.fields.termsAndConditions or TermsAndConditionsMeta()
+        updated_tc = current_tc.model_copy(
+            update={"uploadedFileName": file_name, "urlByLocale": {**current_tc.urlByLocale, **{l: url for l in locale_codes}}}
+        )
+        return definition.model_copy(update={"fields": definition.fields.model_copy(update={"termsAndConditions": updated_tc})})
+    current_pp = definition.fields.privacyPolicy or PrivacyPolicyMeta()
+    updated_pp = current_pp.model_copy(
+        update={"uploadedFileName": file_name, "linkUrlByLocale": {**current_pp.linkUrlByLocale, **{l: url for l in locale_codes}}}
+    )
+    return definition.model_copy(update={"fields": definition.fields.model_copy(update={"privacyPolicy": updated_pp})})
 
 
 def upload_consent_document(
@@ -461,12 +492,21 @@ def upload_consent_document(
 ) -> dict[str, Any]:
     """Admin/subsidiary "upload a PDF for Terms & Conditions / Privacy
     Policy" action. Validates and renames the file (consent_document_service),
-    saves it to disk, then patches the form's *current draft* definition —
-    `uploadedFileName` plus every one of the form's locales' URL to the
-    document's resolved (not-yet-live, see the returned `url`) Adobe
-    frontal-server address, scoped to this form only, same as every other
-    draft field edit (update_draft). The actual SFTP push happens later, at
-    Deploy time (see deploy_form) — this never touches Adobe itself.
+    saves it to disk, then patches `uploadedFileName`/the resolved URL onto
+    *both* FormVersions that matter:
+      - the currently-*editable* version (`_editable_form_version_id` — the
+        published version's own definition for an already-published form,
+        same as Edit Files targets; the draft for one that isn't published
+        yet) — and immediately regenerates *just* that version's data.js
+        file (sync_editable_data_js) so the real URL is live right away,
+        with no Publish needed and no risk to any hand-edited HTML/behavior-
+        JS file, which this never touches.
+      - the *draft* too, when it's a different version (i.e. the form is
+        already published) — so the next Publish doesn't revert this back
+        to a blank URL. Its on-disk files are left alone unless they
+        already exist (sync_editable_data_js's own regenerate-on-miss rule).
+    The actual SFTP push happens later, at Deploy time (see deploy_form) —
+    this never touches Adobe itself.
 
     Caller (the two routers — form_builder.py for admin, subsidiary_forms.py
     for a subsidiary's own ad-hoc form) is responsible for
@@ -493,34 +533,117 @@ def upload_consent_document(
     )
     url = consent_document_service.resolve_sample_url(file_name, active_target.resourceTrackingBaseUrl)
 
-    draft_version = db.get(FormVersion, form.currentDraftVersionId)
-    assert draft_version is not None
-    definition = FormDefinition.model_validate_json(draft_version.definition)
-    locale_codes = [l.code for l in definition.locales]
-
-    if kind == "termsAndConditions":
-        current_tc = definition.fields.termsAndConditions or TermsAndConditionsMeta()
-        updated_tc = current_tc.model_copy(
-            update={"uploadedFileName": file_name, "urlByLocale": {**current_tc.urlByLocale, **{l: url for l in locale_codes}}}
-        )
-        definition = definition.model_copy(update={"fields": definition.fields.model_copy(update={"termsAndConditions": updated_tc})})
-    else:
-        current_pp = definition.fields.privacyPolicy or PrivacyPolicyMeta()
-        updated_pp = current_pp.model_copy(
-            update={"uploadedFileName": file_name, "linkUrlByLocale": {**current_pp.linkUrlByLocale, **{l: url for l in locale_codes}}}
-        )
-        definition = definition.model_copy(update={"fields": definition.fields.model_copy(update={"privacyPolicy": updated_pp})})
-
-    draft_version.definition = definition.model_dump_json()
+    target_version_id = _editable_form_version_id(form) or form.currentDraftVersionId
+    version_ids = {target_version_id, form.currentDraftVersionId}
+    for version_id in version_ids:
+        version = db.get(FormVersion, version_id)
+        assert version is not None
+        definition = FormDefinition.model_validate_json(version.definition)
+        version.definition = _apply_consent_upload_to_definition(definition, kind, file_name, url).model_dump_json()
     form.updatedAt = _now()
     db.commit()
+
+    for version_id in version_ids:
+        sync_editable_data_js(db, form_id, version_id)
+
     return {"outcome": "ok", "fileName": file_name, "url": url}
 
 
-PublishOutcome = Literal["ok", "not_found", "invalid"]
+def compute_structure_fingerprint(definition: FormDefinition) -> str:
+    """A deterministic digest of "which question ids exist, which optional
+    profile fields are present" — the parts of a FormDefinition that change
+    the generated HTML/behavior-JS's actual *shape* (a new/removed
+    `.form_check_module`/`.form_top_group`/consent-checkbox block), as
+    opposed to just their text/data content, which lives entirely in
+    data.js and never requires the HTML to change at all — see
+    renderQuestionModule.ts/renderProfileField.ts's own doc comments on why
+    the HTML is text-empty. Compared at Publish time (see publish_form) to
+    decide whether a hand-edited HTML/behavior-JS file is still structurally
+    valid or needs the admin's confirmation before being reset."""
+    f = definition.fields
+    present_fields = sorted(
+        name
+        for name, value in (
+            ("email", f.email), ("firstName", f.firstName), ("lastName", f.lastName),
+            ("countryCode", f.countryCode), ("callingCode", f.callingCode), ("mobileNumber", f.mobileNumber),
+            ("privacyPolicy", f.privacyPolicy), ("marketingOptin", f.marketingOptin),
+            ("termsAndConditions", f.termsAndConditions),
+        )
+        if value is not None
+    )
+    consent_ids = sorted(c.id for c in (f.additionalConsents or []))
+    question_ids = sorted(q.id for q in definition.questions)
+    return json.dumps({"questions": question_ids, "fields": present_fields, "consents": consent_ids}, sort_keys=True)
 
 
-def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
+def sync_editable_data_js(db: Session, form_id: str, version_id: str) -> None:
+    """Keeps one FormVersion's data.js file continuously in sync with its
+    own current definition — the one file that's always 100% safe to
+    regenerate in full, since it's pure structured data (fields/questions/
+    answers/param), never meaningfully hand-edited (the HTML is text-empty
+    and filled in from this file at runtime). Never touches any other file
+    (html/js/css), so a hand-edit made there via Edit Files is never at risk
+    from this. Called after any action that changes a definition without
+    going through a full Publish (update_draft / upload_consent_document),
+    so a design-screen change reaches the real, already-generated files
+    immediately — no Publish needed just for a data-only change to show up.
+
+    If this version has no generated files at all yet (never touched by
+    Edit Files or a previous publish), generates the full set fresh instead
+    — same "regenerate on miss" convention ensure_draft_generated_files
+    already uses — and stamps structureFingerprint, since every file is
+    freshly correct at that point. Degrades quietly (does nothing) if the
+    definition is currently invalid or the version/form can't be found —
+    Save Draft has no validation gate (see update_draft's own doc comment),
+    so a mid-edit, momentarily-invalid definition must never raise here."""
+    version = db.get(FormVersion, version_id)
+    form = db.get(Form, form_id)
+    if version is None or form is None:
+        return
+
+    definition = FormDefinition.model_validate_json(version.definition)
+    definition = definition.model_copy(update={"pageError": _resolve_page_error_updates(db, definition)})
+    config = _enforce_variants_for_origin(form.origin, BuilderConfig.model_validate_json(version.config))
+    generation_config = config.model_copy(update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form)})
+    generation = _generate_from_form_definition(definition, generation_config)
+    if len(generation["validation"].errors) > 0:
+        return
+
+    files: list[GeneratedFile] = generation["files"]
+    file_names: FileNames = generation["fileNames"]
+
+    existing = list(db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == version_id)).scalars())
+    if not existing:
+        saved = save_form_version_generated_files(form.subsidiaryId, version_id, files)
+        for f in saved:
+            db.add(
+                GeneratedFileEntity(
+                    formVersionId=version_id, fileName=f.fileName, filePath=f.relativePath,
+                    fileType=classify_file_type(f.fileName, file_names),
+                )
+            )
+        version.structureFingerprint = compute_structure_fingerprint(definition)
+        db.commit()
+        return
+
+    data_js = next((f for f in files if f.path == file_names.dataJs), None)
+    existing_data_row = next((row for row in existing if row.fileName == file_names.dataJs), None)
+    if data_js is None or existing_data_row is None:
+        # The data file's own expected name no longer matches any existing
+        # row (e.g. the subsidiary/project code changed since these files
+        # were last generated) — rare, and not safe to guess a path for;
+        # leave it for the next full Publish or explicit "Regenerate from
+        # definition" to resolve properly instead of writing to the wrong
+        # place or silently doing nothing useful.
+        return
+    with open(absolute_file_path(existing_data_row.filePath), "w", encoding="utf-8", newline="") as fh:
+        fh.write(data_js.contents)
+
+
+PublishOutcome = Literal["ok", "not_found", "invalid", "structural_conflict"]
+
+
+def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -> dict[str, Any]:
     """Validates and generates the current draft, persists its
     GeneratedFiles, assigns a versionNumber inside a locked transaction, then
     clones the just-published content into a fresh draft row so further
@@ -559,41 +682,74 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     if len(validation.errors) > 0:
         return {"outcome": "invalid", "validation": validation}
 
-    # The form definition is the single source of truth: every publish
-    # regenerates every file purely from it, full stop. A hand-edit made via
-    # the Edit Files window (update_generated_file_content) never survives a
-    # subsequent publish — there is deliberately no "carry forward the old
-    # edited content" step here any more (there used to be; it caused a
-    # config-level change, like a newly-required field, to silently keep
-    # producing stale output for any file that happened to have an old
-    # hand-edit, which is exactly the two-versions-of-one-campaign problem
-    # this form shouldn't have). A hand-edit is still useful between
-    # publishes (e.g. a quick post-publish patch pushed via Deploy without a
-    # full republish) — it's just never preserved across the next publish.
-    #
-    # Files already generated directly on this draft (via a pre-publish Edit
-    # Files session — see ensure_draft_generated_files) share draft_version.id
-    # with what's about to be inserted below, so they'd otherwise become
-    # duplicate rows for the same (formVersionId, fileName); delete them first.
+    files: list[GeneratedFile] = generation["files"]
+    file_names: FileNames = generation["fileNames"]
+
+    # The form definition is the single source of truth for every file's
+    # *content*, full stop — but a hand-edit made via the Edit Files window
+    # (update_generated_file_content) to an HTML/behavior-JS file is now
+    # preserved across a publish *unless* the form's structure (which
+    # questions/fields exist — see compute_structure_fingerprint) actually
+    # changed since that file was last generated, in which case publishing
+    # requires the admin's explicit confirmation (`force`) before any
+    # hand-edited file is reset. data.js is never part of this: it's pure
+    # data, always safely regenerated fresh (and already kept in sync
+    # continuously by sync_editable_data_js well before Publish is even
+    # clicked — see update_draft/upload_consent_document).
     existing_draft_files = list(
         db.execute(select(GeneratedFileEntity).where(GeneratedFileEntity.formVersionId == draft_version.id)).scalars()
     )
+    new_fingerprint = compute_structure_fingerprint(definition)
+    structural_change = draft_version.structureFingerprint is not None and draft_version.structureFingerprint != new_fingerprint
+    if structural_change:
+        affected = sorted(
+            f.fileName for f in existing_draft_files if f.fileType in ("html", "js") and f.editedAt is not None
+        )
+        if affected and not force:
+            return {"outcome": "structural_conflict", "affectedFiles": affected}
+
+    existing_by_name = {f.fileName: f for f in existing_draft_files}
+    resolved_files: list[GeneratedFile] = []
+    preserved_edits: dict[str, tuple[Any, Optional[str]]] = {}
+    for f in files:
+        existing_row = existing_by_name.get(f.path)
+        file_type = classify_file_type(f.path, file_names)
+        hand_edited = existing_row is not None and existing_row.editedAt is not None
+        # CSS is never structurally tied to which questions/fields exist
+        # (see compute_structure_fingerprint's own doc comment), so a CSS
+        # hand-edit is always preserved, structural change or not — only
+        # html/js ever need the fingerprint comparison at all.
+        keep_hand_edit = hand_edited and (file_type == "css" or (file_type in ("html", "js") and not structural_change))
+        if keep_hand_edit:
+            assert existing_row is not None
+            with open(absolute_file_path(existing_row.filePath), "r", encoding="utf-8", newline="") as fh:
+                resolved_files.append(GeneratedFile(path=f.path, contents=fh.read()))
+            preserved_edits[f.path] = (existing_row.editedAt, existing_row.editedByUserId)
+        else:
+            resolved_files.append(f)
+
+    # Files already generated directly on this draft (via a pre-publish Edit
+    # Files session — see ensure_draft_generated_files) share draft_version.id
+    # with what's about to be inserted below, so they'd otherwise become
+    # duplicate rows for the same (formVersionId, fileName); delete them first
+    # (their content, where preserved, was already read into resolved_files
+    # above).
     for f in existing_draft_files:
         db.delete(f)
     db.flush()
 
-    files: list[GeneratedFile] = generation["files"]
-    file_names: FileNames = generation["fileNames"]
-    saved = save_form_version_generated_files(form.subsidiaryId, draft_version.id, files)
+    saved = save_form_version_generated_files(form.subsidiaryId, draft_version.id, resolved_files)
     for f in saved:
-        db.add(
-            GeneratedFileEntity(
-                formVersionId=draft_version.id,
-                fileName=f.fileName,
-                filePath=f.relativePath,
-                fileType=classify_file_type(f.fileName, file_names),
-            )
+        row = GeneratedFileEntity(
+            formVersionId=draft_version.id,
+            fileName=f.fileName,
+            filePath=f.relativePath,
+            fileType=classify_file_type(f.fileName, file_names),
         )
+        if f.fileName in preserved_edits:
+            row.editedAt, row.editedByUserId = preserved_edits[f.fileName]
+        db.add(row)
+    draft_version.structureFingerprint = new_fingerprint
     db.flush()
 
     published_at = _now()
@@ -631,7 +787,11 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
     db.commit()
 
     # Clone the just-published content into a fresh draft — further edits
-    # must never mutate the version row that was just published.
+    # must never mutate the version row that was just published. Its files
+    # (hand-edit-preserved or freshly-generated, whichever resolved_files
+    # ended up with above) carry forward too, instead of leaving the new
+    # draft with none at all — so a hand-edit an admin is actively building
+    # on survives being published, not just the definition.
     new_draft = FormVersion(
         formId=form_id,
         versionNumber=None,
@@ -639,9 +799,21 @@ def publish_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
         config=config.model_dump_json(),
         status="draft",
         createdByUserId=user_id,
+        structureFingerprint=new_fingerprint,
     )
     db.add(new_draft)
     db.flush()
+    new_saved = save_form_version_generated_files(form.subsidiaryId, new_draft.id, resolved_files)
+    for f in new_saved:
+        row = GeneratedFileEntity(
+            formVersionId=new_draft.id,
+            fileName=f.fileName,
+            filePath=f.relativePath,
+            fileType=classify_file_type(f.fileName, file_names),
+        )
+        if f.fileName in preserved_edits:
+            row.editedAt, row.editedByUserId = preserved_edits[f.fileName]
+        db.add(row)
     form.currentDraftVersionId = new_draft.id
     db.commit()
 
@@ -1023,7 +1195,7 @@ def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) 
 ApproveAdHocOutcome = Literal["ok", "not_found", "not_adhoc", "not_pending", "invalid", "no_project_code"]
 
 
-def approve_adhoc_form(db: Session, form_id: str, project_code: Optional[str], user_id: str) -> dict[str, Any]:
+def approve_adhoc_form(db: Session, form_id: str, project_code: Optional[str], user_id: str, force: bool = False) -> dict[str, Any]:
     """The admin review queue's "Approve" action, then reuses `publish_form`
     as-is. The subsidiary user already picked a project code at creation
     time (see `create_form`'s own doc comment) — `project_code` here lets an
@@ -1053,11 +1225,13 @@ def approve_adhoc_form(db: Session, form_id: str, project_code: Optional[str], u
     form.reviewedAt = _now()
     db.commit()
 
-    result = publish_form(db, form_id, user_id)
+    result = publish_form(db, form_id, user_id, force=force)
     if result["outcome"] == "not_found":
         return {"outcome": "not_found"}
     if result["outcome"] == "invalid":
         return {"outcome": "invalid", "validation": result["validation"]}
+    if result["outcome"] == "structural_conflict":
+        return {"outcome": "structural_conflict", "affectedFiles": result["affectedFiles"]}
     return {"outcome": "ok"}
 
 

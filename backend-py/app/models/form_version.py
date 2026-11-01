@@ -33,3 +33,11 @@ class FormVersion(Base):
     createdAt = datetimeoffset_now()
     publishedAt: Mapped[Optional[object]] = datetimeoffset_nullable()
     unpublishedAt: Mapped[Optional[object]] = datetimeoffset_nullable()
+    # A digest of "which question ids exist, which optional profile fields
+    # are present" at the point this version's generated files were last
+    # fully (re)generated — see form_builder_service.compute_structure_fingerprint.
+    # Null for a version whose files have never been generated at all.
+    # Compared at Publish time to decide whether a hand-edited HTML/behavior-
+    # JS file is still structurally valid or needs the admin's confirmation
+    # before being reset.
+    structureFingerprint: Mapped[Optional[str]] = nvarchar(1000, nullable=True)

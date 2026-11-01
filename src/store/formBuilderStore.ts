@@ -7,6 +7,7 @@ import {
   getFormDetail,
   listFormContributions,
   publishForm as apiPublishForm,
+  StructuralConflictError,
   unpublishForm as apiUnpublishForm,
   updateDraft as apiUpdateDraft,
   type ContributionSummary,
@@ -79,8 +80,10 @@ interface FormBuilderState {
   saveDraft: () => Promise<boolean>;
   /** Validates/generates the draft and makes it visible/downloadable for
    * subsidiary users — does NOT push anything to Adobe; see deploy() for
-   * that, a separate explicit action. */
-  publish: () => Promise<{ ok: boolean; validation?: ValidationResult }>;
+   * that, a separate explicit action. Pass `force: true` (after the caller
+   * has shown the admin which hand-edited files would reset and gotten their
+   * confirmation) to proceed past a structuralConflict result. */
+  publish: (options?: { force?: boolean }) => Promise<{ ok: boolean; validation?: ValidationResult; structuralConflict?: { affectedFiles: string[] } }>;
   /** Pushes the current published version's already-generated files to Adobe
    * over SFTP. Only meaningful once the form is published (publish() or an
    * ad-hoc approval) — a 409 means it isn't yet, or there's nothing to push. */
@@ -207,7 +210,7 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
     }
   },
 
-  async publish() {
+  async publish(options) {
     const { formId, saveDraft } = get();
     if (!formId) return { ok: false };
     // Publish always operates on the persisted draft server-side, so save first
@@ -218,10 +221,13 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
 
     set({ publishing: true, error: null });
     try {
-      const { validation } = await apiPublishForm(formId);
+      const { validation } = await apiPublishForm(formId, options);
       await get().loadForm(formId);
       return { ok: true, validation };
     } catch (err) {
+      if (err instanceof StructuralConflictError) {
+        return { ok: false, structuralConflict: { affectedFiles: err.affectedFiles } };
+      }
       const validation = err instanceof FormInvalidError ? err.validation : undefined;
       set({ error: err instanceof Error ? err.message : "Failed to publish form", validation: validation ?? get().validation });
       return { ok: false, validation };

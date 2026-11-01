@@ -164,17 +164,40 @@ export class FormInvalidError extends Error {
   }
 }
 
-/** Throws FormInvalidError (carrying the blocking Issue[]) on a 422 — every other
- * failure surfaces as the usual ApiError from apiClient. Makes the campaign
- * visible/downloadable for subsidiary users — does NOT push anything to
- * Adobe; see deployForm for that, a separate explicit action. */
-export async function publishForm(formId: string): Promise<PublishResponse> {
+/** Thrown on a 409 from publishForm/approveAdHocForm — a question/field was
+ * added or removed since the draft's files were last generated, and at least
+ * one hand-edited HTML/behavior-JS file would be reset to pick up that
+ * structural change. Carries the affected file names so the caller can warn
+ * the admin by name before retrying with `{ force: true }`. */
+export class StructuralConflictError extends Error {
+  readonly affectedFiles: string[];
+  constructor(affectedFiles: string[]) {
+    super("Publishing would reset hand-edited code in these files");
+    this.name = "StructuralConflictError";
+    this.affectedFiles = affectedFiles;
+  }
+}
+
+/** Throws FormInvalidError (carrying the blocking Issue[]) on a 422, and
+ * StructuralConflictError (carrying the affected file names) on a 409 —
+ * every other failure surfaces as the usual ApiError from apiClient. Pass
+ * `{ force: true }` (after the admin confirms) to publish anyway, resetting
+ * only the files that are actually structurally stale; every other
+ * hand-edited file (and any CSS, always) carries forward untouched — see
+ * publish_form's own doc comment. Makes the campaign visible/downloadable
+ * for subsidiary users — does NOT push anything to Adobe; see deployForm for
+ * that, a separate explicit action. */
+export async function publishForm(formId: string, options?: { force?: boolean }): Promise<PublishResponse> {
   try {
-    return await apiClient.post<PublishResponse>(`/api/v1/admin/forms/${formId}/publish`);
+    return await apiClient.post<PublishResponse>(`/api/v1/admin/forms/${formId}/publish`, { force: options?.force ?? false });
   } catch (err) {
     if (err instanceof ApiError && err.status === 422) {
       const validation = (err.body as { validation?: ValidationResult } | undefined)?.validation;
       if (validation) throw new FormInvalidError(validation);
+    }
+    if (err instanceof ApiError && err.status === 409) {
+      const affectedFiles = (err.body as { affectedFiles?: string[] } | undefined)?.affectedFiles;
+      if (affectedFiles) throw new StructuralConflictError(affectedFiles);
     }
     throw err;
   }
@@ -427,15 +450,20 @@ export function rejectContribution(formId: string, contributionId: string, revie
 /** Admin review queue actions for a subsidiary user's own "ad-hoc" submission
  * (see AdHocReviewPanel.tsx) — distinct from the contribution approve/reject
  * above. Approve is the one point a project code gets attached (never asked of
- * the subsidiary), and reuses the same 422/FormInvalidError shape publishForm
- * already throws, since it calls the same publish path server-side. */
-export async function approveAdHocForm(formId: string, projectCode: string): Promise<void> {
+ * the subsidiary), and reuses the same 422/FormInvalidError and
+ * 409/StructuralConflictError shapes publishForm already throws, since it
+ * calls the same publish path server-side. */
+export async function approveAdHocForm(formId: string, projectCode: string, options?: { force?: boolean }): Promise<void> {
   try {
-    await apiClient.post<void>(`/api/v1/admin/forms/${formId}/adhoc/approve`, { projectCode });
+    await apiClient.post<void>(`/api/v1/admin/forms/${formId}/adhoc/approve`, { projectCode, force: options?.force ?? false });
   } catch (err) {
     if (err instanceof ApiError && err.status === 422) {
       const validation = (err.body as { validation?: ValidationResult } | undefined)?.validation;
       if (validation) throw new FormInvalidError(validation);
+    }
+    if (err instanceof ApiError && err.status === 409) {
+      const affectedFiles = (err.body as { affectedFiles?: string[] } | undefined)?.affectedFiles;
+      if (affectedFiles) throw new StructuralConflictError(affectedFiles);
     }
     throw err;
   }

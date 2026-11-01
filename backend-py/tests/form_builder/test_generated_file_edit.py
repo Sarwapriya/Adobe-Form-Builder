@@ -213,9 +213,13 @@ class TestDraftFiles:
     time it's needed (ensure_draft_generated_files), a hand-edit survives
     further Save Draft calls untouched (Save Draft never regenerates while
     files already exist), "Regenerate" explicitly discards hand-edits and
-    rebuilds fresh, and a pre-publish hand-edit is discarded by the form's
-    first Publish the same way any later republish also discards one — see
-    TestHandEditDoesNotSurviveRepublish."""
+    rebuilds fresh, and — unlike TestHandEditDoesNotSurviveRepublish's two
+    scenarios, where the edit was made directly on an *already-published*
+    version that the next publish never reads from in the first place — a
+    hand-edit made on the draft that's actually about to be published DOES
+    carry into that publish, as long as nothing structural (which
+    questions/fields exist) changed since. See publish_form's own doc
+    comment on structureFingerprint."""
 
     def test_listing_a_draft_generates_files_on_first_access(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
@@ -292,7 +296,7 @@ class TestDraftFiles:
         resp = client.post(f"/api/v1/admin/forms/{form_id}/files/regenerate", headers=standard_headers)
         assert resp.status_code == 403
 
-    def test_draft_hand_edit_does_not_carry_into_first_publish(
+    def test_draft_hand_edit_carries_into_first_publish(
         self,
         client: TestClient,
         admin_headers: dict,
@@ -312,15 +316,18 @@ class TestDraftFiles:
         publish_resp = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
         assert publish_resp.status_code == 200, publish_resp.text
 
+        # A first-ever publish has no prior structureFingerprint to compare
+        # against, so nothing can conflict — the hand-edit carries straight
+        # through, editedAt/editedByUserId stamp included.
         published_files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         published_js = next(f for f in published_files if f["fileName"] == js_file["fileName"])
-        assert published_js["editedAt"] is None
-        assert published_js["editedByUserId"] is None
+        assert published_js["editedAt"] is not None
+        assert published_js["editedByUserId"] is not None
         published_content = client.get(
             f"/api/v1/admin/forms/{form_id}/files/{published_js['id']}", headers=admin_headers
         ).json()["content"]
-        assert published_content == original_content
-        assert published_content != edited_content
+        assert published_content == edited_content
+        assert published_content != original_content
 
         # The pre-publish draft's own GeneratedFile rows (same formVersionId
         # as what's now published, since publish_form promotes that row in
@@ -332,3 +339,71 @@ class TestDraftFiles:
             .all()
         )
         assert len(remaining) == len(published_files)
+
+        # The fresh draft publish_form clones afterward inherits the same
+        # hand-edited content too — an admin can keep building on it.
+        new_draft_files = (
+            db_session.query(GeneratedFileEntity)
+            .filter(GeneratedFileEntity.formVersionId == db_session.get(Form, form_id).currentDraftVersionId)
+            .all()
+        )
+        new_draft_js = next(f for f in new_draft_files if f.fileName == js_file["fileName"])
+        assert new_draft_js.editedAt is not None
+        with open(form_builder_service.absolute_file_path(new_draft_js.filePath), "r", encoding="utf-8", newline="") as fh:
+            assert fh.read() == edited_content
+
+    def test_a_structural_change_blocks_publish_until_confirmed_then_resets_only_affected_files(
+        self,
+        client: TestClient,
+        admin_headers: dict,
+        db_session: Session,
+        subsidiary_row: Subsidiary,
+        project_code_row: ProjectCode,
+    ):
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        js_file = next(f for f in files if f["fileType"] == "js")
+        css_file = next(f for f in files if f["fileType"] == "css")
+        js_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
+        css_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{css_file['id']}", headers=admin_headers).json()["content"]
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": js_original + "\n// hand-edit\n"}, headers=admin_headers)
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{css_file['id']}", json={"content": css_original + "\n.hand-edit{}\n"}, headers=admin_headers)
+
+        # First publish (no prior fingerprint — nothing can conflict yet).
+        assert client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers).status_code == 200
+
+        # Now add a new question — a genuine structural change. Order must
+        # be sequential starting at 1 (validate_form_definition enforces
+        # this), so it continues straight on from the sample's own questions.
+        definition = sample_definition_json(subsidiary_row.name)
+        next_order = len(definition["questions"]) + 1
+        definition["questions"].append(
+            {
+                "id": "Q99", "order": next_order, "controlType": "radio", "required": False,
+                "headingByLocale": {"en_GB": "New?"}, "answers": [
+                    {"id": "A99", "order": 1, "textByLocale": {"en_GB": "Yes"}},
+                    {"id": "A100", "order": 2, "textByLocale": {"en_GB": "No"}},
+                ],
+            }
+        )
+        draft_resp = client.patch(
+            f"/api/v1/admin/forms/{form_id}/draft",
+            json={"definition": definition, "config": sample_config_json(["ff", "oc"])},
+            headers=admin_headers,
+        )
+        assert draft_resp.status_code == 204, draft_resp.text
+
+        conflict = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert conflict.status_code == 409, conflict.text
+        affected = set(conflict.json()["affectedFiles"])
+        assert js_file["fileName"] in affected and css_file["fileName"] not in affected  # css is never fingerprint-checked
+
+        forced = client.post(f"/api/v1/admin/forms/{form_id}/publish", json={"force": True}, headers=admin_headers)
+        assert forced.status_code == 200, forced.text
+
+        after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        after_js = next(f for f in after if f["fileName"] == js_file["fileName"])
+        assert after_js["editedAt"] is None  # reset — the question list changed
+        after_css = next(f for f in after if f["fileName"] == css_file["fileName"])
+        after_css_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_css['id']}", headers=admin_headers).json()["content"]
+        assert after_css_content == css_original + "\n.hand-edit{}\n"  # css hand-edit untouched throughout

@@ -121,10 +121,20 @@ class DraftUpdateBody(BaseModel):
         return v
 
 
+class PublishBody(BaseModel):
+    # When a structural change (a question/field added or removed since the
+    # draft's files were last generated) would reset a hand-edited HTML/
+    # behavior-JS file, publish_form refuses with a 409 listing the affected
+    # files unless this is set — see publish_form's own doc comment.
+    force: bool = False
+
+
 class ApproveAdHocBody(BaseModel):
     # Optional — the subsidiary user already chose a project code when they
     # created the form; this only lets an admin override that choice.
     projectCode: Optional[str] = None
+    # Same meaning as PublishBody.force — approving reuses publish_form.
+    force: bool = False
 
     _v_project_code = field_validator("projectCode")(classmethod(lambda cls, v: _trim_optional(v)))
 
