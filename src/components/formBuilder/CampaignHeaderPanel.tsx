@@ -172,7 +172,7 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
           size="small"
           fullWidth
           value={redirectUrl}
-          inputProps={{ dir }}
+          inputProps={{ dir: "ltr" }}
           helperText="Leave blank to show the default Thank You message instead of redirecting the visitor after they submit."
           onChange={(e) =>
             updateDefinition((d) => ({
