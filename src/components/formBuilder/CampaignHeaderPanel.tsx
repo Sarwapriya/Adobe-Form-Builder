@@ -25,7 +25,11 @@ import { PENDING_TRANSLATION_HELPER_TEXT, pendingTranslationFor } from "./pendin
  * override" fields (headingBeforeBreakFFByLocale/campaignSubheadingFFByLocale)
  * only take effect for the Full Form output, and only when non-blank — see
  * buildDataJs.ts's fallback logic and formDefinition.ts's own doc comments on
- * these fields for why the naming reads this way.
+ * these fields for why the naming reads this way. The heading itself splits
+ * into two lines (headingBeforeBreakByLocale/headingAfterBreakByLocale,
+ * each with its own Full Form override) — the "second line" field had no
+ * editor at all until it was added here, same gap as redirectAfterSuccessUrl
+ * below.
  *
  * Text reads/writes whichever locale is currently active (see
  * MyAdHocFormEditorPage's locale-editing tabs) — for admin's own flow
@@ -59,8 +63,10 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
   const missing = (value: string) => value.trim() === "";
 
   const heading = localeText(definition.fields.headingBeforeBreakByLocale);
+  const headingAfterBreak = localeText(definition.fields.headingAfterBreakByLocale);
   const subheading = localeText(definition.fields.campaignSubheadingByLocale);
   const headingFF = localeText(definition.fields.headingBeforeBreakFFByLocale);
+  const headingAfterBreakFF = localeText(definition.fields.headingAfterBreakFFByLocale);
   const subheadingFF = localeText(definition.fields.campaignSubheadingFFByLocale);
   const submitLabel = localeText(definition.fields.submitButton.labelByLocale);
   const redirectUrl = localeText(definition.fields.redirectAfterSuccessUrlByLocale);
@@ -101,6 +107,20 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
             updateDefinition((d) => ({
               ...d,
               fields: { ...d.fields, headingBeforeBreakByLocale: { ...d.fields.headingBeforeBreakByLocale, [activeLocale]: e.target.value } },
+            }))
+          }
+        />
+        <TextField
+          label="Form heading, second line (One-Click, optional)"
+          size="small"
+          fullWidth
+          value={headingAfterBreak}
+          inputProps={{ dir }}
+          helperText="Shown on its own line directly after the heading above. Leave blank for a single-line heading."
+          onChange={(e) =>
+            updateDefinition((d) => ({
+              ...d,
+              fields: { ...d.fields, headingAfterBreakByLocale: { ...d.fields.headingAfterBreakByLocale, [activeLocale]: e.target.value } },
             }))
           }
         />
@@ -148,6 +168,20 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
             updateDefinition((d) => ({
               ...d,
               fields: { ...d.fields, headingBeforeBreakFFByLocale: { ...d.fields.headingBeforeBreakFFByLocale, [activeLocale]: e.target.value } },
+            }))
+          }
+        />
+        <TextField
+          label="Form heading, second line (Full Form, optional)"
+          size="small"
+          fullWidth
+          value={headingAfterBreakFF}
+          inputProps={{ dir }}
+          helperText="Leave blank to use the One-Click second line above for Full Form too."
+          onChange={(e) =>
+            updateDefinition((d) => ({
+              ...d,
+              fields: { ...d.fields, headingAfterBreakFFByLocale: { ...d.fields.headingAfterBreakFFByLocale, [activeLocale]: e.target.value } },
             }))
           }
         />
