@@ -6,6 +6,7 @@ import { useFormBuilderStore } from "../store/formBuilderStore";
 import { PageHeader } from "../components/common/PageHeader";
 import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
 import { ThankYouPanel } from "../components/formBuilder/ThankYouPanel";
+import { ValidationMessagesPanel } from "../components/formBuilder/ValidationMessagesPanel";
 import { LocaleManagerPanel } from "../components/formBuilder/LocaleManagerPanel";
 import { LocaleEditingSwitcher } from "../components/formBuilder/LocaleEditingSwitcher";
 import { VariantConfigPanel } from "../components/formBuilder/VariantConfigPanel";
@@ -108,6 +109,7 @@ export function FormBuilderEditorPage() {
         <Box sx={{ flex: "1 1 auto", minWidth: 0, width: "100%" }}>
           <CampaignHeaderPanel />
           <ThankYouPanel />
+          <ValidationMessagesPanel />
           <LocaleManagerPanel />
           <LocaleEditingSwitcher />
           {origin !== "adhoc" && <VariantConfigPanel />}

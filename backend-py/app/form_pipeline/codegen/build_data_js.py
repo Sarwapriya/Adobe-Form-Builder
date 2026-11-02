@@ -257,20 +257,29 @@ def build_data_js(form: FormDefinition, config: BuilderConfig, file_names: FileN
         questions[locale] = questions_for_locale
         answers[locale] = answers_for_locale
 
-        # Merge workbook-provided validation messages with hardcoded defaults.
-        #
-        # NOTE (faithfully reproduced quirk, not "fixed" here): the TS source does
-        # `{ ...DEFAULT_VALIDATION_MESSAGES, ...wbMessages }` where DEFAULT_VALIDATION_MESSAGES
-        # uses underscored keys for the two modal-message fields ("modalMessage_1"/
-        # "modalMessage_2") but ValidationMessageSet's own fields are camelCase
-        # ("modalMessage1"/"modalMessage2") — so a workbook-provided modal message never
-        # actually overrides the default; it just adds an extra, differently-named key
-        # nothing reads. Reproduced verbatim (no key remapping) for exact parity.
+        # Merge builder-provided validation messages with hardcoded defaults.
+        # Admin-set values (ValidationMessagesPanel) take precedence for the
+        # current locale; missing keys fall back to the default English set.
+        # modalMessage1/modalMessage2 are remapped explicitly to
+        # modalMessage_1/modalMessage_2 — _DEFAULT_VALIDATION_MESSAGES' own
+        # keys (and what the reference FF.js actually reads) use an
+        # underscore that ValidationMessageSet's own field names don't, so a
+        # raw merge would silently add an extra, never-read key instead of
+        # overriding the default (this used to be a reproduced-verbatim
+        # quirk from before there was any UI to set these — now that there
+        # is, it has to work; kept in sync with buildDataJs.ts's own fix).
         wb_messages = form.validationMessages.get(locale)
         wb_dict = (
             {k: v for k, v in wb_messages.model_dump(by_alias=False).items() if v is not None} if wb_messages is not None else {}
         )
-        validation_messages[locale] = {**_DEFAULT_VALIDATION_MESSAGES, **wb_dict}
+        modal_message_1 = wb_dict.pop("modalMessage1", None)
+        modal_message_2 = wb_dict.pop("modalMessage2", None)
+        validation_messages[locale] = {
+            **_DEFAULT_VALIDATION_MESSAGES,
+            **wb_dict,
+            **({"modalMessage_1": modal_message_1} if modal_message_1 else {}),
+            **({"modalMessage_2": modal_message_2} if modal_message_2 else {}),
+        }
 
     builder_subsidiary_tables: Optional[tuple[dict[str, str], dict[str, list[SubsidiaryCountryEntry]]]] = None
     if form.fields.mobileNumber:

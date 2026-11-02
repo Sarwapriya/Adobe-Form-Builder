@@ -8,6 +8,7 @@ import { PageBreadcrumbs } from "../components/common/PageBreadcrumbs";
 import { FormStatusBar, type FormStatusTone } from "../components/common/FormStatusBar";
 import { CampaignHeaderPanel } from "../components/formBuilder/CampaignHeaderPanel";
 import { ThankYouPanel } from "../components/formBuilder/ThankYouPanel";
+import { ValidationMessagesPanel } from "../components/formBuilder/ValidationMessagesPanel";
 import { SubsidiaryLocalePicker } from "../components/formBuilder/SubsidiaryLocalePicker";
 import { LocaleEditingSwitcher } from "../components/formBuilder/LocaleEditingSwitcher";
 import { BuilderCanvas, PredefinedFieldToggles } from "../components/formBuilder/BuilderCanvas";
@@ -125,6 +126,7 @@ export function MyAdHocFormEditorPage() {
           <LocaleEditingSwitcher />
           <CampaignHeaderPanel hideSubmitButtonLabel />
           <ThankYouPanel />
+          <ValidationMessagesPanel />
           <PredefinedFieldToggles selectedField={selected} onSelectField={readOnly ? () => {} : setSelected} />
           <BuilderCanvas
             selectedQuestionId={PROFILE_FIELD_KEYS.has(selected ?? "") || isConsentId(selected ?? "") ? null : selected}

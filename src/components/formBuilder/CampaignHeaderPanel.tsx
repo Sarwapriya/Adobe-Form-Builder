@@ -70,6 +70,7 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
   const subheadingFF = localeText(definition.fields.campaignSubheadingFFByLocale);
   const submitLabel = localeText(definition.fields.submitButton.labelByLocale);
   const redirectUrl = localeText(definition.fields.redirectAfterSuccessUrlByLocale);
+  const requiredFieldNote = localeText(definition.fields.requiredFieldNoteByLocale);
   const pendingHeading = pendingTranslationFor(contributions, { kind: "campaignHeading" }, activeLocale);
   const pendingSubheading = pendingTranslationFor(contributions, { kind: "campaignSubheading" }, activeLocale);
   const pendingHeadingFF = pendingTranslationFor(contributions, { kind: "campaignHeadingFullForm" }, activeLocale);
@@ -143,6 +144,20 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
             updateDefinition((d) => ({
               ...d,
               fields: { ...d.fields, campaignSubheadingByLocale: { ...d.fields.campaignSubheadingByLocale, [activeLocale]: e.target.value } },
+            }))
+          }
+        />
+        <TextField
+          label="Required-field note (optional)"
+          size="small"
+          fullWidth
+          value={requiredFieldNote}
+          inputProps={{ dir }}
+          helperText="Shown next to the * legend at the top of the form, e.g. &quot;indicates a required field&quot;."
+          onChange={(e) =>
+            updateDefinition((d) => ({
+              ...d,
+              fields: { ...d.fields, requiredFieldNoteByLocale: { ...d.fields.requiredFieldNoteByLocale, [activeLocale]: e.target.value } },
             }))
           }
         />
