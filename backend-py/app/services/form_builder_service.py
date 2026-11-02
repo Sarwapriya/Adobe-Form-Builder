@@ -61,6 +61,7 @@ from app.services import (
 from app.services.file_service import absolute_file_path, save_form_version_generated_files
 from app.utils.background import run_in_background
 from app.services.generation_service import classify_file_type
+from app.services.html_structure_patch import diff_questions, patch_html_for_question_diff
 from app.services.sftp_service import SftpDeployFile, deploy_generated_files
 from app.services.subsidiary_locale_service import list_subsidiary_locales
 from app.services.subsidiary_recipients import resolve_subsidiary_recipients
@@ -571,19 +572,25 @@ def upload_consent_document(
 
 def compute_structure_fingerprint(definition: FormDefinition) -> str:
     """A deterministic digest of "which question ids exist, which optional
-    profile fields are present" — the parts of a FormDefinition that change
-    the generated HTML's actual *shape* (a new/removed `.form_check_module`/
-    `.form_top_group`/consent-checkbox block), as opposed to just their
-    text/data content, which lives entirely in data.js and never requires
-    the HTML to change at all — see renderQuestionModule.ts/
-    renderProfileField.ts's own doc comments on why the HTML is text-empty.
-    The per-language behavior-JS files (buildFfJs.ts/buildOcJs.ts) are NOT
-    affected by this at all — each is the reference script embedded byte-
-    identical regardless of form structure, tagged only with a language pin
-    — so this fingerprint is never compared against them. Compared at
-    Publish time (see publish_form) to decide whether a hand-edited HTML
-    file is still structurally valid or needs the admin's confirmation
-    before being reset."""
+    profile fields are present, and which answer ids each question has" —
+    the parts of a FormDefinition that change the generated HTML's actual
+    *shape* (a new/removed `.form_check_module`/`.form_top_group`/consent-
+    checkbox/answer block), as opposed to just their text/data content,
+    which lives entirely in data.js and never requires the HTML to change at
+    all — see renderQuestionModule.ts/renderProfileField.ts's own doc
+    comments on why the HTML is text-empty. The per-language behavior-JS
+    files (buildFfJs.ts/buildOcJs.ts) are NOT affected by this at all — each
+    is the reference script embedded byte-identical regardless of form
+    structure, tagged only with a language pin — so this fingerprint is
+    never compared against them. Compared at Publish time (see
+    publish_form) to decide whether a hand-edited HTML file is still
+    structurally valid; a whole question being added/removed is then
+    surgically merged into it (see html_structure_patch.py) rather than
+    discarding the hand-edit — an answer being added/removed from an
+    existing question is only *detected* here (its own DOM id is derived
+    from its position, so a simple single-block patch would mislabel every
+    later answer — see that module's own doc comment) and still falls back
+    to the admin's confirmation before being reset."""
     f = definition.fields
     present_fields = sorted(
         name
@@ -597,7 +604,11 @@ def compute_structure_fingerprint(definition: FormDefinition) -> str:
     )
     consent_ids = sorted(c.id for c in (f.additionalConsents or []))
     question_ids = sorted(q.id for q in definition.questions)
-    return json.dumps({"questions": question_ids, "fields": present_fields, "consents": consent_ids}, sort_keys=True)
+    answers_by_question = {q.id: sorted(a.id for a in q.answers) for q in definition.questions}
+    return json.dumps(
+        {"questions": question_ids, "fields": present_fields, "consents": consent_ids, "answers": answers_by_question},
+        sort_keys=True,
+    )
 
 
 def sync_editable_data_js(db: Session, form_id: str, version_id: str) -> None:
@@ -762,9 +773,55 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
 
     new_fingerprint = compute_structure_fingerprint(definition)
     structural_change = editable_version.structureFingerprint is not None and editable_version.structureFingerprint != new_fingerprint
+
+    def _variant_for_html_path(path: str) -> Optional[Literal["ff", "oc"]]:
+        for lang in file_names.languages:
+            if path == lang.ffHtml:
+                return "ff"
+            if path == lang.ocHtml:
+                return "oc"
+        return None
+
+    # A whole question being added/removed is surgically merged straight
+    # into a hand-edited HTML file instead of discarding it (see
+    # html_structure_patch.py's own doc comment for exactly which changes
+    # it can and can't safely merge, and why) — computed up front so the
+    # conflict check right below only ever lists a file as truly affected
+    # once a merge attempt has already failed for it.
+    patched_html_by_name: dict[str, str] = {}
     if structural_change:
+        old_structure = json.loads(editable_version.structureFingerprint)
+        new_structure = json.loads(new_fingerprint)
+        # diff_questions only ever represents question/answer-level changes
+        # — if fields or consents also differ (e.g. a newly enabled
+        # marketing opt-in), a question-only diff would come back empty and
+        # patch_html_for_question_diff would wrongly treat "nothing to
+        # merge" as "fully handled", silently leaving the file stale with no
+        # warning at all. Only attempt a merge when fields/consents are
+        # unchanged — any difference there falls straight through to the
+        # existing warn-and-confirm flow for every hand-edited HTML file.
+        only_questions_changed = (
+            old_structure.get("fields") == new_structure.get("fields")
+            and old_structure.get("consents") == new_structure.get("consents")
+        )
+        question_diff = diff_questions(old_structure, definition) if only_questions_changed else None
+        if question_diff is not None:
+            for existing_row in existing_editable_files:
+                if existing_row.fileType != "html" or existing_row.editedAt is None:
+                    continue
+                variant = _variant_for_html_path(existing_row.fileName)
+                if variant is None:
+                    continue
+                with open(absolute_file_path(existing_row.filePath), "r", encoding="utf-8", newline="") as fh:
+                    current_content = fh.read()
+                patched = patch_html_for_question_diff(current_content, question_diff, definition, variant)
+                if patched is not None:
+                    patched_html_by_name[existing_row.fileName] = patched
+
         affected = sorted(
-            f.fileName for f in existing_editable_files if f.fileType == "html" and f.editedAt is not None
+            f.fileName
+            for f in existing_editable_files
+            if f.fileType == "html" and f.editedAt is not None and f.fileName not in patched_html_by_name
         )
         if affected and not force:
             return {"outcome": "structural_conflict", "affectedFiles": affected}
@@ -776,10 +833,16 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
         existing_row = existing_by_name.get(f.path)
         file_type = classify_file_type(f.path, file_names)
         hand_edited = existing_row is not None and existing_row.editedAt is not None
+        if f.path in patched_html_by_name:
+            assert existing_row is not None
+            resolved_files.append(GeneratedFile(path=f.path, contents=patched_html_by_name[f.path]))
+            preserved_edits[f.path] = (existing_row.editedAt, existing_row.editedByUserId)
+            continue
         # CSS and behavior-JS are never structurally tied to which
         # questions/fields exist (see the doc comment above), so a hand-edit
         # to either is always preserved, structural change or not — only
-        # html ever needs the fingerprint comparison at all.
+        # html ever needs the fingerprint comparison (and, above, a merge
+        # attempt) at all.
         keep_hand_edit = hand_edited and (file_type in ("css", "js") or (file_type == "html" and not structural_change))
         if keep_hand_edit:
             assert existing_row is not None
