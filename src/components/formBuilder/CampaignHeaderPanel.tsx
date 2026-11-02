@@ -10,6 +10,15 @@ import { PENDING_TRANSLATION_HELPER_TEXT, pendingTranslationFor } from "./pendin
  * same FormDefinition.fields entries). Which output variant(s) get generated
  * is configured separately — see VariantConfigPanel.
  *
+ * `redirectAfterSuccessUrlByLocale` (`fields.redirectAfterSuccessUrlByLocale`
+ * in the data model, flowing straight into data.js's `param.redirectAfterSuccessUrl`
+ * — see buildDataJs.ts) had no editor anywhere in the builder until this field
+ * was added — a leftover gap from the Excel-upload pipeline removal, which used
+ * to populate it from a workbook column. Before this, the only way to set it was
+ * hand-editing the generated data.js directly, which data.js's own always-fresh
+ * regeneration (see form_builder_service.sync_editable_data_js/publish_form)
+ * would then silently wipe on the very next save or publish.
+ *
  * Heading and subheading are independently configurable per output variant:
  * the base fields below (headingBeforeBreakByLocale/campaignSubheadingByLocale)
  * are what One-Click shows and what Full Form falls back to; the "Full Form
@@ -54,6 +63,7 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
   const headingFF = localeText(definition.fields.headingBeforeBreakFFByLocale);
   const subheadingFF = localeText(definition.fields.campaignSubheadingFFByLocale);
   const submitLabel = localeText(definition.fields.submitButton.labelByLocale);
+  const redirectUrl = localeText(definition.fields.redirectAfterSuccessUrlByLocale);
   const pendingHeading = pendingTranslationFor(contributions, { kind: "campaignHeading" }, activeLocale);
   const pendingSubheading = pendingTranslationFor(contributions, { kind: "campaignSubheading" }, activeLocale);
   const pendingHeadingFF = pendingTranslationFor(contributions, { kind: "campaignHeadingFullForm" }, activeLocale);
@@ -153,6 +163,24 @@ export function CampaignHeaderPanel({ hideSubmitButtonLabel = false }: { hideSub
             updateDefinition((d) => ({
               ...d,
               fields: { ...d.fields, campaignSubheadingFFByLocale: { ...d.fields.campaignSubheadingFFByLocale, [activeLocale]: e.target.value } },
+            }))
+          }
+        />
+
+        <TextField
+          label="Redirect URL after successful submission (optional)"
+          size="small"
+          fullWidth
+          value={redirectUrl}
+          inputProps={{ dir }}
+          helperText="Leave blank to show the default Thank You message instead of redirecting the visitor after they submit."
+          onChange={(e) =>
+            updateDefinition((d) => ({
+              ...d,
+              fields: {
+                ...d.fields,
+                redirectAfterSuccessUrlByLocale: { ...d.fields.redirectAfterSuccessUrlByLocale, [activeLocale]: e.target.value },
+              },
             }))
           }
         />
