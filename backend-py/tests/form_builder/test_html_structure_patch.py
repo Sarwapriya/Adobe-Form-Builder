@@ -6,9 +6,31 @@ synthetic markup matches exactly what a real generated file looks like.
 
 from __future__ import annotations
 
+import json
+from typing import Literal, Optional
+
+from app.form_pipeline.codegen.file_names import resolve_file_names
 from app.form_pipeline.codegen.html.fragments.render_question_module import render_question_module
-from app.form_pipeline.form.definition import AnswerDefinition, QuestionDefinition
-from app.services.html_structure_patch import diff_questions, patch_html_for_question_diff
+from app.form_pipeline.codegen.html.page_template import render_page
+from app.form_pipeline.codegen.types import BuilderConfig
+from app.form_pipeline.form.definition import (
+    AnswerDefinition,
+    CallingCodeFieldMeta,
+    ConsentDefinition,
+    ConsentToggleMeta,
+    FormDefinition,
+    FormMeta,
+    LocaleInfo,
+    LocalizedFieldMeta,
+    MobileNumberFieldMeta,
+    PageCopy,
+    PrivacyPolicyMeta,
+    ProfileFieldSet,
+    QuestionDefinition,
+    TermsAndConditionsMeta,
+)
+from app.services.form_builder_service import compute_structure_fingerprint
+from app.services.html_structure_patch import diff_consents, diff_questions, patch_html_for_field_diff, patch_html_for_question_diff
 
 
 def _question(qid: str, order: int, answer_ids: list[str] | None = None, control_type: str = "radio") -> QuestionDefinition:
@@ -183,3 +205,257 @@ class TestPatchHtmlForQuestionDiff:
         diff = diff_questions(_structure([]), new_def)
 
         assert patch_html_for_question_diff(html, diff, new_def, "ff") is None
+
+
+def _fields(**kwargs) -> ProfileFieldSet:
+    """Every ProfileFieldSet needs a submitButton (the only non-optional
+    field) — everything else defaults to absent unless overridden."""
+    return ProfileFieldSet(submitButton=LocalizedFieldMeta(labelByLocale={"en_GB": "Submit"}), **kwargs)
+
+
+def _form(fields: ProfileFieldSet, questions: Optional[list[QuestionDefinition]] = None) -> FormDefinition:
+    return FormDefinition(
+        meta=FormMeta(subsidiary="TEST", sourceFileName="sample.xlsx", defaultLocale="en_GB"),
+        locales=[LocaleInfo(code="en_GB", langSubtag="en", isRtl=False, sourceColumn="en_GB", label="English")],
+        questions=questions or [],
+        fields=fields,
+        validationMessages={},
+        pageError={"en_GB": PageCopy(heading="Oops")},
+        thankYou={"en_GB": PageCopy(heading="Thanks")},
+    )
+
+
+def _fresh_html(fields: ProfileFieldSet, variant: Literal["ff", "oc"] = "ff") -> str:
+    """The real, full pipeline's own output for `fields` — the ground truth
+    a correct patch must reproduce exactly."""
+    form = _form(fields)
+    config = BuilderConfig()
+    return render_page(form, config, variant, resolve_file_names(form, config))
+
+
+def _round_trip(old_fields: ProfileFieldSet, new_fields: ProfileFieldSet, variant: Literal["ff", "oc"] = "ff") -> Optional[str]:
+    """Generates `old_fields`'s real page, then patches it to `new_fields`
+    using only the patch module (never regenerating) — the same path
+    publish_form takes for a hand-edited HTML file."""
+    old_html = _fresh_html(old_fields, variant)
+    old_structure = json.loads(compute_structure_fingerprint(_form(old_fields)))
+    new_form = _form(new_fields)
+    removed_consent_ids = diff_consents(old_structure, new_form)
+    return patch_html_for_field_diff(old_html, removed_consent_ids, new_form, variant)
+
+
+class TestPatchHtmlForFieldDiffTopGroup:
+    def test_adding_email_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(email=LocalizedFieldMeta(labelByLocale={"en_GB": "Email"}))
+        patched = _round_trip(old, new)
+        assert patched == _fresh_html(new)
+
+    def test_removing_email_reproduces_a_fresh_page_exactly(self):
+        old = _fields(email=LocalizedFieldMeta(labelByLocale={"en_GB": "Email"}))
+        new = _fields()
+        patched = _round_trip(old, new)
+        fresh = _fresh_html(new)
+        assert patched == fresh
+
+    def test_adding_country_code_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(countryCode=LocalizedFieldMeta())
+        patched = _round_trip(old, new)
+        assert patched == _fresh_html(new)
+
+    def test_removing_country_code_reproduces_a_fresh_page_exactly(self):
+        old = _fields(countryCode=LocalizedFieldMeta())
+        new = _fields()
+        patched = _round_trip(old, new)
+        assert patched == _fresh_html(new)
+
+    def test_an_unrelated_hand_edit_elsewhere_survives_a_field_merge(self):
+        old = _fields()
+        new = _fields(email=LocalizedFieldMeta(labelByLocale={"en_GB": "Email"}))
+        old_html = _fresh_html(old).replace("<body>", "<body><!-- redirect handled elsewhere -->")
+        old_structure = json.loads(compute_structure_fingerprint(_form(old)))
+        new_form = _form(new)
+        patched = patch_html_for_field_diff(old_html, diff_consents(old_structure, new_form), new_form, "ff")
+        assert patched is not None
+        assert "<!-- redirect handled elsewhere -->" in patched
+        assert 'id="email"' in patched
+
+
+class TestPatchHtmlForFieldDiffNamePair:
+    def test_neither_to_both(self):
+        old = _fields()
+        new = _fields(
+            firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}),
+            lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}),
+        )
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_neither_to_first_name_only(self):
+        old = _fields()
+        new = _fields(firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}))
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_first_name_only_to_both(self):
+        old = _fields(firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}))
+        new = _fields(
+            firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}),
+            lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}),
+        )
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_last_name_only_to_both(self):
+        old = _fields(lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}))
+        new = _fields(
+            firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}),
+            lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}),
+        )
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_both_to_first_name_only(self):
+        old = _fields(
+            firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}),
+            lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}),
+        )
+        new = _fields(firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}))
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_both_to_last_name_only(self):
+        old = _fields(
+            firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}),
+            lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}),
+        )
+        new = _fields(lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}))
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_both_to_neither(self):
+        old = _fields(
+            firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}),
+            lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}),
+        )
+        new = _fields()
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_no_change_leaves_the_page_untouched(self):
+        both = _fields(
+            firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}),
+            lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}),
+        )
+        assert _round_trip(both, both) == _fresh_html(both)
+
+
+class TestPatchHtmlForFieldDiffMobileGroup:
+    def test_adding_mobile_number_ff_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(mobileNumber=MobileNumberFieldMeta(required=True))
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_removing_mobile_group_ff_reproduces_a_fresh_page_exactly(self):
+        old = _fields(callingCode=CallingCodeFieldMeta(), mobileNumber=MobileNumberFieldMeta())
+        new = _fields()
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_adding_mobile_group_oc_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(callingCode=CallingCodeFieldMeta(), mobileNumber=MobileNumberFieldMeta())
+        assert _round_trip(old, new, "oc") == _fresh_html(new, "oc")
+
+    def test_removing_mobile_group_oc_reproduces_a_fresh_page_exactly(self):
+        old = _fields(mobileNumber=MobileNumberFieldMeta())
+        new = _fields()
+        assert _round_trip(old, new, "oc") == _fresh_html(new, "oc")
+
+
+class TestPatchHtmlForFieldDiffConsents:
+    def test_adding_privacy_policy_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(privacyPolicy=PrivacyPolicyMeta())
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_removing_privacy_policy_reproduces_a_fresh_page_exactly(self):
+        old = _fields(privacyPolicy=PrivacyPolicyMeta())
+        new = _fields()
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_adding_marketing_optin_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(marketingOptin=ConsentToggleMeta(required=True))
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_adding_privacy_policy_and_marketing_optin_at_once_keeps_order(self):
+        old = _fields()
+        new = _fields(privacyPolicy=PrivacyPolicyMeta(), marketingOptin=ConsentToggleMeta())
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_adding_one_additional_consent_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(additionalConsents=[ConsentDefinition(id="consentExtra1", order=1)])
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_adding_a_second_additional_consent_keeps_the_first_and_the_order(self):
+        old = _fields(additionalConsents=[ConsentDefinition(id="consentExtra1", order=1)])
+        new = _fields(
+            additionalConsents=[
+                ConsentDefinition(id="consentExtra1", order=1),
+                ConsentDefinition(id="consentExtra2", order=2, linkUrlByLocale={"en_GB": "https://example.com"}),
+            ]
+        )
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_removing_one_of_two_additional_consents_keeps_the_other(self):
+        old = _fields(
+            additionalConsents=[
+                ConsentDefinition(id="consentExtra1", order=1),
+                ConsentDefinition(id="consentExtra2", order=2),
+            ]
+        )
+        new = _fields(additionalConsents=[ConsentDefinition(id="consentExtra2", order=2)])
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_removing_the_last_consent_drops_the_whole_group_wrapper(self):
+        old = _fields(additionalConsents=[ConsentDefinition(id="consentExtra1", order=1)])
+        new = _fields()
+        patched = _round_trip(old, new)
+        assert patched == _fresh_html(new)
+        assert "form_bottom_check_group" not in patched
+
+    def test_terms_and_conditions_link_can_be_added_and_removed(self):
+        old = _fields()
+        new = _fields(termsAndConditions=TermsAndConditionsMeta())
+        added = _round_trip(old, new)
+        assert added == _fresh_html(new)
+        removed = _round_trip(new, old)
+        assert removed == _fresh_html(old)
+
+
+class TestPatchHtmlForFieldDiffCombined:
+    def test_everything_added_at_once_from_a_bare_page_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(
+            countryCode=LocalizedFieldMeta(),
+            email=LocalizedFieldMeta(labelByLocale={"en_GB": "Email"}),
+            firstName=LocalizedFieldMeta(labelByLocale={"en_GB": "First"}),
+            lastName=LocalizedFieldMeta(labelByLocale={"en_GB": "Last"}),
+            callingCode=CallingCodeFieldMeta(),
+            mobileNumber=MobileNumberFieldMeta(required=True),
+            privacyPolicy=PrivacyPolicyMeta(),
+            marketingOptin=ConsentToggleMeta(required=True),
+            additionalConsents=[ConsentDefinition(id="consentExtra1", order=1)],
+            termsAndConditions=TermsAndConditionsMeta(),
+        )
+        assert _round_trip(old, new) == _fresh_html(new)
+
+
+class TestPatchHtmlForFieldDiffFallback:
+    def test_returns_none_when_form_top_group_itself_is_gone(self):
+        new = _fields(email=LocalizedFieldMeta(labelByLocale={"en_GB": "Email"}))
+        html = "<html><body>completely hand-rewritten, no recognizable structure left</body></html>"
+        new_form = _form(new)
+        assert patch_html_for_field_diff(html, [], new_form, "ff") is None
+
+    def test_returns_none_when_form_bottom_group_itself_is_gone(self):
+        old = _fields()
+        html = _fresh_html(old).replace('<div class="form_bottom_group">', '<div class="hand_rewritten_bottom">')
+        new = _fields(privacyPolicy=PrivacyPolicyMeta())
+        new_form = _form(new)
+        assert patch_html_for_field_diff(html, [], new_form, "ff") is None

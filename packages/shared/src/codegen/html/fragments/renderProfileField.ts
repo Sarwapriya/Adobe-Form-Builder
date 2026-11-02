@@ -84,7 +84,7 @@ export function renderProfileFields(fields: ProfileInputFields): string {
         `${requiredAttr}` +
         'data-parsley-type-message="Digits are allowed" data-parsley-type="digits" data-pt-api="y" id="mobileNumber" ' +
         'maxlength="10" name="mobileNumber" placeholder="" spellcheck="false" type="text">' +
-        "<div class=\"btn_clear\"></div></div></div>",
+        "<div class=\"btn_clear\"></div></div></div></div>",
     );
   }
 

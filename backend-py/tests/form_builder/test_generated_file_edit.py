@@ -249,13 +249,13 @@ class TestHandEditOnAnAlreadyPublishedFormSurvivesRepublish:
         after_js_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_js['id']}", headers=admin_headers).json()["content"]
         assert after_js_content == js_original + "\n// redirect URL\n"
 
-    def test_a_field_change_still_blocks_republish_of_an_already_published_hand_edit_until_confirmed(
+    def test_adding_a_consent_merges_into_an_already_published_hand_edit_without_conflict(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
     ):
-        """A profile field being added isn't surgically mergeable (several
-        share one wrapper div between two fields — see
-        html_structure_patch.py's own doc comment), so it still falls back
-        to the existing warn-and-confirm/force flow, unlike a question add."""
+        """A profile field/consent being added is now surgically merged into
+        hand-edited HTML too (see html_structure_patch.py's
+        patch_html_for_field_diff) — same no-conflict treatment as adding a
+        question."""
         form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
         files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         html_file = next(f for f in files if f["fileType"] == "html")
@@ -263,6 +263,50 @@ class TestHandEditOnAnAlreadyPublishedFormSurvivesRepublish:
         html_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", headers=admin_headers).json()["content"]
         js_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
         client.put(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", json={"content": html_original + "\n<!-- hand-edit -->\n"}, headers=admin_headers)
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": js_original + "\n// redirect URL\n"}, headers=admin_headers)
+
+        definition = sample_definition_json(subsidiary_row.name)
+        definition["fields"]["marketingOptin"] = {"labelByLocale": {"en_GB": "Marketing opt-in"}}
+        draft_resp = client.patch(
+            f"/api/v1/admin/forms/{form_id}/draft",
+            json={"definition": definition, "config": sample_config_json(["ff", "oc"])},
+            headers=admin_headers,
+        )
+        assert draft_resp.status_code == 204, draft_resp.text
+
+        published = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert published.status_code == 200, published.text  # merged — no confirmation needed
+
+        after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        after_html = next(f for f in after if f["fileName"] == html_file["fileName"])
+        assert after_html["editedAt"] is not None  # still counted hand-edited — merged, not discarded
+        after_html_content = client.get(
+            f"/api/v1/admin/forms/{form_id}/files/{after_html['id']}", headers=admin_headers
+        ).json()["content"]
+        assert "<!-- hand-edit -->" in after_html_content  # the admin's own edit survives
+        assert 'id="subscribe"' in after_html_content  # the new marketing opt-in checkbox was merged in
+
+        after_js = next(f for f in after if f["fileName"] == js_file["fileName"])
+        assert after_js["editedAt"] is not None  # redirect-URL edit untouched throughout
+        after_js_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_js['id']}", headers=admin_headers).json()["content"]
+        assert after_js_content == js_original + "\n// redirect URL\n"
+
+    def test_an_unmergeable_field_change_still_blocks_republish_of_an_already_published_hand_edit_until_confirmed(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        """If the hand-edit itself already altered the exact region a field
+        merge needs to anchor on (here, the admin renamed the
+        `.form_bottom_group` container that a freshly-enabled consent would
+        need to be inserted into), the merge can't safely guess and still
+        falls back to the existing warn-and-confirm/force flow."""
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        html_file = next(f for f in files if f["fileType"] == "html")
+        js_file = next(f for f in files if f["fileType"] == "js")
+        html_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", headers=admin_headers).json()["content"]
+        js_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()["content"]
+        mangled_html = html_original.replace('<div class="form_bottom_group">', '<div class="hand_rewritten_bottom">')
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", json={"content": mangled_html}, headers=admin_headers)
         client.put(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", json={"content": js_original + "\n// redirect URL\n"}, headers=admin_headers)
 
         definition = sample_definition_json(subsidiary_row.name)
@@ -283,7 +327,7 @@ class TestHandEditOnAnAlreadyPublishedFormSurvivesRepublish:
 
         after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         after_html = next(f for f in after if f["fileName"] == html_file["fileName"])
-        assert after_html["editedAt"] is None  # reset — the field set changed and can't be merged
+        assert after_html["editedAt"] is None  # reset — the anchor region was itself altered
 
         after_js = next(f for f in after if f["fileName"] == js_file["fileName"])
         assert after_js["editedAt"] is not None  # redirect-URL edit untouched throughout
@@ -516,7 +560,7 @@ class TestDraftFiles:
         after_css_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_css['id']}", headers=admin_headers).json()["content"]
         assert after_css_content == css_original + "\n.hand-edit{}\n"
 
-    def test_a_field_change_blocks_publish_until_confirmed_then_resets_only_affected_files(
+    def test_adding_a_consent_merges_into_a_hand_edited_draft_without_conflict(
         self,
         client: TestClient,
         admin_headers: dict,
@@ -524,11 +568,10 @@ class TestDraftFiles:
         subsidiary_row: Subsidiary,
         project_code_row: ProjectCode,
     ):
-        """Unlike a question add/remove, a profile field change (e.g. a newly
-        enabled marketing opt-in) isn't surgically mergeable — several
-        fields share one wrapper div with another field (see
-        html_structure_patch.py's own doc comment) — so it still goes
-        through the warn-and-confirm/force flow."""
+        """A profile field/consent change (e.g. a newly enabled marketing
+        opt-in) is now surgically merged into hand-edited HTML too (see
+        html_structure_patch.py's patch_html_for_field_diff) — same
+        no-conflict treatment as adding a question."""
         form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
         files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         html_file = next(f for f in files if f["fileType"] == "html")
@@ -547,8 +590,8 @@ class TestDraftFiles:
         # First publish (no prior fingerprint — nothing can conflict yet).
         assert client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers).status_code == 200
 
-        # Now enable a profile field — a genuine structural change that
-        # isn't surgically mergeable.
+        # Now enable a profile field — a structural change that's now
+        # surgically mergeable.
         definition = sample_definition_json(subsidiary_row.name)
         definition["fields"]["marketingOptin"] = {"labelByLocale": {"en_GB": "Marketing opt-in"}}
         draft_resp = client.patch(
@@ -558,18 +601,17 @@ class TestDraftFiles:
         )
         assert draft_resp.status_code == 204, draft_resp.text
 
-        conflict = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
-        assert conflict.status_code == 409, conflict.text
-        affected = set(conflict.json()["affectedFiles"])
-        # Only HTML embeds per-field markup, so only it is fingerprint-checked.
-        assert affected == {html_file["fileName"]}
-
-        forced = client.post(f"/api/v1/admin/forms/{form_id}/publish", json={"force": True}, headers=admin_headers)
-        assert forced.status_code == 200, forced.text
+        published = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert published.status_code == 200, published.text  # merged — no confirmation needed
 
         after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
         after_html = next(f for f in after if f["fileName"] == html_file["fileName"])
-        assert after_html["editedAt"] is None  # reset — the field set changed and can't be merged
+        assert after_html["editedAt"] is not None  # still counted hand-edited — merged, not discarded
+        after_html_content = client.get(
+            f"/api/v1/admin/forms/{form_id}/files/{after_html['id']}", headers=admin_headers
+        ).json()["content"]
+        assert "<!-- hand-edit -->" in after_html_content  # the admin's own edit survives
+        assert 'id="subscribe"' in after_html_content  # the new marketing opt-in checkbox was merged in
 
         after_js = next(f for f in after if f["fileName"] == js_file["fileName"])
         assert after_js["editedAt"] is not None  # js hand-edit untouched throughout

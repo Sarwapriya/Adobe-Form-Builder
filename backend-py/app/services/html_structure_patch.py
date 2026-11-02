@@ -19,30 +19,60 @@ still correctly *detected* (via `structure_fingerprint`'s own `answers` key)
 so the existing warn-and-confirm flow catches them instead of silently
 missing them, same as any other change this module can't safely handle.
 
+`patch_html_for_field_diff` applies the same philosophy to the profile-field
+group (`.form_top_group`) and the consent-checkbox group
+(`.form_bottom_check_group`/terms-and-conditions link) — turning email,
+first/last name, calling-code+mobile-number, privacy policy, marketing
+opt-in, additional consents, or the T&C link on or off is reconciled
+directly against each unit's own marker id (the id actually present or
+absent in the hand-edited file, not just what the old fingerprint claimed),
+so it self-corrects even if the file already drifted slightly. firstName and
+lastName share one `.form_text_group` wrapper that must itself appear/
+disappear exactly when *both* go from absent to present or vice versa (see
+`_patch_name_pair`); callingCode and mobileNumber are rendered as a single
+indivisible block regardless of which one of the two actually changed (see
+`_patch_mobile_group`) — mirroring `render_profile_fields` exactly, so
+there's never a partial/half-rendered profile field left behind.
+
 Every function here is pure (no DB/disk access) and deliberately
-conservative: the moment an expected anchor (a question's own id, or the
-`form_check_group` container itself) can't be found — because the admin's
-hand-edit already altered that exact region, or the file predates this
-feature and has some other shape — `patch_html_for_question_diff` returns
-`None` rather than guess, and the caller falls back to the existing
-warn-and-confirm flow for that one file. Field/consent changes (mobile
-number, additional consents, etc.) are out of scope here too — several of
-them share one wrapper div between two fields (firstName/lastName,
-callingCode/mobileNumber) in a way that isn't safely patchable without the
-same risk of guessing wrong — those also keep using the existing flow.
+conservative: the moment an expected anchor (a question's own id, the
+`form_check_group`/`form_top_group`/`form_bottom_group` container, or the
+`form_text_group`/`form_bottom_check_group` wrapper) can't be found —
+because the admin's hand-edit already altered that exact region, or the
+file predates this feature and has some other shape — these functions
+return `None` rather than guess, and the caller falls back to the existing
+warn-and-confirm flow for that one file. A *property* changing on an
+already-present field/question/consent (e.g. toggling `required`, or
+`visibleInVariants`) is not detected as a structural change at all (see
+`compute_structure_fingerprint`'s own doc comment) and so never reaches this
+module — only presence/absence (added/removed) is in scope here, consistent
+with how question/answer changes are already scoped.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 
 from app.form_pipeline.codegen.escaping import escape_html
+from app.form_pipeline.codegen.html.fragments.render_profile_field import render_profile_fields
 from app.form_pipeline.codegen.html.fragments.render_question_module import render_question_module
-from app.form_pipeline.form.definition import FormDefinition
+from app.form_pipeline.codegen.html.page_template import _terms_link
+from app.form_pipeline.form.definition import (
+    CallingCodeFieldMeta,
+    ConsentDefinition,
+    FormDefinition,
+    LocalizedFieldMeta,
+    MobileNumberFieldMeta,
+)
 
 _FORM_CHECK_GROUP_OPEN_RE = re.compile(r'<div\s+class="form_check_group">')
+_FORM_TOP_GROUP_OPEN_RE = re.compile(r'<div\s+class="form_top_group">')
+_FORM_BOTTOM_GROUP_OPEN_RE = re.compile(r'<div\s+class="form_bottom_group">')
+_BOTTOM_CHECK_GROUP_OPEN_RE = re.compile(r'<div\s+class="form_bottom_check_group">')
+_NAME_GROUP_OPEN_RE = re.compile(r'<div\s+class="form_text_group">')
+_TERMS_LINK_RE = re.compile(r'<a\b[^>]*\bid="termsAndConditionsLink"[^>]*>.*?</a>', re.DOTALL)
 _DIV_OPEN_RE = re.compile(r"<div\b", re.IGNORECASE)
 _DIV_CLOSE_RE = re.compile(r"</div\s*>", re.IGNORECASE)
 
@@ -124,16 +154,32 @@ def _find_balanced_div(html: str, open_tag_match: "re.Match[str]") -> Optional[t
     return open_tag_match.start(), pos
 
 
+def _find_enclosing_div(html: str, pos: int) -> Optional[tuple[int, int]]:
+    """The smallest `<div>...</div>` span that contains character offset
+    `pos` — found by scanning every `<div` open tag before `pos` and keeping
+    the *last* (nearest, hence smallest, for well-formed nested HTML) one
+    whose balanced span still encloses `pos`. None if no div encloses it."""
+    best: Optional[tuple[int, int]] = None
+    for open_match in _DIV_OPEN_RE.finditer(html, 0, pos):
+        span = _find_balanced_div(html, open_match)
+        if span is not None and span[0] <= pos <= span[1]:
+            best = span
+    return best
+
+
 def _find_element_by_id(html: str, element_id: str) -> Optional[tuple[int, int]]:
-    """Finds the `<div ...>` whose own opening tag carries `id="{element_id}"`
-    (escaped the same way render_question_module escapes question ids), and
-    returns its balanced (start, end) span. None if not found, or found but
-    unbalanced."""
-    pattern = re.compile(r'<div\b[^>]*\bid="' + re.escape(escape_html(element_id)) + r'"[^>]*>')
+    """Finds wherever `id="{element_id}"` (escaped the same way
+    render_question_module/render_profile_fields escape ids) actually sits —
+    on a `<div>` itself (question modules carry their id directly) or on a
+    descendant `<input>`/`<select>` (every profile field and consent
+    checkbox does instead) — and returns the smallest enclosing `<div>`'s
+    balanced (start, end) span either way. None if the id isn't found, or
+    found but no enclosing div balances."""
+    pattern = re.compile(r'\bid="' + re.escape(escape_html(element_id)) + r'"')
     match = pattern.search(html)
     if match is None:
         return None
-    return _find_balanced_div(html, match)
+    return _find_enclosing_div(html, match.start())
 
 
 def patch_html_for_question_diff(
@@ -188,5 +234,390 @@ def patch_html_for_question_diff(
                 return None
             insert_at = group_match.end()
         html = html[:insert_at] + fragment + html[insert_at:]
+
+    return html
+
+
+def diff_consents(old_structure: dict, new_definition: FormDefinition) -> list[str]:
+    """Additional-consent ids the old structure had that the new definition
+    doesn't — candidates to look for and remove. (Added ids need no such
+    list: they're read straight off `new_definition.fields.additionalConsents`
+    by `_patch_consent_group`. privacyPolicy/marketingOptin need no list
+    either — their presence is a plain field, discoverable the same way on
+    both the old and new side without needing the stored fingerprint at
+    all.)"""
+    old_consent_ids = set(old_structure.get("consents") or [])
+    new_consent_ids = {c.id for c in (new_definition.fields.additionalConsents or [])}
+    return sorted(old_consent_ids - new_consent_ids)
+
+
+def _render_privacy_policy_fragment(required: Optional[bool]) -> str:
+    """Must stay byte-identical to page_template.py's own privacyPolicy
+    consent_checks branch."""
+    star = '<span class="star">*</span>' if required is not False else ""
+    return (
+        '<div class="form_bottom_check">'
+        '<input id="privacyPolicy" name="privacyPolicy" type="checkbox" data-pt-api="y">'
+        f'<label for="privacyPolicy"><span></span>{star}<br>'
+        '<a href="#" target="_blank" id="privacyPolicyLink"><span></span><img src="" alt=""></a></label>'
+        "</div>"
+    )
+
+
+def _render_marketing_optin_fragment(required: Optional[bool]) -> str:
+    """Must stay byte-identical to page_template.py's own marketingOptin
+    consent_checks branch."""
+    star = '<span class="star">*</span>' if required else ""
+    return (
+        '<div class="form_bottom_check form_bottom_check2">'
+        '<input id="subscribe" name="subscribe" type="checkbox" data-pt-api="y">'
+        f'<label for="subscribe"><span></span>{star}</label>'
+        "</div>"
+    )
+
+
+def _render_additional_consent_fragment(consent: ConsentDefinition) -> str:
+    """Must stay byte-identical to page_template.py's own additionalConsents
+    consent_checks branch."""
+    cid = escape_html(consent.id)
+    link = f'<br><a href="#" target="_blank" id="{cid}Link"><span></span></a>' if consent.linkUrlByLocale else ""
+    star = '<span class="star">*</span>' if consent.required else ""
+    return (
+        '<div class="form_bottom_check form_bottom_check2">'
+        f'<input id="{cid}" name="{cid}" type="checkbox" data-pt-api="y">'
+        f'<label for="{cid}"><span></span>{link}{star}</label>'
+        "</div>"
+    )
+
+
+def _find_form_text_bx_wrapper(html: str, element_id: str) -> Optional[tuple[int, int]]:
+    """Every `.form_top_group` profile field (`render_profile_fields`) wraps
+    its `<input>`/`<select>` in one or two more levels of `.input_wrap`/
+    `.select_wrap` div before reaching the field's own outermost
+    `.form_text_bx` wrapper — the actual removable/insertable unit — so
+    `_find_element_by_id`'s plain "smallest enclosing div" isn't enough
+    here; this walks further up until it reaches a div whose class starts
+    with `form_text_bx`."""
+    pattern = re.compile(r'\bid="' + re.escape(escape_html(element_id)) + r'"')
+    match = pattern.search(html)
+    if match is None:
+        return None
+    pos = match.start()
+    for _ in range(5):  # a handful of nesting levels is always enough here
+        span = _find_enclosing_div(html, pos)
+        if span is None:
+            return None
+        start, _end = span
+        if html[start : start + 60].find('class="form_text_bx') != -1:
+            return span
+        pos = start
+    return None
+
+
+def _locate_top_unit(html: str, unit: str) -> Optional[tuple[int, int]]:
+    """The outer, removable/insertable span for one `.form_top_group` unit —
+    a plain id lookup for `email`/`countryCode`, the shared
+    `.form_text_group` wrapper for `namePair` (found by its own class, not
+    by either child's id, so it's still found even mid-edit when it might
+    temporarily hold only one child or be empty), and whichever of
+    `callingCode`/`mobileNumber` is actually present for `mobileGroup` (the
+    two are rendered as one block — see `render_profile_fields` — so either
+    id locates the same single span)."""
+    if unit == "namePair":
+        match = _NAME_GROUP_OPEN_RE.search(html)
+        if match is None:
+            return None
+        return _find_balanced_div(html, match)
+    if unit == "mobileGroup":
+        span = _find_form_text_bx_wrapper(html, "mobileNumber")
+        return span if span is not None else _find_form_text_bx_wrapper(html, "callingCode")
+    return _find_form_text_bx_wrapper(html, unit)
+
+
+def _find_top_group_insert_anchor(html: str, preceding_units: list[str]) -> Optional[int]:
+    """Walks `preceding_units` (nearest first) looking for the nearest
+    earlier `.form_top_group` unit that's actually present in `html`, and
+    returns the position right after it to insert at. None if none of them
+    are present — the caller falls back to the very start of
+    `.form_top_group`."""
+    for unit in preceding_units:
+        span = _locate_top_unit(html, unit)
+        if span is not None:
+            return span[1]
+    return None
+
+
+def _patch_simple_top_unit(
+    html: str, unit: str, new_present: bool, render_fragment: Callable[[], str], preceding_units: list[str]
+) -> Optional[str]:
+    """Reconciles one independently-wrapped `.form_top_group` unit
+    (`countryCode`/`email`, each its own `<div>` with no sibling sharing
+    it) against whether `unit`'s id is actually found in `html` right now —
+    not against the old fingerprint — so it self-corrects even if the file
+    already drifted. Returns `html` unchanged when nothing needs to
+    change."""
+    span = _locate_top_unit(html, unit)
+    currently_present = span is not None
+    if currently_present and not new_present:
+        assert span is not None
+        return html[: span[0]] + html[span[1] :]
+    if not currently_present and new_present:
+        insert_at = _find_top_group_insert_anchor(html, preceding_units)
+        if insert_at is None:
+            top_match = _FORM_TOP_GROUP_OPEN_RE.search(html)
+            if top_match is None:
+                return None
+            insert_at = top_match.end()
+        return html[:insert_at] + render_fragment() + html[insert_at:]
+    return html
+
+
+def _patch_name_pair(
+    html: str,
+    first_name_field: Optional[LocalizedFieldMeta],
+    last_name_field: Optional[LocalizedFieldMeta],
+    preceding_units: list[str],
+) -> Optional[str]:
+    """firstName/lastName share one `.form_text_group` wrapper
+    (`render_profile_fields`) that must itself be created/removed exactly
+    when going from neither-present to either-present or back, and whose
+    two possible children are otherwise independently reconciled inside it
+    without disturbing the other."""
+    new_first = first_name_field is not None
+    new_last = last_name_field is not None
+    new_any = new_first or new_last
+
+    group_span = _locate_top_unit(html, "namePair")
+
+    if group_span is None:
+        if not new_any:
+            return html
+        fragment = render_profile_fields(firstName=first_name_field, lastName=last_name_field)
+        insert_at = _find_top_group_insert_anchor(html, preceding_units)
+        if insert_at is None:
+            top_match = _FORM_TOP_GROUP_OPEN_RE.search(html)
+            if top_match is None:
+                return None
+            insert_at = top_match.end()
+        return html[:insert_at] + fragment + html[insert_at:]
+
+    if not new_any:
+        start, end = group_span
+        return html[:start] + html[end:]
+
+    first_in_file = _find_form_text_bx_wrapper(html, "firstName") is not None
+    last_in_file = _find_form_text_bx_wrapper(html, "lastName") is not None
+
+    if first_in_file and not new_first:
+        span = _find_form_text_bx_wrapper(html, "firstName")
+        if span is None:
+            return None
+        html = html[: span[0]] + html[span[1] :]
+    if last_in_file and not new_last:
+        span = _find_form_text_bx_wrapper(html, "lastName")
+        if span is None:
+            return None
+        html = html[: span[0]] + html[span[1] :]
+
+    if new_first and not first_in_file:
+        group_match = _NAME_GROUP_OPEN_RE.search(html)
+        if group_match is None:
+            return None
+        fragment = render_profile_fields(firstName=first_name_field)
+        inner = fragment[len('<div class="form_text_group">') : -len("</div>")]
+        html = html[: group_match.end()] + inner + html[group_match.end() :]
+
+    if new_last and not last_in_file:
+        group_match = _NAME_GROUP_OPEN_RE.search(html)
+        if group_match is None:
+            return None
+        group_span2 = _find_balanced_div(html, group_match)
+        if group_span2 is None:
+            return None
+        insert_at = group_span2[1] - len("</div>")
+        fragment = render_profile_fields(lastName=last_name_field)
+        inner = fragment[len('<div class="form_text_group">') : -len("</div>")]
+        html = html[:insert_at] + inner + html[insert_at:]
+
+    return html
+
+
+def _patch_mobile_group(
+    html: str,
+    calling_code_field: Optional[CallingCodeFieldMeta],
+    mobile_number_field: Optional[MobileNumberFieldMeta],
+    preceding_units: list[str],
+) -> Optional[str]:
+    """callingCode/mobileNumber render as one indivisible block regardless
+    of which of the two is actually set (see `render_profile_fields`), so
+    the unit's presence is `calling_code_field is not None or
+    mobile_number_field is not None` — there's no partial-membership case
+    to reconcile here, unlike firstName/lastName."""
+    new_present = calling_code_field is not None or mobile_number_field is not None
+    span = _locate_top_unit(html, "mobileGroup")
+    currently_present = span is not None
+    if currently_present and not new_present:
+        assert span is not None
+        return html[: span[0]] + html[span[1] :]
+    if not currently_present and new_present:
+        fragment = render_profile_fields(callingCode=calling_code_field, mobileNumber=mobile_number_field)
+        insert_at = _find_top_group_insert_anchor(html, preceding_units)
+        if insert_at is None:
+            top_match = _FORM_TOP_GROUP_OPEN_RE.search(html)
+            if top_match is None:
+                return None
+            insert_at = top_match.end()
+        return html[:insert_at] + fragment + html[insert_at:]
+    return html
+
+
+def _patch_consent_group(
+    html: str, removed_consent_ids: list[str], new_definition: FormDefinition, variant: Literal["ff", "oc"]
+) -> Optional[str]:
+    """Reconciles `.form_bottom_check_group` (privacyPolicy, marketingOptin,
+    and every `additionalConsents` entry visible in `variant`) the same
+    self-correcting way as the top-group units, plus the group wrapper
+    itself, which must appear/disappear exactly when the item count goes
+    from zero to non-zero or back — mirroring `render_page`'s own
+    `privacy_block = ... if consent_checks else ""`."""
+    f = new_definition.fields
+    new_items: list[tuple[str, str]] = []
+    pp = f.privacyPolicy
+    if pp and variant in (pp.visibleInVariants or ["ff"]):
+        new_items.append(("privacyPolicy", _render_privacy_policy_fragment(pp.required)))
+    mo = f.marketingOptin
+    if mo and variant in (mo.visibleInVariants or ["ff"]):
+        new_items.append(("subscribe", _render_marketing_optin_fragment(mo.required)))
+    for consent in f.additionalConsents or []:
+        if variant in (consent.visibleInVariants or ["ff"]):
+            new_items.append((escape_html(consent.id), _render_additional_consent_fragment(consent)))
+
+    new_keys = {key for key, _ in new_items}
+
+    # privacyPolicy/subscribe are always checked (their presence is a plain
+    # field on new_definition, no stored list needed); additional-consent
+    # removals can only be discovered via the old fingerprint, passed in by
+    # the caller — see diff_consents's own doc comment.
+    for candidate in set(removed_consent_ids) | {"privacyPolicy", "subscribe"}:
+        if candidate in new_keys:
+            continue
+        span = _find_element_by_id(html, candidate)
+        if span is not None:
+            html = html[: span[0]] + html[span[1] :]
+
+    if not new_items:
+        group_match = _BOTTOM_CHECK_GROUP_OPEN_RE.search(html)
+        if group_match is None:
+            return html
+        span = _find_balanced_div(html, group_match)
+        if span is None:
+            return None
+        return html[: span[0]] + html[span[1] :]
+
+    group_match = _BOTTOM_CHECK_GROUP_OPEN_RE.search(html)
+    if group_match is None:
+        fragment = '<div class="form_bottom_check_group">' + "".join(frag for _, frag in new_items) + "</div>"
+        if variant == "oc":
+            anchor = _find_element_by_id(html, "formBottomBar")
+            if anchor is None:
+                return None
+            insert_at = anchor[0]
+        else:
+            fbg_match = _FORM_BOTTOM_GROUP_OPEN_RE.search(html)
+            if fbg_match is None:
+                return None
+            insert_at = fbg_match.end()
+        return html[:insert_at] + fragment + html[insert_at:]
+
+    keys_in_order = [key for key, _ in new_items]
+    for key, fragment in new_items:
+        if _find_element_by_id(html, key) is not None:
+            continue
+        position = keys_in_order.index(key)
+        insert_at = None
+        for candidate_key in reversed(keys_in_order[:position]):
+            span = _find_element_by_id(html, candidate_key)
+            if span is not None:
+                insert_at = span[1]
+                break
+        if insert_at is None:
+            group_match = _BOTTOM_CHECK_GROUP_OPEN_RE.search(html)
+            if group_match is None:
+                return None
+            insert_at = group_match.end()
+        html = html[:insert_at] + fragment + html[insert_at:]
+
+    return html
+
+
+def _patch_terms_link(html: str, new_definition: FormDefinition, variant: Literal["ff", "oc"]) -> Optional[str]:
+    """The terms-and-conditions link is a single `<a>` with no wrapping
+    `<div>` of its own (see `_terms_link`/`page_template.py`), sitting right
+    after the `apiError` div inside the submit block — so it's found/removed
+    by matching the `<a>` tag itself rather than a div span."""
+    new_present = bool(new_definition.fields.termsAndConditions)
+    match = _TERMS_LINK_RE.search(html)
+    currently_present = match is not None
+    if currently_present and not new_present:
+        assert match is not None
+        return html[: match.start()] + html[match.end() :]
+    if not currently_present and new_present:
+        anchor = _find_element_by_id(html, "apiError")
+        if anchor is None:
+            return None
+        fragment = _terms_link(new_definition, "form_bottom_terms" if variant == "oc" else "")
+        insert_at = anchor[1]
+        return html[:insert_at] + fragment + html[insert_at:]
+    return html
+
+
+def patch_html_for_field_diff(
+    html: str, removed_consent_ids: list[str], new_definition: FormDefinition, variant: Literal["ff", "oc"]
+) -> Optional[str]:
+    """Reconciles every profile-field/consent unit in `html` against
+    `new_definition` for one HTML file's `variant` — email/firstName/
+    lastName only apply to the Full Form profile block (see `render_page`'s
+    own `is_oc` branch: the One-Click call never passes them at all, so
+    they're skipped here too rather than ever being inserted into an OC
+    file). Returns the patched HTML, or `None` the moment any step can't
+    find its expected anchor, signaling the caller to fall back to the
+    existing warn-and-confirm flow for this file instead of guessing."""
+    f = new_definition.fields
+
+    patched = _patch_simple_top_unit(html, "countryCode", bool(f.countryCode), lambda: render_profile_fields(countryCode=f.countryCode), [])
+    if patched is None:
+        return None
+    html = patched
+
+    if variant == "ff":
+        patched = _patch_simple_top_unit(html, "email", bool(f.email), lambda: render_profile_fields(email=f.email), ["countryCode"])
+        if patched is None:
+            return None
+        html = patched
+
+        patched = _patch_name_pair(html, f.firstName, f.lastName, ["email", "countryCode"])
+        if patched is None:
+            return None
+        html = patched
+
+        patched = _patch_mobile_group(html, f.callingCode, f.mobileNumber, ["namePair", "email", "countryCode"])
+        if patched is None:
+            return None
+        html = patched
+    else:
+        patched = _patch_mobile_group(html, f.callingCode, f.mobileNumber, ["countryCode"])
+        if patched is None:
+            return None
+        html = patched
+
+    patched = _patch_consent_group(html, removed_consent_ids, new_definition, variant)
+    if patched is None:
+        return None
+    html = patched
+
+    patched = _patch_terms_link(html, new_definition, variant)
+    if patched is None:
+        return None
+    html = patched
 
     return html

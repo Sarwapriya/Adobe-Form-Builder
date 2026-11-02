@@ -61,7 +61,7 @@ from app.services import (
 from app.services.file_service import absolute_file_path, save_form_version_generated_files
 from app.utils.background import run_in_background
 from app.services.generation_service import classify_file_type
-from app.services.html_structure_patch import diff_questions, patch_html_for_question_diff
+from app.services.html_structure_patch import diff_consents, diff_questions, patch_html_for_field_diff, patch_html_for_question_diff
 from app.services.sftp_service import SftpDeployFile, deploy_generated_files
 from app.services.subsidiary_locale_service import list_subsidiary_locales
 from app.services.subsidiary_recipients import resolve_subsidiary_recipients
@@ -782,41 +782,42 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
                 return "oc"
         return None
 
-    # A whole question being added/removed is surgically merged straight
-    # into a hand-edited HTML file instead of discarding it (see
-    # html_structure_patch.py's own doc comment for exactly which changes
-    # it can and can't safely merge, and why) — computed up front so the
-    # conflict check right below only ever lists a file as truly affected
-    # once a merge attempt has already failed for it.
+    # A whole question or field/consent being added/removed is surgically
+    # merged straight into a hand-edited HTML file instead of discarding it
+    # (see html_structure_patch.py's own doc comment for exactly which
+    # changes it can and can't safely merge, and why) — computed up front so
+    # the conflict check right below only ever lists a file as truly
+    # affected once a merge attempt has already failed for it. The two
+    # merges are independent and composed in sequence (question diff first,
+    # then field/consent diff on whatever that produced) — each is a safe
+    # no-op when its own region didn't change, so there's no need to gate
+    # one on the other being clean (an earlier version of this code did,
+    # before patch_html_for_field_diff existed, specifically to avoid
+    # silently treating a field/consent change as "nothing to merge" —
+    # that's no longer a risk now that field/consent changes are actually
+    # merged rather than just detected).
     patched_html_by_name: dict[str, str] = {}
     if structural_change:
         old_structure = json.loads(editable_version.structureFingerprint)
-        new_structure = json.loads(new_fingerprint)
-        # diff_questions only ever represents question/answer-level changes
-        # — if fields or consents also differ (e.g. a newly enabled
-        # marketing opt-in), a question-only diff would come back empty and
-        # patch_html_for_question_diff would wrongly treat "nothing to
-        # merge" as "fully handled", silently leaving the file stale with no
-        # warning at all. Only attempt a merge when fields/consents are
-        # unchanged — any difference there falls straight through to the
-        # existing warn-and-confirm flow for every hand-edited HTML file.
-        only_questions_changed = (
-            old_structure.get("fields") == new_structure.get("fields")
-            and old_structure.get("consents") == new_structure.get("consents")
-        )
-        question_diff = diff_questions(old_structure, definition) if only_questions_changed else None
-        if question_diff is not None:
-            for existing_row in existing_editable_files:
-                if existing_row.fileType != "html" or existing_row.editedAt is None:
-                    continue
-                variant = _variant_for_html_path(existing_row.fileName)
-                if variant is None:
-                    continue
-                with open(absolute_file_path(existing_row.filePath), "r", encoding="utf-8", newline="") as fh:
-                    current_content = fh.read()
-                patched = patch_html_for_question_diff(current_content, question_diff, definition, variant)
-                if patched is not None:
-                    patched_html_by_name[existing_row.fileName] = patched
+        question_diff = diff_questions(old_structure, definition)
+        removed_consent_ids = diff_consents(old_structure, definition)
+        for existing_row in existing_editable_files:
+            if existing_row.fileType != "html" or existing_row.editedAt is None:
+                continue
+            variant = _variant_for_html_path(existing_row.fileName)
+            if variant is None:
+                continue
+            with open(absolute_file_path(existing_row.filePath), "r", encoding="utf-8", newline="") as fh:
+                current_content = fh.read()
+            patched: Optional[str] = (
+                patch_html_for_question_diff(current_content, question_diff, definition, variant)
+                if question_diff.is_patchable
+                else None
+            )
+            if patched is not None:
+                patched = patch_html_for_field_diff(patched, removed_consent_ids, definition, variant)
+            if patched is not None:
+                patched_html_by_name[existing_row.fileName] = patched
 
         affected = sorted(
             f.fileName
