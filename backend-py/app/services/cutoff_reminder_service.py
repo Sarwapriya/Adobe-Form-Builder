@@ -30,6 +30,14 @@ from app.services.subsidiary_recipients import resolve_subsidiary_recipients
 DEFAULT_REMINDER_DAYS_BEFORE = 7
 
 
+def _subsidiary_relative_form_link(form_id: str, origin: str) -> str:
+    """Same routing rule as email_service._subsidiary_form_link, but as a
+    frontend-relative path — what the in-app notification bell's `link`
+    column stores and the frontend navigates to directly on click, no
+    FRONTEND_URL prefix needed since it's never leaving the app."""
+    return f"/my-forms/adhoc/{form_id}" if origin == "adhoc" else f"/my-forms/{form_id}"
+
+
 def _days_until(target: date, from_: date) -> int:
     return (target - from_).days
 
@@ -103,7 +111,13 @@ def run_cutoff_reminders(db: Session) -> None:
                     continue
                 pending_for_subsidiary.append(
                     email_service.AdminPendingItem(
-                        subsidiary_id=subsidiary_id, project_code=code.code, form_name=form.name, cutoff_date=code.cutoffDate, reasons=reasons
+                        form_id=form.id,
+                        origin=form.origin,
+                        subsidiary_id=subsidiary_id,
+                        project_code=code.code,
+                        form_name=form.name,
+                        cutoff_date=code.cutoffDate,
+                        reasons=reasons,
                     )
                 )
             if not pending_for_subsidiary:
@@ -119,21 +133,35 @@ def run_cutoff_reminders(db: Session) -> None:
                     subsidiary_id,
                     code.code,
                     code.cutoffDate,
-                    [email_service.CutoffReminderItem(form_name=p.form_name, reasons=p.reasons) for p in pending_for_subsidiary],
+                    [
+                        email_service.CutoffReminderItem(form_id=p.form_id, origin=p.origin, form_name=p.form_name, reasons=p.reasons)
+                        for p in pending_for_subsidiary
+                    ],
                 )
             form_list = "; ".join(f"{p.form_name} ({', '.join(p.reasons)})" for p in pending_for_subsidiary)
+            # One form pending → deep-link straight to it, in the subsidiary's
+            # own panel (never /admin/...) — several → the subsidiary's form
+            # list is the best a single link can do.
+            subsidiary_link = (
+                _subsidiary_relative_form_link(pending_for_subsidiary[0].form_id, pending_for_subsidiary[0].origin)
+                if len(pending_for_subsidiary) == 1
+                else "/my-forms"
+            )
             notification_service.notify_subsidiary(
-                db, subsidiary_id, "cutoff_reminder", f'Forms pending before cutoff — "{code.code}"', form_list, link="/my-forms"
+                db, subsidiary_id, "cutoff_reminder", f'Forms pending before cutoff — "{code.code}"', form_list, link=subsidiary_link
             )
 
     if all_pending_items:
         admin_recipients = list_admin_notification_emails(db)
         if admin_recipients:
             email_service.send_admin_pending_items_summary(db, admin_recipients, all_pending_items)
+        admin_link = (
+            f"/admin/form-builder/{all_pending_items[0].form_id}" if len(all_pending_items) == 1 else "/admin/form-builder"
+        )
         notification_service.notify_admins(
             db, "cutoff_reminder_summary", f"{len(all_pending_items)} form(s) pending before cutoff",
             "; ".join(f'{p.form_name} ({p.subsidiary_id}, "{p.project_code}")' for p in all_pending_items),
-            link="/admin/form-builder",
+            link=admin_link,
         )
 
 

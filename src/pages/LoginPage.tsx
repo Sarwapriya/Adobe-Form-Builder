@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
 import { useAuthStore } from "../auth/authStore";
 import { showToast } from "../store/toastStore";
@@ -11,7 +11,6 @@ export function LoginPage() {
   const error = useAuthStore((s) => s.error);
   const login = useAuthStore((s) => s.login);
   const mode = useThemeModeStore((s) => s.mode);
-  const navigate = useNavigate();
   const location = useLocation();
 
   const [username, setUsername] = useState("");
@@ -22,9 +21,19 @@ export function LoginPage() {
     if (error) showToast(error, "error");
   }, [error]);
 
+  // ProtectedRoute redirects an unauthenticated visit to a deep link (e.g. a
+  // link from a notification email) here with `state: { from: location }` —
+  // the branch below is what sends the user back to that exact page once
+  // `login()` flips `status` to "authenticated" and this component
+  // re-renders. `handleSubmit` must NOT also call `navigate()` itself on
+  // success: an explicit navigate() there fired before this reactive branch
+  // ever got a chance to run, unconditionally overriding it with "/" and
+  // silently dropping the deep link — exactly the bug reported against the
+  // cutoff-reminder email's "Open this form" button landing on the
+  // dashboard instead of the form it was actually about.
   if (status === "authenticated") {
-    const state = location.state as { from?: { pathname: string } } | null;
-    const redirectTo = state?.from?.pathname ?? "/";
+    const state = location.state as { from?: { pathname: string; search?: string } } | null;
+    const redirectTo = state?.from ? `${state.from.pathname}${state.from.search ?? ""}` : "/";
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -33,7 +42,8 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await login(username, password);
-      navigate("/", { replace: true });
+      // No navigate() here — see the doc comment above the `status ===
+      // "authenticated"` branch, which handles the redirect reactively.
     } catch {
       // The error is already surfaced via the store's `error` field below;
       // nothing further to do here besides letting the user try again.

@@ -36,6 +36,25 @@ def _app_link(path: str) -> str:
     return f"{settings.FRONTEND_URL or ''}{settings.SUBPATH}{path}"
 
 
+def _subsidiary_form_link(form_id: str, origin: str) -> str:
+    """A subsidiary user's own deep link to one specific form — never the
+    admin builder (that's `/admin/...`, a route a standard subsidiary user
+    can't even open) and never just the list page, so a reminder email
+    actually lands on the one form it's about. `origin` mirrors
+    `Form.origin`/App.tsx's own routes: an ad-hoc form is edited at
+    `/my-forms/adhoc/{id}` (MyAdHocFormEditorPage), an admin-authored (HR)
+    form a subsidiary user is translating/contributing to is at
+    `/my-forms/{id}` (MyFormTranslatePage)."""
+    return _app_link(f"/my-forms/adhoc/{form_id}" if origin == "adhoc" else f"/my-forms/{form_id}")
+
+
+def _admin_form_link(form_id: str) -> str:
+    """An admin's deep link to one specific form's builder — same route for
+    every origin (App.tsx's `/admin/form-builder/:id`, FormBuilderEditorPage
+    itself branches on the form's own origin internally)."""
+    return _app_link(f"/admin/form-builder/{form_id}")
+
+
 @dataclass
 class _ResolvedSmtpConfig:
     host: str
@@ -141,6 +160,7 @@ def _render_email_html(
     intro: Optional[str] = None,
     rows: Optional[list[tuple[str, str]]] = None,
     items: Optional[list[str]] = None,
+    item_links: Optional[list[Optional[str]]] = None,
     cta_label: Optional[str] = None,
     cta_url: Optional[str] = None,
     footer_note: Optional[str] = None,
@@ -156,7 +176,19 @@ def _render_email_html(
 
     items_html = ""
     if items:
-        item_cells = "".join(f'<li style="margin-bottom:6px;">{_escape(i)}</li>' for i in items)
+        # item_links is a parallel array (same length as items) — None for an
+        # item with no specific destination of its own, which is shown as
+        # plain text same as before this parameter existed. Each list item
+        # (one pending form, in every current caller) links straight to that
+        # one form instead of the shared cta_url below — the only way a
+        # multi-item email can still be fully navigable to the *right* page
+        # per item, not just the first/only one.
+        item_cells = "".join(
+            f'<li style="margin-bottom:6px;">'
+            + (f'<a href="{link}" style="color:#1428a0;text-decoration:none;">{_escape(i)}</a>' if link else _escape(i))
+            + "</li>"
+            for i, link in zip(items, item_links or [None] * len(items))
+        )
         items_html = f'<ul style="margin:16px 0;padding-left:20px;color:#1a1c23;font-size:14px;">{item_cells}</ul>'
 
     cta_html = ""
@@ -214,15 +246,23 @@ def _format_date_only(dt: datetime) -> str:
 
 @dataclass
 class CutoffReminderItem:
+    form_id: str
+    origin: str
     form_name: str
     reasons: list[str]
 
 
 def _build_cutoff_reminder_message(subsidiary_id: str, project_code: str, cutoff_date: datetime, items: list[CutoffReminderItem]) -> EmailContent:
-    link = _app_link("/my-forms")
+    item_links = [_subsidiary_form_link(item.form_id, item.origin) for item in items]
+    # One item → the button goes straight to that one form, same as the list
+    # link right above it; several → a single button can't deep-link all of
+    # them at once, so it falls back to the subsidiary's own form list
+    # (still never the admin area) and each list item above stays
+    # individually clickable to its own form.
+    link = item_links[0] if len(items) == 1 else _app_link("/my-forms")
     cutoff = _format_date_only(cutoff_date)
     subject = f'Reminder: forms pending for "{project_code}" (cutoff {cutoff})'
-    body_lines = "\n".join(f"- {item.form_name}: {'; '.join(item.reasons)}" for item in items)
+    body_lines = "\n".join(f"- {item.form_name} ({item_links[i]}): {'; '.join(item.reasons)}" for i, item in enumerate(items))
     text = (
         f'The following form(s) for subsidiary "{subsidiary_id}" under project "{project_code}" '
         f"still need attention, and this project's cutoff date is {cutoff}:\n\n{body_lines}"
@@ -232,7 +272,8 @@ def _build_cutoff_reminder_message(subsidiary_id: str, project_code: str, cutoff
         title="Forms pending before cutoff",
         intro=f'The following form(s) for subsidiary "{subsidiary_id}" under project "{project_code}" still need attention — this project\'s cutoff date is {cutoff}.',
         items=[f"{item.form_name}: {'; '.join(item.reasons)}" for item in items],
-        cta_label="Review your forms",
+        item_links=item_links,
+        cta_label="Review your forms" if len(items) > 1 else "Open this form",
         cta_url=link,
     )
     return EmailContent(subject=subject, text=text, html=html)
@@ -248,6 +289,8 @@ def send_cutoff_reminder(db: Session, recipients: list[str], subsidiary_id: str,
 
 @dataclass
 class AdminPendingItem:
+    form_id: str
+    origin: str
     subsidiary_id: str
     project_code: str
     form_name: str
@@ -256,12 +299,19 @@ class AdminPendingItem:
 
 
 def _build_admin_pending_summary_message(items: list[AdminPendingItem]) -> EmailContent:
-    link = _app_link("/admin/form-builder")
+    item_links = [_admin_form_link(item.form_id) for item in items]
+    # One item (the common case — see the screenshot this was reported
+    # from) → the button goes straight to that one form's builder, not the
+    # HR list page `/admin/form-builder` redirects to regardless of which
+    # form (or even which origin, HR vs ad-hoc) is actually pending; several
+    # → falls back to the Form Initiator's own landing page, same as before,
+    # with each list item above still individually clickable to its own form.
+    link = item_links[0] if len(items) == 1 else _app_link("/admin/form-builder")
     subject = f"Reminder: {len(items)} form{'' if len(items) == 1 else 's'} pending before cutoff"
     body_lines = "\n".join(
-        f'- {item.form_name} (subsidiary "{item.subsidiary_id}", project "{item.project_code}", '
+        f'- {item.form_name} ({item_links[i]}) (subsidiary "{item.subsidiary_id}", project "{item.project_code}", '
         f"cutoff {_format_date_only(item.cutoff_date)}): {'; '.join(item.reasons)}"
-        for item in items
+        for i, item in enumerate(items)
     )
     text = f"The following forms still need attention before their project's cutoff date:\n\n{body_lines}\n\nReview them in the Form Initiator: {link}\n"
     html = _render_email_html(
@@ -272,7 +322,8 @@ def _build_admin_pending_summary_message(items: list[AdminPendingItem]) -> Email
             f"cutoff {_format_date_only(item.cutoff_date)}: {'; '.join(item.reasons)}"
             for item in items
         ],
-        cta_label="Open Form Initiator",
+        item_links=item_links,
+        cta_label="Open Form Initiator" if len(items) > 1 else "Open this form",
         cta_url=link,
     )
     return EmailContent(subject=subject, text=text, html=html)
