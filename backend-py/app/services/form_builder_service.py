@@ -40,6 +40,7 @@ from app.form_pipeline import (
     resolve_file_names,
     validate_form_definition,
 )
+from app.form_pipeline.codegen.build_data_js import build_data_js
 from app.form_pipeline.codegen.file_names import FileNames
 from app.form_pipeline.codegen.types import ChannelConfig
 from app.errors import NotFoundError, ValidationError
@@ -61,6 +62,7 @@ from app.services import (
 from app.services.file_service import absolute_file_path, save_form_version_generated_files
 from app.utils.background import run_in_background
 from app.services.generation_service import classify_file_type
+from app.services.data_js_patch import merge_data_js
 from app.services.html_structure_patch import diff_consents, diff_questions, patch_html_for_field_diff, patch_html_for_question_diff
 from app.services.sftp_service import SftpDeployFile, deploy_generated_files
 from app.services.subsidiary_locale_service import list_subsidiary_locales
@@ -454,25 +456,31 @@ def update_draft(db: Session, form_id: str, definition: FormDefinition, config: 
 
     draft_version = db.get(FormVersion, form.currentDraftVersionId)
     assert draft_version is not None
+    # Captured unconditionally, before draft_version.definition is overwritten
+    # below — this is the baseline sync_editable_data_js needs to tell "the
+    # admin changed this leaf by hand" apart from "this leaf just differs
+    # because the design screen changed it", for a hand-edited data.js (see
+    # data_js_patch.py's own doc comment). Also doubles as the
+    # structureFingerprint backfill below, same baseline either way.
+    old_definition = FormDefinition.model_validate_json(draft_version.definition)
     # A version created before structureFingerprint existed has never had one
     # stamped, and publish_form treats a null fingerprint as "nothing to
     # compare against, so no conflict" (see its own doc comment) — correct
     # for a version that's never been touched since, but wrong the moment
     # this specific save is itself a structural change: with no baseline,
     # that change would go undetected and silently reset a hand-edited HTML
-    # file with no warning. Backfilling from the OLD (about-to-be-replaced)
-    # definition, right here before it's overwritten, establishes "this is
-    # what the files on disk currently match" as the baseline, so THIS
-    # save's own structural change (if any) is correctly caught at the next
-    # Publish instead of slipping through for free.
+    # file with no warning. Backfilling right here, before the definition is
+    # overwritten, establishes "this is what the files on disk currently
+    # match" as the baseline, so THIS save's own structural change (if any)
+    # is correctly caught at the next Publish instead of slipping through
+    # for free.
     if draft_version.structureFingerprint is None:
-        old_definition = FormDefinition.model_validate_json(draft_version.definition)
         draft_version.structureFingerprint = compute_structure_fingerprint(old_definition)
     draft_version.definition = definition.model_dump_json()
     draft_version.config = _enforce_variants_for_origin(form.origin, config).model_dump_json()
     form.updatedAt = _now()
     db.commit()
-    sync_editable_data_js(db, form_id, form.currentDraftVersionId)
+    sync_editable_data_js(db, form_id, form.currentDraftVersionId, old_definition=old_definition)
     return "ok"
 
 
@@ -550,10 +558,12 @@ def upload_consent_document(
 
     target_version_id = _editable_form_version_id(form) or form.currentDraftVersionId
     version_ids = {target_version_id, form.currentDraftVersionId}
+    old_definitions: dict[str, FormDefinition] = {}
     for version_id in version_ids:
         version = db.get(FormVersion, version_id)
         assert version is not None
         definition = FormDefinition.model_validate_json(version.definition)
+        old_definitions[version_id] = definition
         # Same backfill-before-overwrite as update_draft, for a version that
         # predates structureFingerprint — see that function's own doc
         # comment for why this has to happen before `version.definition` is
@@ -565,7 +575,7 @@ def upload_consent_document(
     db.commit()
 
     for version_id in version_ids:
-        sync_editable_data_js(db, form_id, version_id)
+        sync_editable_data_js(db, form_id, version_id, old_definition=old_definitions[version_id])
 
     return {"outcome": "ok", "fileName": file_name, "url": url}
 
@@ -611,17 +621,23 @@ def compute_structure_fingerprint(definition: FormDefinition) -> str:
     )
 
 
-def sync_editable_data_js(db: Session, form_id: str, version_id: str) -> None:
+def sync_editable_data_js(db: Session, form_id: str, version_id: str, old_definition: Optional[FormDefinition] = None) -> None:
     """Keeps one FormVersion's data.js file continuously in sync with its
-    own current definition — the one file that's always 100% safe to
-    regenerate in full, since it's pure structured data (fields/questions/
-    answers/param), never meaningfully hand-edited (the HTML is text-empty
-    and filled in from this file at runtime). Never touches any other file
-    (html/js/css), so a hand-edit made there via Edit Files is never at risk
-    from this. Called after any action that changes a definition without
-    going through a full Publish (update_draft / upload_consent_document),
-    so a design-screen change reaches the real, already-generated files
-    immediately — no Publish needed just for a data-only change to show up.
+    own current definition. Called after any action that changes a
+    definition without going through a full Publish (update_draft /
+    upload_consent_document), so a design-screen change reaches the real,
+    already-generated files immediately — no Publish needed just for a
+    data-only change to show up. Never touches any other file (html/js/css),
+    so a hand-edit made there via Edit Files is never at risk from this.
+
+    If the data.js row is itself hand-edited (via Edit Files) and the caller
+    passed `old_definition` — the definition this version's files matched
+    *before* the change that's calling this function — the hand-edit is
+    3-way-merged against it rather than unconditionally overwritten (see
+    data_js_patch.py's own doc comment for why this is safe: data.js is pure
+    data, so "what changed" is a plain data diff). `old_definition` is
+    omitted for the one-off "no generated files at all yet" case below,
+    where there's nothing to merge against anyway.
 
     If this version has no generated files at all yet (never touched by
     Edit Files or a previous publish), generates the full set fresh instead
@@ -671,8 +687,27 @@ def sync_editable_data_js(db: Session, form_id: str, version_id: str) -> None:
         # definition" to resolve properly instead of writing to the wrong
         # place or silently doing nothing useful.
         return
+
+    new_content = data_js.contents
+    if existing_data_row.editedAt is not None and old_definition is not None:
+        with open(absolute_file_path(existing_data_row.filePath), "r", encoding="utf-8", newline="") as fh:
+            hand_content = fh.read()
+        old_data_js = build_data_js(old_definition, generation_config, file_names)
+        merged = merge_data_js(old_data_js.contents, hand_content, new_content)
+        if merged is not None:
+            new_content = merged
+        # else: a genuine conflict (or the hand-edit no longer parses as
+        # JSON) — this path has no confirmation step to fall back to (Save
+        # Draft is a silent, unconditional background sync, unlike Publish),
+        # so it falls through to the unconditional overwrite below same as
+        # before this function could merge at all; editedAt is cleared since
+        # the content on disk is about to stop reflecting any hand-edit.
+        else:
+            existing_data_row.editedAt = None
+            existing_data_row.editedByUserId = None
+            db.commit()
     with open(absolute_file_path(existing_data_row.filePath), "w", encoding="utf-8", newline="") as fh:
-        fh.write(data_js.contents)
+        fh.write(new_content)
 
 
 PublishOutcome = Literal["ok", "not_found", "invalid", "structural_conflict"]
@@ -782,6 +817,40 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
                 return "oc"
         return None
 
+    # data.js is hand-edit-mergeable too (see data_js_patch.py's own doc
+    # comment) — attempted unconditionally, not just under structural_change,
+    # since data.js's content depends on nearly every field of the
+    # definition, not only which questions/fields exist. The "old" baseline
+    # is whatever editable_version's own files were last generated to match:
+    # when the form was never published before (editable_version IS
+    # draft_version, the same row `definition` already is), that baseline
+    # trivially equals `definition` itself, which correctly preserves 100%
+    # of a hand-edit made and never-since-reconciled (nothing could have
+    # "changed on the design side" when old == new) — otherwise it's
+    # editable_version's own frozen, already-fully-resolved definition/
+    # config (see its own `draft_version.config =
+    # generation_config.model_dump_json()` below, from whichever publish
+    # produced it). A genuine conflict (or an unparseable hand-edit) joins
+    # the same affectedFiles/force gate as an unmergeable hand-edited HTML
+    # file below, rather than silently discarding the hand-edit.
+    data_js_merged_content: Optional[str] = None
+    data_js_row = next((f for f in existing_editable_files if f.fileType == "data-js"), None)
+    if data_js_row is not None and data_js_row.editedAt is not None:
+        if editable_version_id == draft_version.id:
+            old_definition_for_data_js = definition
+            old_config_for_data_js = generation_config
+        else:
+            old_raw_definition = FormDefinition.model_validate_json(editable_version.definition)
+            old_definition_for_data_js = old_raw_definition.model_copy(
+                update={"pageError": _resolve_page_error_updates(db, old_raw_definition)}
+            )
+            old_config_for_data_js = BuilderConfig.model_validate_json(editable_version.config)
+        old_data_js_content = build_data_js(old_definition_for_data_js, old_config_for_data_js, file_names).contents
+        new_data_js_content = next(f.contents for f in files if f.path == file_names.dataJs)
+        with open(absolute_file_path(data_js_row.filePath), "r", encoding="utf-8", newline="") as fh:
+            hand_data_js_content = fh.read()
+        data_js_merged_content = merge_data_js(old_data_js_content, hand_data_js_content, new_data_js_content)
+
     # A whole question or field/consent being added/removed is surgically
     # merged straight into a hand-edited HTML file instead of discarding it
     # (see html_structure_patch.py's own doc comment for exactly which
@@ -819,13 +888,17 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
             if patched is not None:
                 patched_html_by_name[existing_row.fileName] = patched
 
-        affected = sorted(
-            f.fileName
-            for f in existing_editable_files
-            if f.fileType == "html" and f.editedAt is not None and f.fileName not in patched_html_by_name
+    affected = sorted(
+        f.fileName
+        for f in existing_editable_files
+        if f.editedAt is not None
+        and (
+            (f.fileType == "html" and structural_change and f.fileName not in patched_html_by_name)
+            or (f.fileType == "data-js" and data_js_merged_content is None)
         )
-        if affected and not force:
-            return {"outcome": "structural_conflict", "affectedFiles": affected}
+    )
+    if affected and not force:
+        return {"outcome": "structural_conflict", "affectedFiles": affected}
 
     existing_by_name = {f.fileName: f for f in existing_editable_files}
     resolved_files: list[GeneratedFile] = []
@@ -837,6 +910,11 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
         if f.path in patched_html_by_name:
             assert existing_row is not None
             resolved_files.append(GeneratedFile(path=f.path, contents=patched_html_by_name[f.path]))
+            preserved_edits[f.path] = (existing_row.editedAt, existing_row.editedByUserId)
+            continue
+        if file_type == "data-js" and data_js_merged_content is not None:
+            assert existing_row is not None
+            resolved_files.append(GeneratedFile(path=f.path, contents=data_js_merged_content))
             preserved_edits[f.path] = (existing_row.editedAt, existing_row.editedByUserId)
             continue
         # CSS and behavior-JS are never structurally tied to which

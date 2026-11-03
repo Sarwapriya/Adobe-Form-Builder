@@ -16,6 +16,7 @@ from app.models.generated_file import GeneratedFile as GeneratedFileEntity
 from app.models.project_code import ProjectCode
 from app.models.subsidiary import Subsidiary
 from app.services import form_builder_service
+from app.services.data_js_patch import parse_data_js, serialize_data_js
 from tests.form_builder.conftest import (
     create_admin_draft_form,
     create_and_publish_admin_form,
@@ -334,6 +335,91 @@ class TestHandEditOnAnAlreadyPublishedFormSurvivesRepublish:
         after_js_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_js['id']}", headers=admin_headers).json()["content"]
         assert after_js_content == js_original + "\n// redirect URL\n"
 
+    def test_a_hand_edited_data_js_merges_with_an_unrelated_design_change_at_republish(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        """data.js is pure data (no HTML-shape concerns at all — see
+        data_js_patch.py's own doc comment), so a hand-edited value there
+        (e.g. a redirect URL with no builder UI yet) now survives a design
+        change the same way a hand-edited HTML file does, instead of being
+        silently wiped by the next Publish's unconditional regenerate."""
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        data_js_file = next(f for f in files if f["fileType"] == "data-js")
+        data_js_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{data_js_file['id']}", headers=admin_headers).json()["content"]
+
+        parts = parse_data_js(data_js_original)
+        assert parts is not None
+        parts["fields"]["en_GB"]["redirectAfterSuccessUrl"] = "https://hand-edited.example.com"
+        hand_edited = serialize_data_js(parts)
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{data_js_file['id']}", json={"content": hand_edited}, headers=admin_headers)
+
+        # An unrelated design-screen change — a new consent — published with
+        # no `force` needed at all: data.js was never part of the HTML-style
+        # affectedFiles/409 flow to begin with here, since nothing conflicts.
+        definition = sample_definition_json(subsidiary_row.name)
+        definition["fields"]["marketingOptin"] = {"labelByLocale": {"en_GB": "Marketing opt-in"}}
+        draft_resp = client.patch(
+            f"/api/v1/admin/forms/{form_id}/draft",
+            json={"definition": definition, "config": sample_config_json(["ff", "oc"])},
+            headers=admin_headers,
+        )
+        assert draft_resp.status_code == 204, draft_resp.text
+
+        published = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert published.status_code == 200, published.text
+
+        after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        after_data_js = next(f for f in after if f["fileName"] == data_js_file["fileName"])
+        assert after_data_js["editedAt"] is not None  # still counted hand-edited — merged, not discarded
+        after_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_data_js['id']}", headers=admin_headers).json()["content"]
+        after_parts = parse_data_js(after_content)
+        assert after_parts is not None
+        assert after_parts["fields"]["en_GB"]["redirectAfterSuccessUrl"] == "https://hand-edited.example.com"  # the hand-edit survives
+        assert after_parts["fields"]["en_GB"]["subscribe"] == "Marketing opt-in"  # the design change is also there
+
+    def test_a_hand_edited_data_js_conflicting_with_a_design_change_blocks_until_confirmed(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        """The one case data.js's merge can't resolve on its own: both sides
+        changed the exact same leaf. Joins the same affectedFiles/force gate
+        as an unmergeable hand-edited HTML file, rather than silently
+        picking a side."""
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        data_js_file = next(f for f in files if f["fileType"] == "data-js")
+        data_js_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{data_js_file['id']}", headers=admin_headers).json()["content"]
+
+        parts = parse_data_js(data_js_original)
+        assert parts is not None
+        parts["fields"]["en_GB"]["redirectAfterSuccessUrl"] = "https://hand-edited.example.com"
+        hand_edited = serialize_data_js(parts)
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{data_js_file['id']}", json={"content": hand_edited}, headers=admin_headers)
+
+        # The design screen changes the *same* leaf to a different value.
+        definition = sample_definition_json(subsidiary_row.name)
+        definition["fields"]["redirectAfterSuccessUrlByLocale"] = {"en_GB": "https://design-screen.example.com"}
+        draft_resp = client.patch(
+            f"/api/v1/admin/forms/{form_id}/draft",
+            json={"definition": definition, "config": sample_config_json(["ff", "oc"])},
+            headers=admin_headers,
+        )
+        assert draft_resp.status_code == 204, draft_resp.text
+
+        conflict = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert conflict.status_code == 409, conflict.text
+        assert set(conflict.json()["affectedFiles"]) == {data_js_file["fileName"]}
+
+        forced = client.post(f"/api/v1/admin/forms/{form_id}/publish", json={"force": True}, headers=admin_headers)
+        assert forced.status_code == 200, forced.text
+
+        after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        after_data_js = next(f for f in after if f["fileName"] == data_js_file["fileName"])
+        assert after_data_js["editedAt"] is None  # reset — the conflicting value took the design side
+        after_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_data_js['id']}", headers=admin_headers).json()["content"]
+        after_parts = parse_data_js(after_content)
+        assert after_parts["fields"]["en_GB"]["redirectAfterSuccessUrl"] == "https://design-screen.example.com"
+
     def test_republishing_a_never_edited_file_stays_freshly_generated(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
     ):
@@ -411,6 +497,47 @@ class TestDraftFiles:
         assert same_file["editedAt"] is not None
         reread = client.get(f"/api/v1/admin/forms/{form_id}/files/{js_file['id']}", headers=admin_headers).json()
         assert reread["content"] == edited_content
+
+    def test_a_hand_edited_data_js_survives_a_save_draft_call_with_an_unrelated_design_change(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        """This is the continuous-sync path (sync_editable_data_js, called
+        from every Save Draft, no Publish involved at all) — previously the
+        one file that got unconditionally overwritten fresh on every single
+        Save Draft, hand-edited or not, even for a change nowhere near what
+        was hand-edited. Now merged the same way Publish does."""
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        data_js_file = next(f for f in files if f["fileType"] == "data-js")
+        original = client.get(f"/api/v1/admin/forms/{form_id}/files/{data_js_file['id']}", headers=admin_headers).json()["content"]
+
+        parts = parse_data_js(original)
+        assert parts is not None
+        parts["fields"]["en_GB"]["redirectAfterSuccessUrl"] = "https://hand-edited.example.com"
+        client.put(
+            f"/api/v1/admin/forms/{form_id}/files/{data_js_file['id']}",
+            json={"content": serialize_data_js(parts)},
+            headers=admin_headers,
+        )
+
+        # An unrelated design-screen change, saved as a draft — no Publish.
+        definition = sample_definition_json(subsidiary_row.name)
+        definition["fields"]["marketingOptin"] = {"labelByLocale": {"en_GB": "Marketing opt-in"}}
+        draft_resp = client.patch(
+            f"/api/v1/admin/forms/{form_id}/draft",
+            json={"definition": definition, "config": sample_config_json(["ff", "oc"])},
+            headers=admin_headers,
+        )
+        assert draft_resp.status_code == 204, draft_resp.text
+
+        after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        after_data_js = next(f for f in after if f["id"] == data_js_file["id"])
+        assert after_data_js["editedAt"] is not None  # still counted hand-edited — merged, not discarded
+        after_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{data_js_file['id']}", headers=admin_headers).json()["content"]
+        after_parts = parse_data_js(after_content)
+        assert after_parts is not None
+        assert after_parts["fields"]["en_GB"]["redirectAfterSuccessUrl"] == "https://hand-edited.example.com"
+        assert after_parts["fields"]["en_GB"]["subscribe"] == "Marketing opt-in"
 
     def test_regenerate_discards_hand_edits_and_rebuilds_fresh(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
