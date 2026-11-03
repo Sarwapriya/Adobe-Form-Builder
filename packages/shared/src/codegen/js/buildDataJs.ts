@@ -263,15 +263,20 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
     answers[locale] = answersForLocale;
 
     // Merge builder-provided validation messages with hardcoded defaults.
-    // Admin-set values (ValidationMessagesPanel) take precedence for the
-    // current locale; missing keys fall back to the default English set.
+    // form.validationMessages has no builder-screen UI of its own — a
+    // per-field panel (ValidationMessagesPanel) existed briefly but was
+    // removed as one UI panel too many; a real admin customization reaches
+    // this object only via a direct hand-edit of the generated data.js file
+    // on the backend (preserved across further publishes by the Python
+    // port's own `data_js_patch.py`, which this frontend copy has no
+    // equivalent of — this function only ever runs for a live preview, not
+    // for anything persisted), not via anything here.
     // modalMessage1/modalMessage2 are remapped explicitly to
     // modalMessage_1/modalMessage_2 — DEFAULT_VALIDATION_MESSAGES' own keys
     // (and what the reference FF.js actually reads) use an underscore that
     // ValidationMessageSet's own field names don't, so a raw spread would
     // silently add an extra, never-read key instead of overriding the
-    // default (this used to be a reproduced-verbatim quirk from before
-    // there was any UI to set these — now that there is, it has to work).
+    // default.
     const wbMessages = form.validationMessages[locale] ?? {};
     const { modalMessage1, modalMessage2, ...restWbMessages } = wbMessages;
     validationMessages[locale] = {
