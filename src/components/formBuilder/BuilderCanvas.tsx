@@ -438,6 +438,14 @@ export function PredefinedFieldToggles({
     });
   }
 
+  // submitConfirmationEnabled is the one toggle on this panel where absence
+  // means ON (see ProfileFieldSet.submitConfirmationEnabled's own doc
+  // comment) — every other switch here defaults to off, so this one alone
+  // inverts the checked expression instead of using `!!`.
+  function toggleSubmitConfirmation(enabled: boolean) {
+    updateDefinition((d) => ({ ...d, fields: { ...d.fields, submitConfirmationEnabled: enabled } }));
+  }
+
   if (!fields) return null;
   const currentFields = fields;
   const additionalConsents = currentFields.additionalConsents ?? [];
@@ -628,6 +636,21 @@ export function PredefinedFieldToggles({
           size="small"
           checked={!!currentFields.termsAndConditions}
           onChange={(e) => toggleTermsAndConditions(e.target.checked)}
+        />
+      </Box>
+
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mt: 2.5, mb: 0.25 }}>
+        Submit Confirmation
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
+        The "Are you sure you want to submit?" popup shown when Submit is clicked. On by default.
+      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Typography variant="body2">Ask for confirmation before submitting</Typography>
+        <Switch
+          size="small"
+          checked={currentFields.submitConfirmationEnabled !== false}
+          onChange={(e) => toggleSubmitConfirmation(e.target.checked)}
         />
       </Box>
     </Paper>

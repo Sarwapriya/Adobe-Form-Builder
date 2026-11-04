@@ -637,6 +637,12 @@ def compute_structure_fingerprint(definition: FormDefinition) -> str:
             ("countryCode", f.countryCode), ("callingCode", f.callingCode), ("mobileNumber", f.mobileNumber),
             ("privacyPolicy", f.privacyPolicy), ("marketingOptin", f.marketingOptin),
             ("termsAndConditions", f.termsAndConditions), ("recaptcha", f.recaptcha),
+            # Inverted vs. every entry above: absent/None means the popup
+            # renders (today's default, unchanged), so it counts as
+            # "present" here whenever it's NOT explicitly disabled — this
+            # tuple tracks "does this currently render in the HTML", not
+            # "is this field object set".
+            ("submitConfirmation", True if f.submitConfirmationEnabled is not False else None),
         )
         if value is not None
     )

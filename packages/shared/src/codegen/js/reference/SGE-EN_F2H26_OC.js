@@ -1061,7 +1061,12 @@ $(document).ready(function ()
                return false;
            }
 
-           validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
+           // The "Are you sure you want to submit?" confirmation popup is
+           // admin-toggleable (ProfileFieldSet.submitConfirmationEnabled) —
+           // when turned off, its whole #submitIntentPopup section isn't in
+           // the DOM at all (see pageTemplate.ts), so this check alone
+           // decides whether showSubmitModal ever runs.
+           (($("#submitIntentPopup").length) && validateModal()) ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
 
            return false;
         });

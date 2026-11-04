@@ -474,6 +474,38 @@ class TestPatchHtmlForFieldDiffRecaptcha:
         assert "recaptcha/api.js" in patched
 
 
+class TestPatchHtmlForFieldDiffSubmitConfirmation:
+    def test_disabling_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(submitConfirmationEnabled=False)
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_re_enabling_after_disabling_reproduces_a_fresh_page_exactly(self):
+        old = _fields(submitConfirmationEnabled=False)
+        new = _fields(submitConfirmationEnabled=True)
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_no_change_leaves_the_page_untouched(self):
+        fields = _fields()
+        assert _round_trip(fields, fields) == _fresh_html(fields)
+
+    def test_an_unrelated_hand_edit_survives_disabling(self):
+        old = _fields()
+        new = _fields(submitConfirmationEnabled=False)
+        old_html = _fresh_html(old).replace("<body>", "<body><!-- redirect handled elsewhere -->")
+        old_structure = json.loads(compute_structure_fingerprint(_form(old)))
+        new_form = _form(new)
+        patched = patch_html_for_field_diff(old_html, diff_consents(old_structure, new_form), new_form, "ff")
+        assert patched is not None
+        assert "<!-- redirect handled elsewhere -->" in patched
+        assert 'id="submitIntentPopup"' not in patched
+
+    def test_oc_variant_also_patches(self):
+        old = _fields()
+        new = _fields(submitConfirmationEnabled=False)
+        assert _round_trip(old, new, "oc") == _fresh_html(new, "oc")
+
+
 class TestPatchHtmlForFieldDiffCombined:
     def test_everything_added_at_once_from_a_bare_page_reproduces_a_fresh_page_exactly(self):
         old = _fields()
@@ -512,5 +544,12 @@ class TestPatchHtmlForFieldDiffFallback:
         old = _fields()
         html = _fresh_html(old).replace('<div class="form_bottom_group">', '<div class="hand_rewritten_bottom">')
         new = _fields(recaptcha=ReCaptchaMeta())
+        new_form = _form(new)
+        assert patch_html_for_field_diff(html, [], new_form, "ff") is None
+
+    def test_returns_none_for_submit_confirmation_when_overlay_div_is_gone(self):
+        old = _fields(submitConfirmationEnabled=False)
+        html = _fresh_html(old).replace('id="overlay"', 'id="overlayRenamed"')
+        new = _fields()
         new_form = _form(new)
         assert patch_html_for_field_diff(html, [], new_form, "ff") is None

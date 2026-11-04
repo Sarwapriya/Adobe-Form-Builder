@@ -173,6 +173,13 @@ class ProfileFieldSet(_Model):
     additionalConsents: Optional[list[ConsentDefinition]] = None
     termsAndConditions: Optional[TermsAndConditionsMeta] = None
     recaptcha: Optional[ReCaptchaMeta] = None
+    # The "Are you sure you want to submit?" confirmation popup — on by
+    # default (absent/None means enabled, matching every existing form's
+    # current behavior before this toggle existed); only an explicit False
+    # disables it (the inverse of every other on/off field here, where
+    # presence alone means enabled). See formDefinition.ts's own doc comment
+    # for the full rationale.
+    submitConfirmationEnabled: Optional[bool] = None
     submitButton: LocalizedFieldMeta
     redirectAfterSuccessUrlByLocale: Optional[dict[LocaleCode, str]] = None
     headingBeforeBreakByLocale: Optional[dict[LocaleCode, str]] = None

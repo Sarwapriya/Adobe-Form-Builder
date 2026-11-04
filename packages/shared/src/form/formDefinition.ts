@@ -240,6 +240,19 @@ export interface ProfileFieldSet {
   termsAndConditions?: TermsAndConditionsMeta;
   recaptcha?: ReCaptchaMeta;
   submitButton: LocalizedFieldMeta;
+  /** The "Are you sure you want to submit? You won't be able to change your
+   * answers after this." confirmation popup shown once, the first time
+   * Submit is clicked with nothing yet answered (see the reference FF.js/
+   * OC.js's own `validateModal()`/`showSubmitModal()`) — on by default
+   * (absent/`undefined` means enabled, matching every existing form's
+   * current behavior before this toggle existed), `false` turns it off.
+   * Unlike every other on/off field here, presence alone isn't "enabled" —
+   * it's the inverse: only an explicit `false` disables it. The popup's own
+   * text (`ValidationMessageSet.modalMessage1`/`modalMessage2`, the two
+   * button labels) has no builder UI either way — hand-edit-only, same as
+   * every other validation message (see buildDataJs.ts's own doc comment
+   * on why that panel was removed). */
+  submitConfirmationEnabled?: boolean;
   /** Varies per locale in the source (translators sometimes leave country-specific
    * notes alongside the URL), so this is a locale map, not a single string. */
   redirectAfterSuccessUrlByLocale?: Record<LocaleCode, string>;

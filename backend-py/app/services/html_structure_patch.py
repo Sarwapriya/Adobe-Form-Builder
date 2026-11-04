@@ -58,7 +58,12 @@ from typing import Callable, Literal, Optional
 from app.form_pipeline.codegen.escaping import escape_html
 from app.form_pipeline.codegen.html.fragments.render_profile_field import render_profile_fields
 from app.form_pipeline.codegen.html.fragments.render_question_module import render_question_module
-from app.form_pipeline.codegen.html.page_template import _RECAPTCHA_API_SCRIPT, _recaptcha_widget, _terms_link
+from app.form_pipeline.codegen.html.page_template import (
+    _RECAPTCHA_API_SCRIPT,
+    _SUBMIT_INTENT_POPUP,
+    _recaptcha_widget,
+    _terms_link,
+)
 from app.form_pipeline.form.definition import (
     CallingCodeFieldMeta,
     ConsentDefinition,
@@ -81,6 +86,9 @@ _RECAPTCHA_WIDGET_RE = re.compile(
     r'<div class="g-recaptcha" id="g-recaptcha"></div><div class="error" id="reCaptchaRequired" style="display:none"></div>'
 )
 _RECAPTCHA_SCRIPT_RE = re.compile(re.escape(_RECAPTCHA_API_SCRIPT))
+# Also a fixed, content-free fragment (see page_template.py's own
+# _SUBMIT_INTENT_POPUP doc comment) — same literal-match treatment.
+_SUBMIT_INTENT_POPUP_RE = re.compile(re.escape(_SUBMIT_INTENT_POPUP))
 _HEAD_CLOSE_RE = re.compile(r"</head>", re.IGNORECASE)
 _DIV_OPEN_RE = re.compile(r"<div\b", re.IGNORECASE)
 _DIV_CLOSE_RE = re.compile(r"</div\s*>", re.IGNORECASE)
@@ -645,6 +653,34 @@ def _patch_recaptcha_script(html: str, new_definition: FormDefinition, variant: 
     return html
 
 
+def _patch_submit_confirmation_popup(html: str, new_definition: FormDefinition) -> Optional[str]:
+    """The "Are you sure you want to submit?" popup (`#submitIntentPopup`) is
+    a single fixed, content-free fragment — see `page_template.py`'s own
+    `_SUBMIT_INTENT_POPUP` doc comment — sitting right after the `#overlay`
+    div and before the data/behavior `<script>` tags, identically in both
+    variants (unlike reCAPTCHA, this toggle isn't per-variant: the same
+    presence/absence applies to every HTML file for the form). Same
+    newline-accounting caveat as `_patch_recaptcha_script`: the template's
+    `</div>\\n{submit_confirmation_popup}\\n<script` slot leaves two bare
+    newlines back-to-back when the popup is absent, so inserting it has to
+    land between those two newlines rather than add a third."""
+    new_present = new_definition.fields.submitConfirmationEnabled is not False
+    match = _SUBMIT_INTENT_POPUP_RE.search(html)
+    currently_present = match is not None
+    if currently_present and not new_present:
+        assert match is not None
+        return html[: match.start()] + html[match.end() :]
+    if not currently_present and new_present:
+        anchor = _find_element_by_id(html, "overlay")
+        if anchor is None:
+            return None
+        insert_at = anchor[1]
+        if insert_at < len(html) and html[insert_at] == "\n":
+            insert_at += 1
+        return html[:insert_at] + _SUBMIT_INTENT_POPUP + html[insert_at:]
+    return html
+
+
 def patch_html_for_field_diff(
     html: str, removed_consent_ids: list[str], new_definition: FormDefinition, variant: Literal["ff", "oc"]
 ) -> Optional[str]:
@@ -700,6 +736,11 @@ def patch_html_for_field_diff(
     html = patched
 
     patched = _patch_recaptcha_script(html, new_definition, variant)
+    if patched is None:
+        return None
+    html = patched
+
+    patched = _patch_submit_confirmation_popup(html, new_definition)
     if patched is None:
         return None
     html = patched

@@ -42,6 +42,29 @@ const RECAPTCHA_API_SCRIPT =
 const recaptchaWidget = () =>
   '<div class="g-recaptcha" id="g-recaptcha"></div><div class="error" id="reCaptchaRequired" style="display:none"></div>';
 
+// The "Are you sure you want to submit?" confirmation popup — on by default (see
+// ProfileFieldSet.submitConfirmationEnabled's own doc comment for why this is the one
+// field here where presence/absence works backwards from every other toggle).
+// Entirely static — every piece of visible text is an empty node filled at runtime
+// from validation_messages, same convention as the rest of this file — so, like
+// RECAPTCHA_API_SCRIPT, it's a plain constant rather than a function. The reference
+// FF.js/OC.js's own `($("#submitIntentPopup").length) && validateModal()` guard is
+// what actually gates the modal at runtime; this markup being present/absent is what
+// that guard checks.
+const SUBMIT_INTENT_POPUP =
+  '<section id="submitIntentPopup" class="popup popup--alert">\n' +
+  '<div class="popup__dimmed"></div>\n' +
+  '<div class="popup__contents-wrap"><div class="popup__contents"><div class="popup__inner-wrap"><div class="popup__inner">\n' +
+  '<p class="popup__desc" id="submitIntentPopupMessage1"></p>\n' +
+  '<p class="popup__desc" id="submitIntentPopupMessage2"></p>\n' +
+  "</div></div>\n" +
+  '<div class="popup__btn-wrap">\n' +
+  '<button class="cta cta--outlined cta--black" id="submitIntentPopupNo"></button>\n' +
+  '<button class="cta cta--contained cta--black" id="submitIntentPopupYes"></button>\n' +
+  "</div>\n" +
+  "</div></div>\n" +
+  "</section>";
+
 // Terms & Conditions link — an empty-text-node anchor populated at runtime from
 // `fields[language]["termsAndConditions"]`/`["termsAndConditionsLink"]` (see
 // buildDataJs.ts and the reference scripts' own termsAndConditionsLink population
@@ -85,6 +108,7 @@ export function renderPage(
   const rc = form.fields.recaptcha;
   const recaptchaEnabled = !!rc && (rc.visibleInVariants ?? ["ff"]).includes(variant);
   const recaptchaScript = recaptchaEnabled ? RECAPTCHA_API_SCRIPT : "";
+  const submitConfirmationPopup = form.fields.submitConfirmationEnabled !== false ? SUBMIT_INTENT_POPUP : "";
   const localeInfo = form.locales.find((l) => l.code === files.locale);
   const langSubtag = localeInfo?.langSubtag ?? "en";
   const dir = localeInfo?.isRtl ? "rtl" : "ltr";
@@ -215,18 +239,7 @@ ${recaptchaScript}
 <div id="hrTy" style="display:none"><h3></h3><p><a href="" target="_blank"></a></p></div>
 <div id="hrErr" style="display:none"><h3></h3><p><a href="" target="_blank"></a></p></div>
 <div id="overlay" style="display:none"><span class="loader"></span></div>
-<section id="submitIntentPopup" class="popup popup--alert">
-<div class="popup__dimmed"></div>
-<div class="popup__contents-wrap"><div class="popup__contents"><div class="popup__inner-wrap"><div class="popup__inner">
-<p class="popup__desc" id="submitIntentPopupMessage1"></p>
-<p class="popup__desc" id="submitIntentPopupMessage2"></p>
-</div></div>
-<div class="popup__btn-wrap">
-<button class="cta cta--outlined cta--black" id="submitIntentPopupNo"></button>
-<button class="cta cta--contained cta--black" id="submitIntentPopupYes"></button>
-</div>
-</div></div>
-</section>
+${submitConfirmationPopup}
 <script src="${fileNames.dataJs}"></script>
 <script src="${isOc ? files.ocJs : files.ffJs}"></script>
 </body>

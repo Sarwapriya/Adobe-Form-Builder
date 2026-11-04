@@ -98,6 +98,7 @@ export const profileFieldSetSchema = z.object({
   additionalConsents: z.array(consentDefinitionSchema).optional(),
   termsAndConditions: termsAndConditionsMetaSchema.optional(),
   recaptcha: reCaptchaMetaSchema.optional(),
+  submitConfirmationEnabled: z.boolean().optional(),
   submitButton: localizedFieldMetaSchema,
   redirectAfterSuccessUrlByLocale: localeTextMap.optional(),
   headingBeforeBreakByLocale: localeTextMap.optional(),
