@@ -19,6 +19,7 @@ from app.models.project_code import ProjectCode
 from app.models.subsidiary import Subsidiary
 from app.services.admin_settings_service import set_admin_setting
 from app.services.file_service import absolute_file_path
+from app.services.subsidiary_recaptcha_config_service import upsert_recaptcha_config
 from tests.form_builder.conftest import create_and_publish_admin_form
 
 
@@ -68,6 +69,16 @@ class TestAnalyticsParamInjection:
         param = _read_data_js_param(db_session, form_id)
 
         assert param["analytics"]["reportSuiteID"] == "sssamsung4test"
+
+    def test_publish_injects_the_subsidiarys_own_recaptcha_site_key(
+        self, client: TestClient, admin_headers: dict, db_session: Session, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        upsert_recaptcha_config(db_session, subsidiary_row.name, "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI")
+
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        param = _read_data_js_param(db_session, form_id)
+
+        assert param["reCaptchaSiteKey"] == "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
 
     def test_a_subsidiary_with_no_report_suite_id_publishes_without_the_key(
         self, client: TestClient, admin_headers: dict, db_session: Session, subsidiary_row: Subsidiary, project_code_row: ProjectCode

@@ -57,6 +57,7 @@ from app.services import (
     project_code_service,
     sftp_settings_service,
     subsidiary_project_block_service,
+    subsidiary_recaptcha_config_service,
     subsidiary_service,
 )
 from app.services.file_service import absolute_file_path, save_form_version_generated_files
@@ -124,6 +125,21 @@ def _resolve_analytics_param_updates(db: Session, form: Form) -> dict[str, Any]:
             datastreamID=_ANALYTICS_DATASTREAM_ID,
         ),
     }
+
+
+def _resolve_recaptcha_site_key(db: Session, form: Form) -> dict[str, Any]:
+    """`BuilderConfig.reCaptchaSiteKey` — resolved fresh at every generation
+    from the admin-managed `SubsidiaryRecaptchaConfig` table (Configuration >
+    Access & Locales), same pattern as `_resolve_analytics_param_updates`'s
+    own Report Suite ID lookup. No builder UI ever lets a user type a site
+    key directly (see `ReCaptchaMeta`'s own doc comment) — only whether
+    reCAPTCHA is on for this form/variant; the key itself always comes from
+    here. Returns an empty dict (no override) when the subsidiary has no key
+    configured, leaving `reCaptchaSiteKey` at its blank default — the
+    generated widget would then render with no sitekey, which the builder UI
+    warns about separately rather than this function guessing a value."""
+    site_key = subsidiary_recaptcha_config_service.get_site_key_for_subsidiary(db, form.subsidiaryId)
+    return {"reCaptchaSiteKey": site_key} if site_key else {}
 
 
 def _resolve_page_error_updates(db: Session, definition: FormDefinition) -> dict[str, PageCopy]:
@@ -608,7 +624,7 @@ def compute_structure_fingerprint(definition: FormDefinition) -> str:
             ("email", f.email), ("firstName", f.firstName), ("lastName", f.lastName),
             ("countryCode", f.countryCode), ("callingCode", f.callingCode), ("mobileNumber", f.mobileNumber),
             ("privacyPolicy", f.privacyPolicy), ("marketingOptin", f.marketingOptin),
-            ("termsAndConditions", f.termsAndConditions),
+            ("termsAndConditions", f.termsAndConditions), ("recaptcha", f.recaptcha),
         )
         if value is not None
     )
@@ -655,7 +671,7 @@ def sync_editable_data_js(db: Session, form_id: str, version_id: str, old_defini
     definition = FormDefinition.model_validate_json(version.definition)
     definition = definition.model_copy(update={"pageError": _resolve_page_error_updates(db, definition)})
     config = _enforce_variants_for_origin(form.origin, BuilderConfig.model_validate_json(version.config))
-    generation_config = config.model_copy(update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form)})
+    generation_config = config.model_copy(update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form), **_resolve_recaptcha_site_key(db, form)})
     generation = _generate_from_form_definition(definition, generation_config)
     if len(generation["validation"].errors) > 0:
         return
@@ -755,7 +771,7 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
     # actually generated with (code included) so its preview can recompute the
     # exact names; the fresh draft further down keeps the code-free `config`.
     generation_config = config.model_copy(
-        update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form)}
+        update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form), **_resolve_recaptcha_site_key(db, form)}
     )
     generation = _generate_from_form_definition(definition, generation_config)
     validation: ValidationResult = generation["validation"]
@@ -1179,7 +1195,7 @@ def ensure_draft_generated_files(db: Session, form_id: str) -> list[GeneratedFil
     definition = definition.model_copy(update={"pageError": _resolve_page_error_updates(db, definition)})
     config = _enforce_variants_for_origin(form.origin, BuilderConfig.model_validate_json(draft_version.config))
     generation_config = config.model_copy(
-        update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form)}
+        update={"projectCode": form.projectCode, **_resolve_analytics_param_updates(db, form), **_resolve_recaptcha_site_key(db, form)}
     )
     generation = _generate_from_form_definition(definition, generation_config)
     if len(generation["validation"].errors) > 0:

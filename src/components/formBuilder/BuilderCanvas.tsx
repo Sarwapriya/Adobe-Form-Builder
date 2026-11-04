@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -39,6 +39,7 @@ import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import type { ControlType, FormVariant, QuestionDefinition } from "@formbuilder/shared";
 import { resolveLocalizedText } from "@formbuilder/shared";
 import { useFormBuilderStore } from "../../store/formBuilderStore";
+import { getSubsidiaryRecaptchaConfig } from "../../api/subsidiaryRecaptchaConfigsApi";
 import { CONTROL_TYPE_LABEL, consentVariants, createConsent, createQuestion, questionVariants, renumberConsents, renumberQuestions } from "./formBuilderHelpers";
 
 const ADD_QUESTION_TYPES: ControlType[] = ["shortText", "text", "dropdown", "radio", "checkbox"];
@@ -313,7 +314,7 @@ interface PredefinedFieldItem {
 }
 
 interface ConsentToggleItem {
-  key: "privacyPolicy" | "marketingOptin";
+  key: "privacyPolicy" | "marketingOptin" | "recaptcha";
   label: string;
 }
 
@@ -338,6 +339,29 @@ export function PredefinedFieldToggles({
   const defaultLocale = useFormBuilderStore((s) => s.definition?.meta.defaultLocale ?? "en_GB");
   const formVariants = useFormBuilderStore((s): FormVariant[] => s.config?.variants ?? ["ff", "oc"]);
   const updateDefinition = useFormBuilderStore((s) => s.updateDefinition);
+  const subsidiaryId = useFormBuilderStore((s) => s.subsidiaryId);
+
+  // Whether this subsidiary has a reCAPTCHA site key configured at all
+  // (Configuration > Access & Locales) — null while still loading/unknown,
+  // so the warning below never flashes true before the real answer arrives.
+  const [hasRecaptchaSiteKey, setHasRecaptchaSiteKey] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!subsidiaryId) {
+      setHasRecaptchaSiteKey(null);
+      return;
+    }
+    getSubsidiaryRecaptchaConfig(subsidiaryId)
+      .then((r) => {
+        if (!cancelled) setHasRecaptchaSiteKey(!!r.siteKey);
+      })
+      .catch(() => {
+        if (!cancelled) setHasRecaptchaSiteKey(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [subsidiaryId]);
 
   const profileItems: PredefinedFieldItem[] = [
     { key: "firstName", label: "First Name", shownIn: "Full Form only" },
@@ -348,6 +372,7 @@ export function PredefinedFieldToggles({
   const consentToggleItems: ConsentToggleItem[] = [
     { key: "privacyPolicy", label: "Privacy Policy Consent" },
     { key: "marketingOptin", label: "Marketing Opt-in" },
+    { key: "recaptcha", label: "reCAPTCHA (\"I'm not a robot\")" },
   ];
 
   function toggleProfileField(key: PredefinedFieldItem["key"], enabled: boolean) {
@@ -374,6 +399,10 @@ export function PredefinedFieldToggles({
         if (selectedField === key) onSelectField(null);
       } else if (key === "privacyPolicy") {
         nextFields.privacyPolicy = { textByLocale: { [d.meta.defaultLocale]: "I agree to the" }, linkUrlByLocale: {}, linkTextByLocale: {} };
+      } else if (key === "recaptcha") {
+        // No label of any kind — Google renders its own, non-customizable
+        // widget (see ReCaptchaMeta's own doc comment).
+        nextFields.recaptcha = {};
       } else {
         const label = consentToggleItems.find((i) => i.key === key)!.label;
         nextFields[key] = { labelByLocale: { [d.meta.defaultLocale]: label } };
@@ -473,6 +502,11 @@ export function PredefinedFieldToggles({
 
   function renderConsentToggleItem(item: ConsentToggleItem, i: number) {
     const value = currentFields[item.key];
+    // reCAPTCHA has nothing to drill into — no label/link text of any kind
+    // (Google renders its own widget), so unlike privacyPolicy/marketingOptin
+    // its chip is never selectable/clickable; the switch + variant chips
+    // here are the whole of its configuration.
+    const selectable = item.key !== "recaptcha";
     return (
       <Box key={item.key}>
         {i > 0 && <Divider sx={{ my: 0.5 }} />}
@@ -480,10 +514,10 @@ export function PredefinedFieldToggles({
           <Chip
             label={item.label}
             size="small"
-            variant={selectedField === item.key ? "filled" : "outlined"}
-            color={selectedField === item.key ? "primary" : "default"}
-            onClick={() => (value ? onSelectField(item.key) : undefined)}
-            sx={{ cursor: value ? "pointer" : "default" }}
+            variant={selectable && selectedField === item.key ? "filled" : "outlined"}
+            color={selectable && selectedField === item.key ? "primary" : "default"}
+            onClick={() => (selectable && value ? onSelectField(item.key) : undefined)}
+            sx={{ cursor: selectable && value ? "pointer" : "default" }}
           />
           {value && (
             <VariantChips
@@ -494,6 +528,12 @@ export function PredefinedFieldToggles({
           )}
           <Switch size="small" checked={!!value} onChange={(e) => toggleConsentField(item.key, e.target.checked)} sx={{ ml: "auto" }} />
         </Box>
+        {item.key === "recaptcha" && value && hasRecaptchaSiteKey === false && (
+          <Typography variant="caption" color="warning.main" sx={{ display: "block", mt: 0.5 }}>
+            No reCAPTCHA site key is configured for this subsidiary yet — the widget will render broken until an
+            admin adds one in Configuration &gt; Access &amp; Locales.
+          </Typography>
+        )}
       </Box>
     );
   }

@@ -46,6 +46,14 @@ export interface BuilderConfig {
   /** Per-question required override: questionId → true/false. Undefined keeps the
    * default (true). Used to make a question optional in the generated form. */
   questionRequired?: Record<string, boolean>;
+  /** Google reCAPTCHA site key for whichever subsidiary this form belongs to — never
+   * typed into the builder directly, resolved at generation time from the
+   * admin-managed SubsidiaryRecaptchaConfig table (backend-only; this package has no
+   * access to it), same as the Adobe Analytics Report Suite ID. Blank/omitted means no
+   * key is configured, in which case the generated reCAPTCHA widget (if
+   * `ProfileFieldSet.recaptcha` is set) would render with no sitekey — the builder UI
+   * warns about this case rather than silently shipping a broken widget. */
+  reCaptchaSiteKey?: string;
 }
 
 export function defaultBuilderConfig(): BuilderConfig {

@@ -325,7 +325,7 @@ def build_data_js(form: FormDefinition, config: BuilderConfig, file_names: FileN
                 },
                 "fallbackLanguage": default_locale,
                 "project": config.project or "",
-                "reCaptchaSiteKey": "",
+                "reCaptchaSiteKey": config.reCaptchaSiteKey or "",
                 "redirectAfterSuccessInSecond": "5",
                 "source": {
                     "fullForm": (config.source.fullForm or "") if config.source else "",

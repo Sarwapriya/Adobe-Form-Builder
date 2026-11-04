@@ -73,6 +73,10 @@ const termsAndConditionsMetaSchema = z.object({
   uploadedFileName: z.string().optional(),
 });
 
+const reCaptchaMetaSchema = z.object({
+  visibleInVariants: z.array(z.enum(["ff", "oc"])).optional(),
+});
+
 export const consentDefinitionSchema = z.object({
   id: z.string(),
   order: z.number(),
@@ -93,6 +97,7 @@ export const profileFieldSetSchema = z.object({
   marketingOptin: consentToggleMetaSchema.optional(),
   additionalConsents: z.array(consentDefinitionSchema).optional(),
   termsAndConditions: termsAndConditionsMetaSchema.optional(),
+  recaptcha: reCaptchaMetaSchema.optional(),
   submitButton: localizedFieldMetaSchema,
   redirectAfterSuccessUrlByLocale: localeTextMap.optional(),
   headingBeforeBreakByLocale: localeTextMap.optional(),

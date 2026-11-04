@@ -34,6 +34,7 @@ export type {
   PrivacyPolicyMeta,
   ProfileFieldSet,
   QuestionDefinition,
+  ReCaptchaMeta,
   TermsAndConditionsMeta,
   ValidationMessageSet,
 } from "./form/formDefinition";

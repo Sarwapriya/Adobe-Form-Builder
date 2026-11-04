@@ -7,6 +7,7 @@ import { SubsidiaryManager } from "../components/admin/SubsidiaryManager";
 import { SubsidiaryProjectCodeAccessManager } from "../components/admin/SubsidiaryProjectCodeAccessManager";
 import { SubsidiaryLocaleManager } from "../components/admin/SubsidiaryLocaleManager";
 import { SubsidiaryPrivacyLinkManager } from "../components/admin/SubsidiaryPrivacyLinkManager";
+import { SubsidiaryRecaptchaConfigManager } from "../components/admin/SubsidiaryRecaptchaConfigManager";
 import { PageErrorDefaultsManager } from "../components/admin/PageErrorDefaultsManager";
 import { SmtpSettingsManager } from "../components/admin/SmtpSettingsManager";
 import { FabrixSettingsManager } from "../components/admin/FabrixSettingsManager";
@@ -88,6 +89,7 @@ export function ConfigurationPage() {
       <TabPanel active={tab === "access"}>
         <SubsidiaryLocaleManager />
         <SubsidiaryPrivacyLinkManager />
+        <SubsidiaryRecaptchaConfigManager />
         <PageErrorDefaultsManager />
       </TabPanel>
 

@@ -344,6 +344,32 @@ export function deleteSubsidiaryPrivacyLink(id: string): Promise<void> {
   return apiClient.delete(`/api/v1/admin/subsidiary-privacy-links/${id}`);
 }
 
+/** Admin management of the subsidiary -> Google reCAPTCHA site key reference
+ * table (Configuration > Access & Locales) — read-only lookup for any
+ * authenticated user lives at /api/v1/subsidiary-recaptcha-configs instead
+ * (see subsidiaryRecaptchaConfigsApi.ts). One key per subsidiary (not per
+ * locale — reCAPTCHA site keys are domain-scoped, not language-scoped).
+ * Row presence is the whole record — no soft delete, same as the
+ * privacy-link table above. */
+export interface SubsidiaryRecaptchaConfig {
+  id: string;
+  subsidiaryName: string;
+  siteKey: string;
+  createdAt: string;
+}
+
+export function listAllSubsidiaryRecaptchaConfigs(): Promise<SubsidiaryRecaptchaConfig[]> {
+  return apiClient.get<SubsidiaryRecaptchaConfig[]>("/api/v1/admin/subsidiary-recaptcha-configs");
+}
+
+export function upsertSubsidiaryRecaptchaConfig(subsidiaryName: string, siteKey: string): Promise<SubsidiaryRecaptchaConfig> {
+  return apiClient.post<SubsidiaryRecaptchaConfig>("/api/v1/admin/subsidiary-recaptcha-configs", { subsidiaryName, siteKey });
+}
+
+export function deleteSubsidiaryRecaptchaConfig(id: string): Promise<void> {
+  return apiClient.delete(`/api/v1/admin/subsidiary-recaptcha-configs/${id}`);
+}
+
 /** Admin management of the locale -> default "page error" copy reference
  * table (Configuration > Access & Locales) — automatically written into
  * every published form's master data JS file (`page_error[locale].hrErr`)

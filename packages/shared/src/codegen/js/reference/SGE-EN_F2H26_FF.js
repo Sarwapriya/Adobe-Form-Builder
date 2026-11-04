@@ -1,20 +1,24 @@
-/*
-Function to hide reCaptcha verification error
+// Function to hide reCaptcha verification error
 function hideCaptchaVerificationError()
 {
     $("#reCaptchaRequired").hide();
 }
 
-reCapthca Callback method
-/*var onloadCallback = function()
+// reCaptcha callback method — only renders when the widget's own target div is
+// actually present on the page (it isn't unless reCAPTCHA is enabled for this
+// form/variant, in which case the Google script tag that calls this on load
+// isn't included either — see pageTemplate.ts's own opt-in gating)
+var onloadCallback = function()
 {
-    grecaptcha.render("g-recaptcha",
+    if ($("#g-recaptcha").length)
     {
-        "sitekey" : param["reCaptchaSiteKey"],
-        "callback": hideCaptchaVerificationError
-    });
+        grecaptcha.render("g-recaptcha",
+        {
+            "sitekey" : param["reCaptchaSiteKey"],
+            "callback": hideCaptchaVerificationError
+        });
+    }
 }
-*/
 
 // Once the document is ready
 $(document).ready(function ()
@@ -234,7 +238,7 @@ $(document).ready(function ()
         });
 
 
-        //$("#reCaptchaRequired").html(validation_messages[language]["reCaptchaRequired"]);
+        $("#reCaptchaRequired").html(validation_messages[language]["reCaptchaRequired"]);
 
          $("#apiError").html(validation_messages[language]["apiError"]);
 
@@ -561,15 +565,12 @@ $(document).ready(function ()
         });
     }
 
-    
-    /*
-    Function to check if User has verified the reCaptcha
+
+    // Function to check if User has verified the reCaptcha
     function isCaptchaVerified()
     {
         return ((grecaptcha) && (grecaptcha.getResponse().length !== 0));
     }
-    */
-   
 
     // Function to carry out task(s) at the start of Form submit process
     function preSubmitProcess()
@@ -991,17 +992,18 @@ $(document).ready(function ()
         // Carry out following after the submit button is clicked
         $("form").parsley(parsleyConfig).on("form:submit", function ()
         {
+            // Check if reCaptcha is verified — before triggering the submit-intent
+            // modal/actual submit below, not after, so an unverified captcha blocks
+            // the submission itself rather than just showing an error alongside one
+            // that's already in flight
+            if (($(".g-recaptcha").length) && (!(isCaptchaVerified())))
+            {
+                $("#reCaptchaRequired").show();
+
+                return false;
+            }
+
             validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
-
-			/*
-			Check if reCaptcha is verified
-			if (($(".g-recaptcha").length) && (!(isCaptchaVerified())))
-			{
-				$("#reCaptchaRequired").show();
-
-				return false;
-			}
-			*/
 
             return false;
         });

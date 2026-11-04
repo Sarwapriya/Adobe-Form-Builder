@@ -28,6 +28,19 @@ const FAVICON_TAG = '<link rel="shortcut icon" href="https://res6.mena2p.crm.sam
 const FONTS_TAG = '<link rel="stylesheet" href="samsungSS_fonts_2026.css">';
 const ADOBE_LAUNCH_SCRIPT =
   '<script src="https://assets.adobedtm.com/72afb75f5516/dd6b57adea42/launch-b679a712f5a6.min.js" async></script>';
+// Explicit-render invocation (not Google's simpler auto-render/data-sitekey form) —
+// onloadCallback is the reactivated reference FF.js/OC.js's own grecaptcha.render(
+// "g-recaptcha", {...}) call. Opt-in only, same treatment as ADOBE_LAUNCH_SCRIPT, so
+// a page with no reCAPTCHA enabled never loads Google's script at all.
+const RECAPTCHA_API_SCRIPT =
+  '<script src="https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit" async defer></script>';
+
+// The "I'm not a robot" checkbox target div plus its own validation-error
+// placeholder — must stay byte-identical to html_structure_patch.py's own copy of
+// this fragment (that module can't import this one without a circular import, same
+// reasoning as its consent-fragment renderers).
+const recaptchaWidget = () =>
+  '<div class="g-recaptcha" id="g-recaptcha"></div><div class="error" id="reCaptchaRequired" style="display:none"></div>';
 
 // Terms & Conditions link — an empty-text-node anchor populated at runtime from
 // `fields[language]["termsAndConditions"]`/`["termsAndConditionsLink"]` (see
@@ -69,6 +82,9 @@ export function renderPage(
   const isOc = variant === "oc";
   const files = languageFileNames(fileNames, locale);
   const analyticsScript = config.analytics?.enabled ? ADOBE_LAUNCH_SCRIPT : "";
+  const rc = form.fields.recaptcha;
+  const recaptchaEnabled = !!rc && (rc.visibleInVariants ?? ["ff"]).includes(variant);
+  const recaptchaScript = recaptchaEnabled ? RECAPTCHA_API_SCRIPT : "";
   const localeInfo = form.locales.find((l) => l.code === files.locale);
   const langSubtag = localeInfo?.langSubtag ?? "en";
   const dir = localeInfo?.isRtl ? "rtl" : "ltr";
@@ -154,6 +170,7 @@ export function renderPage(
     }
   }
   const privacyBlock = consentChecks.length > 0 ? `<div class="form_bottom_check_group">${consentChecks.join("")}</div>` : "";
+  const recaptchaBlock = recaptchaEnabled ? recaptchaWidget() : "";
 
   const submitBlock =
     '<button class="disabled" disabled id="btnSubmit"></button>' +
@@ -166,8 +183,8 @@ export function renderPage(
   // immediately before the bar, mirroring where the reference's own (permanently
   // commented-out) OC consent markup sits relative to it.
   const bottomGroup = isOc
-    ? `${privacyBlock}<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>`
-    : `<div class="form_bottom_group">${privacyBlock}${submitBlock}</div>`;
+    ? `${privacyBlock}${recaptchaBlock}<div class="form_bottom_bar" id="formBottomBar">${submitBlock}</div>`
+    : `<div class="form_bottom_group">${privacyBlock}${recaptchaBlock}${submitBlock}</div>`;
 
   const topHeading = '<h2><br class="b_850"><span></span></h2>';
   const topSubheading = '<p class="top_subheading"></p>';
@@ -183,6 +200,7 @@ ${FONTS_TAG}
 <link rel="stylesheet" href="${files.css}">
 ${CDN_SCRIPTS}
 ${analyticsScript}
+${recaptchaScript}
 </head>
 <body>
 <div class="${isOc ? "container_oc" : "container"}">

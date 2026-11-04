@@ -129,6 +129,22 @@ class TermsAndConditionsMeta(_Model):
     uploadedFileName: Optional[str] = None
 
 
+class ReCaptchaMeta(_Model):
+    """Google reCAPTCHA v2 ("I'm not a robot" checkbox) for one form's
+    submission — presence alone enables it for Full Form (same "absent means
+    Full Form only" convention as every other consent-style toggle here),
+    visibleInVariants narrows/extends to One-Click. No text/label of any kind
+    (Google renders its own, non-customizable, widget), and no `required`
+    flag — unlike a consent checkbox, it's unconditionally blocking whenever
+    present (the widget's own DOM presence is what gates Submit in the
+    generated behavior-JS, nothing else toggles that). The actual site key is
+    never stored here — it's admin-managed per subsidiary (see
+    SubsidiaryRecaptchaConfig) and resolved onto BuilderConfig.reCaptchaSiteKey
+    at generation time, same as the Adobe Analytics Report Suite ID."""
+
+    visibleInVariants: Optional[list[FormVariant]] = None
+
+
 class ConsentToggleMeta(LocalizedFieldMeta):
     required: Optional[bool] = None
     visibleInVariants: Optional[list[FormVariant]] = None
@@ -156,6 +172,7 @@ class ProfileFieldSet(_Model):
     marketingOptin: Optional[ConsentToggleMeta] = None
     additionalConsents: Optional[list[ConsentDefinition]] = None
     termsAndConditions: Optional[TermsAndConditionsMeta] = None
+    recaptcha: Optional[ReCaptchaMeta] = None
     submitButton: LocalizedFieldMeta
     redirectAfterSuccessUrlByLocale: Optional[dict[LocaleCode, str]] = None
     headingBeforeBreakByLocale: Optional[dict[LocaleCode, str]] = None

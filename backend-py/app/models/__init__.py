@@ -18,6 +18,7 @@ from app.models.subsidiary_country import SubsidiaryCountry
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
 from app.models.subsidiary_locale import SubsidiaryLocale
 from app.models.subsidiary_privacy_link import SubsidiaryPrivacyLink
+from app.models.subsidiary_recaptcha_config import SubsidiaryRecaptchaConfig
 from app.models.page_error_locale_default import PageErrorLocaleDefault
 from app.models.qa_run import QaRun
 from app.models.qa_test_case_result import QaTestCaseResult
@@ -51,6 +52,7 @@ __all__ = [
     "SubsidiaryProjectBlock",
     "SubsidiaryLocale",
     "SubsidiaryPrivacyLink",
+    "SubsidiaryRecaptchaConfig",
     "PageErrorLocaleDefault",
     "QaRun",
     "QaTestCaseResult",

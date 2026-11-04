@@ -55,6 +55,7 @@ from app.services import (
     subsidiary_logo_service,
     subsidiary_privacy_link_service,
     subsidiary_project_block_service,
+    subsidiary_recaptcha_config_service,
     subsidiary_service,
 )
 from app.services.dkms_settings_service import DkmsSettingsInput
@@ -586,6 +587,48 @@ def delete_subsidiary_privacy_link(id: str, db: Session = Depends(get_db)) -> No
     deleted = subsidiary_privacy_link_service.delete_privacy_link(db, id)
     if not deleted:
         raise HTTPException(status_code=404, detail="privacy link not found")
+
+
+# --- Subsidiary reCAPTCHA configs --------------------------------------------
+# Reference table of each subsidiary's Google reCAPTCHA v2 site key — see
+# models/subsidiary_recaptcha_config.py's own doc comment. Any authenticated
+# user reads it (subsidiary_recaptcha_configs.py router); only an admin edits
+# it.
+
+
+def _serialize_recaptcha_config(row) -> dict:
+    return {"id": row.id, "subsidiaryName": row.subsidiaryName, "siteKey": row.siteKey, "createdAt": row.createdAt}
+
+
+@router.get("/subsidiary-recaptcha-configs")
+def list_all_subsidiary_recaptcha_configs(db: Session = Depends(get_db)) -> list[dict]:
+    return [_serialize_recaptcha_config(r) for r in subsidiary_recaptcha_config_service.list_recaptcha_configs(db)]
+
+
+class UpsertSubsidiaryRecaptchaConfigBody(BaseModel):
+    subsidiaryName: str = Field(min_length=1)
+    siteKey: str = Field(min_length=1, max_length=200)
+
+    @field_validator("subsidiaryName", "siteKey")
+    @classmethod
+    def _trim(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must not be empty")
+        return v
+
+
+@router.post("/subsidiary-recaptcha-configs", status_code=status.HTTP_201_CREATED)
+def upsert_subsidiary_recaptcha_config(body: UpsertSubsidiaryRecaptchaConfigBody, db: Session = Depends(get_db)) -> dict:
+    row = subsidiary_recaptcha_config_service.upsert_recaptcha_config(db, body.subsidiaryName, body.siteKey)
+    return _serialize_recaptcha_config(row)
+
+
+@router.delete("/subsidiary-recaptcha-configs/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_subsidiary_recaptcha_config(id: str, db: Session = Depends(get_db)) -> None:
+    deleted = subsidiary_recaptcha_config_service.delete_recaptcha_config(db, id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="recaptcha config not found")
 
 
 # --- Page error locale defaults -----------------------------------------------------

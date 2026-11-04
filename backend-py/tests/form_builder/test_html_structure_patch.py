@@ -27,6 +27,7 @@ from app.form_pipeline.form.definition import (
     PrivacyPolicyMeta,
     ProfileFieldSet,
     QuestionDefinition,
+    ReCaptchaMeta,
     TermsAndConditionsMeta,
 )
 from app.services.form_builder_service import compute_structure_fingerprint
@@ -428,6 +429,51 @@ class TestPatchHtmlForFieldDiffConsents:
         assert removed == _fresh_html(old)
 
 
+class TestPatchHtmlForFieldDiffRecaptcha:
+    def test_adding_recaptcha_ff_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(recaptcha=ReCaptchaMeta())
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_removing_recaptcha_ff_reproduces_a_fresh_page_exactly(self):
+        old = _fields(recaptcha=ReCaptchaMeta())
+        new = _fields()
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_adding_recaptcha_oc_reproduces_a_fresh_page_exactly(self):
+        old = _fields()
+        new = _fields(recaptcha=ReCaptchaMeta(visibleInVariants=["oc"]))
+        assert _round_trip(old, new, "oc") == _fresh_html(new, "oc")
+
+    def test_enabling_oc_too_while_already_enabled_for_ff_reproduces_a_fresh_page_exactly(self):
+        old = _fields(recaptcha=ReCaptchaMeta())
+        new = _fields(recaptcha=ReCaptchaMeta(visibleInVariants=["ff", "oc"]))
+        assert _round_trip(old, new, "ff") == _fresh_html(new, "ff")
+        assert _round_trip(old, new, "oc") == _fresh_html(new, "oc")
+
+    def test_recaptcha_coexists_with_an_existing_consent_group(self):
+        old = _fields(privacyPolicy=PrivacyPolicyMeta())
+        new = _fields(privacyPolicy=PrivacyPolicyMeta(), recaptcha=ReCaptchaMeta())
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_removing_recaptcha_while_a_consent_group_stays(self):
+        old = _fields(privacyPolicy=PrivacyPolicyMeta(), recaptcha=ReCaptchaMeta())
+        new = _fields(privacyPolicy=PrivacyPolicyMeta())
+        assert _round_trip(old, new) == _fresh_html(new)
+
+    def test_an_unrelated_hand_edit_survives_adding_recaptcha(self):
+        old = _fields()
+        new = _fields(recaptcha=ReCaptchaMeta())
+        old_html = _fresh_html(old).replace("<body>", "<body><!-- redirect handled elsewhere -->")
+        old_structure = json.loads(compute_structure_fingerprint(_form(old)))
+        new_form = _form(new)
+        patched = patch_html_for_field_diff(old_html, diff_consents(old_structure, new_form), new_form, "ff")
+        assert patched is not None
+        assert "<!-- redirect handled elsewhere -->" in patched
+        assert 'id="g-recaptcha"' in patched
+        assert "recaptcha/api.js" in patched
+
+
 class TestPatchHtmlForFieldDiffCombined:
     def test_everything_added_at_once_from_a_bare_page_reproduces_a_fresh_page_exactly(self):
         old = _fields()
@@ -442,8 +488,10 @@ class TestPatchHtmlForFieldDiffCombined:
             marketingOptin=ConsentToggleMeta(required=True),
             additionalConsents=[ConsentDefinition(id="consentExtra1", order=1)],
             termsAndConditions=TermsAndConditionsMeta(),
+            recaptcha=ReCaptchaMeta(visibleInVariants=["ff", "oc"]),
         )
         assert _round_trip(old, new) == _fresh_html(new)
+        assert _round_trip(old, new, "oc") == _fresh_html(new, "oc")
 
 
 class TestPatchHtmlForFieldDiffFallback:
@@ -457,5 +505,12 @@ class TestPatchHtmlForFieldDiffFallback:
         old = _fields()
         html = _fresh_html(old).replace('<div class="form_bottom_group">', '<div class="hand_rewritten_bottom">')
         new = _fields(privacyPolicy=PrivacyPolicyMeta())
+        new_form = _form(new)
+        assert patch_html_for_field_diff(html, [], new_form, "ff") is None
+
+    def test_returns_none_for_recaptcha_when_form_bottom_group_itself_is_gone(self):
+        old = _fields()
+        html = _fresh_html(old).replace('<div class="form_bottom_group">', '<div class="hand_rewritten_bottom">')
+        new = _fields(recaptcha=ReCaptchaMeta())
         new_form = _form(new)
         assert patch_html_for_field_diff(html, [], new_form, "ff") is None

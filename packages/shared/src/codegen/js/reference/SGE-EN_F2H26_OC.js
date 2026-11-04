@@ -1,7 +1,29 @@
+// Function to hide reCaptcha verification error
+function hideCaptchaVerificationError()
+{
+    $("#reCaptchaRequired").hide();
+}
+
+// reCaptcha callback method — only renders when the widget's own target div is
+// actually present on the page (it isn't unless reCAPTCHA is enabled for this
+// form/variant, in which case the Google script tag that calls this on load
+// isn't included either — see pageTemplate.ts's own opt-in gating)
+var onloadCallback = function()
+{
+    if ($("#g-recaptcha").length)
+    {
+        grecaptcha.render("g-recaptcha",
+        {
+            "sitekey" : param["reCaptchaSiteKey"],
+            "callback": hideCaptchaVerificationError
+        });
+    }
+}
+
 // Once the document is ready
 $(document).ready(function ()
-{    
-    
+{
+
 
     // Function to set content for Page Language & Error Message
     // It is kept separate instead of being defined within setFieldData to provide handling in case data is not available in config for received language
@@ -249,6 +271,7 @@ $(document).ready(function ()
         });
 
          $("#apiError").html(validation_messages[language]["apiError"]);
+        $("#reCaptchaRequired").html(validation_messages[language]["reCaptchaRequired"]);
         $("#submitIntentPopupMessage1").text(validation_messages[language]["modalMessage_1"]);
         $("#submitIntentPopupMessage2").text(validation_messages[language]["modalMessage_2"]);
         $("#submitIntentPopupYes").text(validation_messages[language]["modalButtonYes"]);
@@ -565,6 +588,12 @@ $(document).ready(function ()
                 $("#mobileNumber").next("span.parsley-errors").find("span.parsley-error").css("color", "red");
             }
         });
+    }
+
+    // Function to check if User has verified the reCaptcha
+    function isCaptchaVerified()
+    {
+        return ((grecaptcha) && (grecaptcha.getResponse().length !== 0));
     }
 
     // Function to carry out task(s) at the start of Form submit process
@@ -1021,6 +1050,17 @@ $(document).ready(function ()
         });
         $("form").parsley(parsleyConfig).on("form:submit", function ()
         {
+           // Check if reCaptcha is verified — before triggering the submit-intent
+           // modal/actual submit below, not after, so an unverified captcha blocks
+           // the submission itself rather than just showing an error alongside one
+           // that's already in flight
+           if (($(".g-recaptcha").length) && (!(isCaptchaVerified())))
+           {
+               $("#reCaptchaRequired").show();
+
+               return false;
+           }
+
            validateModal() ? showSubmitModal(processValidatedSubmit) : processValidatedSubmit();
 
            return false;

@@ -170,6 +170,23 @@ export interface TermsAndConditionsMeta {
   uploadedFileName?: string;
 }
 
+/** Google reCAPTCHA v2 ("I'm not a robot" checkbox) for one form's submission —
+ * presence alone enables it for Full Form (same "absent means Full Form only"
+ * convention as every other consent-style toggle here), `visibleInVariants`
+ * narrows/extends to One-Click. No text/label of any kind (Google renders its
+ * own, non-customizable, widget), and no `required` flag — unlike a consent
+ * checkbox, it's unconditionally blocking whenever present (see
+ * html_structure_patch.py/page_template.py: the widget's own DOM presence is
+ * what gates Submit in the generated behavior-JS, nothing else toggles that).
+ * The actual site key is never stored here — it's admin-managed per
+ * subsidiary (see SubsidiaryRecaptchaConfig on the backend) and resolved onto
+ * `BuilderConfig.reCaptchaSiteKey` at generation time, same as the Adobe
+ * Analytics Report Suite ID. */
+export interface ReCaptchaMeta {
+  /** Absent means `["ff"]` — see PrivacyPolicyMeta.visibleInVariants. */
+  visibleInVariants?: Array<"ff" | "oc">;
+}
+
 /** Marketing Opt-in's own shape — a LocalizedFieldMeta (just a label, like
  * firstName/lastName) plus the same required/visibility knobs PrivacyPolicyMeta and
  * ConsentDefinition have, so all three consent-style checkboxes are configured
@@ -221,6 +238,7 @@ export interface ProfileFieldSet {
   /** Admin-added consent checkboxes beyond the two above — see ConsentDefinition. */
   additionalConsents?: ConsentDefinition[];
   termsAndConditions?: TermsAndConditionsMeta;
+  recaptcha?: ReCaptchaMeta;
   submitButton: LocalizedFieldMeta;
   /** Varies per locale in the source (translators sometimes leave country-specific
    * notes alongside the URL), so this is a locale map, not a single string. */

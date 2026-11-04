@@ -61,6 +61,11 @@ class BuilderConfig(BaseModel):
     voucherRequired: Optional[Literal["Y", "N"]] = None
     # Per-question required override: questionId -> true/false.
     questionRequired: Optional[dict[str, bool]] = None
+    # Google reCAPTCHA site key for whichever subsidiary this form belongs to —
+    # never typed into the builder directly, resolved at generation time from
+    # the admin-managed SubsidiaryRecaptchaConfig table, same as the Adobe
+    # Analytics Report Suite ID. Blank/omitted means no key is configured.
+    reCaptchaSiteKey: Optional[str] = None
 
 
 def default_builder_config() -> BuilderConfig:

@@ -31,6 +31,20 @@ _CDN_SCRIPTS = (
 _FAVICON_TAG = '<link rel="shortcut icon" href="https://res6.mena2p.crm.samsung.com/res/tracking/Favicon.png">'
 _FONTS_TAG = '<link rel="stylesheet" href="samsungSS_fonts_2026.css">'
 _ADOBE_LAUNCH_SCRIPT = '<script src="https://assets.adobedtm.com/72afb75f5516/dd6b57adea42/launch-b679a712f5a6.min.js" async></script>'
+# Explicit-render invocation (not Google's simpler auto-render/data-sitekey
+# form) — onloadCallback is the reactivated reference FF.js/OC.js's own
+# grecaptcha.render("g-recaptcha", {...}) call, see reference_ff_js.py's doc
+# comment. Opt-in only, same treatment as _ADOBE_LAUNCH_SCRIPT, so a page
+# with no reCAPTCHA enabled never loads Google's script at all.
+_RECAPTCHA_API_SCRIPT = '<script src="https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit" async defer></script>'
+
+
+def _recaptcha_widget() -> str:
+    """The "I'm not a robot" checkbox target div plus its own validation-error
+    placeholder — must stay byte-identical to html_structure_patch.py's own
+    copy of this fragment (that module can't import this one without a
+    circular import, same reasoning as its consent-fragment renderers)."""
+    return '<div class="g-recaptcha" id="g-recaptcha"></div><div class="error" id="reCaptchaRequired" style="display:none"></div>'
 
 
 def _terms_link(form: FormDefinition, extra_class: str) -> str:
@@ -57,6 +71,9 @@ def render_page(
     is_oc = variant == "oc"
     files = language_file_names(file_names, locale)
     analytics_script = _ADOBE_LAUNCH_SCRIPT if (config.analytics and config.analytics.enabled) else ""
+    rc = form.fields.recaptcha
+    recaptcha_enabled = bool(rc) and variant in (rc.visibleInVariants if rc and rc.visibleInVariants is not None else ["ff"])
+    recaptcha_script = _RECAPTCHA_API_SCRIPT if recaptcha_enabled else ""
     locale_info = next((l for l in form.locales if l.code == files.locale), None)
     lang_subtag = locale_info.langSubtag if locale_info else "en"
     dir_attr = "rtl" if (locale_info and locale_info.isRtl) else "ltr"
@@ -127,6 +144,7 @@ def render_page(
                 "</div>"
             )
     privacy_block = f'<div class="form_bottom_check_group">{"".join(consent_checks)}</div>' if consent_checks else ""
+    recaptcha_block = _recaptcha_widget() if recaptcha_enabled else ""
 
     submit_block = (
         '<button class="disabled" disabled id="btnSubmit"></button>'
@@ -137,9 +155,9 @@ def render_page(
     # so when any consent renders for OC it sits as its own sibling block
     # immediately before the bar.
     if is_oc:
-        bottom_group = f'{privacy_block}<div class="form_bottom_bar" id="formBottomBar">{submit_block}</div>'
+        bottom_group = f'{privacy_block}{recaptcha_block}<div class="form_bottom_bar" id="formBottomBar">{submit_block}</div>'
     else:
-        bottom_group = f'<div class="form_bottom_group">{privacy_block}{submit_block}</div>'
+        bottom_group = f'<div class="form_bottom_group">{privacy_block}{recaptcha_block}{submit_block}</div>'
 
     top_heading = '<h2><br class="b_850"><span></span></h2>'
     top_subheading = '<p class="top_subheading"></p>'
@@ -158,6 +176,7 @@ def render_page(
 <link rel="stylesheet" href="{files.css}">
 {_CDN_SCRIPTS}
 {analytics_script}
+{recaptcha_script}
 </head>
 <body>
 <div class="{container_class}">

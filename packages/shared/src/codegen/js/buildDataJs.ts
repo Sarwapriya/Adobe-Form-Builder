@@ -317,7 +317,7 @@ export function buildDataJs(form: FormDefinition, config: BuilderConfig, fileNam
         channelDetail: { fullForm: config.channelDetail?.fullForm ?? "", oneClick: config.channelDetail?.oneClick ?? "" },
         fallbackLanguage: defaultLocale,
         project: config.project ?? "",
-        reCaptchaSiteKey: "",
+        reCaptchaSiteKey: config.reCaptchaSiteKey ?? "",
         redirectAfterSuccessInSecond: "5",
         source: { fullForm: config.source?.fullForm ?? "", oneClick: config.source?.oneClick ?? "" },
         voucherRequired: config.voucherRequired ?? "N",

@@ -1025,6 +1025,7 @@ exports[`generateSolution > matches the reference fixture snapshot (ff.html) 1`]
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/parsleyjs@2/dist/parsley.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/libphonenumber-js/1.11.4/libphonenumber-js.min.js"></script>
 
+
 </head>
 <body>
 <div class="container">

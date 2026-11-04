@@ -58,7 +58,7 @@ from typing import Callable, Literal, Optional
 from app.form_pipeline.codegen.escaping import escape_html
 from app.form_pipeline.codegen.html.fragments.render_profile_field import render_profile_fields
 from app.form_pipeline.codegen.html.fragments.render_question_module import render_question_module
-from app.form_pipeline.codegen.html.page_template import _terms_link
+from app.form_pipeline.codegen.html.page_template import _RECAPTCHA_API_SCRIPT, _recaptcha_widget, _terms_link
 from app.form_pipeline.form.definition import (
     CallingCodeFieldMeta,
     ConsentDefinition,
@@ -73,6 +73,15 @@ _FORM_BOTTOM_GROUP_OPEN_RE = re.compile(r'<div\s+class="form_bottom_group">')
 _BOTTOM_CHECK_GROUP_OPEN_RE = re.compile(r'<div\s+class="form_bottom_check_group">')
 _NAME_GROUP_OPEN_RE = re.compile(r'<div\s+class="form_text_group">')
 _TERMS_LINK_RE = re.compile(r'<a\b[^>]*\bid="termsAndConditionsLink"[^>]*>.*?</a>', re.DOTALL)
+# Both the widget and its API <script> tag are fixed, content-free fragments
+# (see page_template.py's own _recaptcha_widget()/_RECAPTCHA_API_SCRIPT) —
+# matched as a single literal regex rather than via the balanced-div
+# scanner, same reasoning as _TERMS_LINK_RE.
+_RECAPTCHA_WIDGET_RE = re.compile(
+    r'<div class="g-recaptcha" id="g-recaptcha"></div><div class="error" id="reCaptchaRequired" style="display:none"></div>'
+)
+_RECAPTCHA_SCRIPT_RE = re.compile(re.escape(_RECAPTCHA_API_SCRIPT))
+_HEAD_CLOSE_RE = re.compile(r"</head>", re.IGNORECASE)
 _DIV_OPEN_RE = re.compile(r"<div\b", re.IGNORECASE)
 _DIV_CLOSE_RE = re.compile(r"</div\s*>", re.IGNORECASE)
 
@@ -571,6 +580,71 @@ def _patch_terms_link(html: str, new_definition: FormDefinition, variant: Litera
     return html
 
 
+def _recaptcha_enabled(new_definition: FormDefinition, variant: Literal["ff", "oc"]) -> bool:
+    rc = new_definition.fields.recaptcha
+    return bool(rc) and variant in (rc.visibleInVariants if rc and rc.visibleInVariants is not None else ["ff"])
+
+
+def _patch_recaptcha_widget(html: str, new_definition: FormDefinition, variant: Literal["ff", "oc"]) -> Optional[str]:
+    """The reCAPTCHA widget (the "I'm not a robot" checkbox target plus its
+    own validation-error placeholder) sits right after the consent-checkbox
+    group — or, when there's no consent group at all, at the same anchor the
+    group itself would be created at (see `_patch_consent_group`) — and
+    right before the submit block, mirroring `page_template.py`'s own
+    `recaptcha_block` placement exactly."""
+    new_present = _recaptcha_enabled(new_definition, variant)
+    match = _RECAPTCHA_WIDGET_RE.search(html)
+    currently_present = match is not None
+    if currently_present and not new_present:
+        assert match is not None
+        return html[: match.start()] + html[match.end() :]
+    if not currently_present and new_present:
+        group_match = _BOTTOM_CHECK_GROUP_OPEN_RE.search(html)
+        if group_match is not None:
+            group_span = _find_balanced_div(html, group_match)
+            if group_span is None:
+                return None
+            insert_at = group_span[1]
+        elif variant == "oc":
+            anchor = _find_element_by_id(html, "formBottomBar")
+            if anchor is None:
+                return None
+            insert_at = anchor[0]
+        else:
+            fbg_match = _FORM_BOTTOM_GROUP_OPEN_RE.search(html)
+            if fbg_match is None:
+                return None
+            insert_at = fbg_match.end()
+        return html[:insert_at] + _recaptcha_widget() + html[insert_at:]
+    return html
+
+
+def _patch_recaptcha_script(html: str, new_definition: FormDefinition, variant: Literal["ff", "oc"]) -> Optional[str]:
+    """The Google reCAPTCHA API `<script>` tag in `<head>` — opt-in only,
+    same treatment as the widget itself. The template's own
+    `{recaptcha_script}\\n</head>` always has that slot's own trailing
+    newline present even when `recaptcha_script` is empty (the same way
+    `{analytics_script}` does) — so the blank line already sitting right
+    before `</head>` belongs to this slot, and inserting the fragment has to
+    land *before* that single trailing newline, not after it, or an extra
+    blank line is left behind (and the opposite direction on removal)."""
+    new_present = _recaptcha_enabled(new_definition, variant)
+    match = _RECAPTCHA_SCRIPT_RE.search(html)
+    currently_present = match is not None
+    if currently_present and not new_present:
+        assert match is not None
+        return html[: match.start()] + html[match.end() :]
+    if not currently_present and new_present:
+        head_match = _HEAD_CLOSE_RE.search(html)
+        if head_match is None:
+            return None
+        insert_at = head_match.start()
+        if insert_at > 0 and html[insert_at - 1] == "\n":
+            insert_at -= 1
+        return html[:insert_at] + _RECAPTCHA_API_SCRIPT + html[insert_at:]
+    return html
+
+
 def patch_html_for_field_diff(
     html: str, removed_consent_ids: list[str], new_definition: FormDefinition, variant: Literal["ff", "oc"]
 ) -> Optional[str]:
@@ -616,6 +690,16 @@ def patch_html_for_field_diff(
     html = patched
 
     patched = _patch_terms_link(html, new_definition, variant)
+    if patched is None:
+        return None
+    html = patched
+
+    patched = _patch_recaptcha_widget(html, new_definition, variant)
+    if patched is None:
+        return None
+    html = patched
+
+    patched = _patch_recaptcha_script(html, new_definition, variant)
     if patched is None:
         return None
     html = patched

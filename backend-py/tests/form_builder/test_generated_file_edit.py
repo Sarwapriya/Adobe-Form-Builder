@@ -292,6 +292,40 @@ class TestHandEditOnAnAlreadyPublishedFormSurvivesRepublish:
         after_js_content = client.get(f"/api/v1/admin/forms/{form_id}/files/{after_js['id']}", headers=admin_headers).json()["content"]
         assert after_js_content == js_original + "\n// redirect URL\n"
 
+    def test_enabling_recaptcha_merges_into_an_already_published_hand_edit_without_conflict(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
+    ):
+        """Same no-conflict merge treatment as any other field/consent toggle
+        — see html_structure_patch.py's _patch_recaptcha_widget/
+        _patch_recaptcha_script."""
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        files = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        html_file = next(f for f in files if f["fileType"] == "html")
+        html_original = client.get(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", headers=admin_headers).json()["content"]
+        client.put(f"/api/v1/admin/forms/{form_id}/files/{html_file['id']}", json={"content": html_original + "\n<!-- hand-edit -->\n"}, headers=admin_headers)
+
+        definition = sample_definition_json(subsidiary_row.name)
+        definition["fields"]["recaptcha"] = {}
+        draft_resp = client.patch(
+            f"/api/v1/admin/forms/{form_id}/draft",
+            json={"definition": definition, "config": sample_config_json(["ff", "oc"])},
+            headers=admin_headers,
+        )
+        assert draft_resp.status_code == 204, draft_resp.text
+
+        published = client.post(f"/api/v1/admin/forms/{form_id}/publish", headers=admin_headers)
+        assert published.status_code == 200, published.text  # merged — no confirmation needed
+
+        after = client.get(f"/api/v1/admin/forms/{form_id}/files", headers=admin_headers).json()
+        after_html = next(f for f in after if f["fileName"] == html_file["fileName"])
+        assert after_html["editedAt"] is not None  # still counted hand-edited — merged, not discarded
+        after_html_content = client.get(
+            f"/api/v1/admin/forms/{form_id}/files/{after_html['id']}", headers=admin_headers
+        ).json()["content"]
+        assert "<!-- hand-edit -->" in after_html_content  # the admin's own edit survives
+        assert 'id="g-recaptcha"' in after_html_content
+        assert "recaptcha/api.js" in after_html_content
+
     def test_an_unmergeable_field_change_still_blocks_republish_of_an_already_published_hand_edit_until_confirmed(
         self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode
     ):
