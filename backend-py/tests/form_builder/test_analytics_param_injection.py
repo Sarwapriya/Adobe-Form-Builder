@@ -19,8 +19,9 @@ from app.models.project_code import ProjectCode
 from app.models.subsidiary import Subsidiary
 from app.services.admin_settings_service import set_admin_setting
 from app.services.file_service import absolute_file_path
+from app.services import subsidiary_recaptcha_config_service
 from app.services.subsidiary_recaptcha_config_service import upsert_recaptcha_config
-from tests.form_builder.conftest import create_and_publish_admin_form
+from tests.form_builder.conftest import create_admin_draft_form, create_and_publish_admin_form
 
 
 def _read_data_js_param(db: Session, form_id: str) -> dict:
@@ -79,6 +80,38 @@ class TestAnalyticsParamInjection:
         param = _read_data_js_param(db_session, form_id)
 
         assert param["reCaptchaSiteKey"] == "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
+
+    def test_save_draft_survives_a_broken_recaptcha_config_lookup(
+        self, client: TestClient, admin_headers: dict, subsidiary_row: Subsidiary, project_code_row: ProjectCode, monkeypatch
+    ):
+        """Reproduces a real incident: Save Draft (PATCH .../draft) 500'd for
+        every form, not just ones using reCAPTCHA, because
+        _resolve_recaptcha_site_key's DB lookup (new table, migration not yet
+        applied) was unguarded and ran unconditionally on every save. Forcing
+        the same failure here (any DB error, not just a missing table) must
+        no longer break the save at all."""
+
+        def _boom(db, subsidiary_name):
+            raise RuntimeError("Invalid object name 'fq.SubsidiaryRecaptchaConfigs'")
+
+        monkeypatch.setattr(subsidiary_recaptcha_config_service, "get_site_key_for_subsidiary", _boom)
+
+        # create_admin_draft_form itself calls PATCH .../draft — this is the
+        # exact endpoint/code path that 500'd.
+        form_id = create_admin_draft_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        assert form_id
+
+    def test_publish_survives_a_broken_recaptcha_config_lookup(
+        self, client: TestClient, admin_headers: dict, db_session: Session, subsidiary_row: Subsidiary, project_code_row: ProjectCode, monkeypatch
+    ):
+        def _boom(db, subsidiary_name):
+            raise RuntimeError("Invalid object name 'fq.SubsidiaryRecaptchaConfigs'")
+
+        monkeypatch.setattr(subsidiary_recaptcha_config_service, "get_site_key_for_subsidiary", _boom)
+
+        form_id = create_and_publish_admin_form(client, admin_headers, subsidiary_row.name, project_code=project_code_row.code)
+        param = _read_data_js_param(db_session, form_id)
+        assert param["reCaptchaSiteKey"] == ""  # no override applied, but the publish still succeeded
 
     def test_a_subsidiary_with_no_report_suite_id_publishes_without_the_key(
         self, client: TestClient, admin_headers: dict, db_session: Session, subsidiary_row: Subsidiary, project_code_row: ProjectCode

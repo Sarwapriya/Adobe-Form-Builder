@@ -137,8 +137,20 @@ def _resolve_recaptcha_site_key(db: Session, form: Form) -> dict[str, Any]:
     here. Returns an empty dict (no override) when the subsidiary has no key
     configured, leaving `reCaptchaSiteKey` at its blank default — the
     generated widget would then render with no sitekey, which the builder UI
-    warns about separately rather than this function guessing a value."""
-    site_key = subsidiary_recaptcha_config_service.get_site_key_for_subsidiary(db, form.subsidiaryId)
+    warns about separately rather than this function guessing a value.
+
+    Called unconditionally on every Save Draft/Publish/first-files-generation
+    for every form, not just ones using reCAPTCHA — so a failure here (e.g.
+    the SubsidiaryRecaptchaConfigs table/migration not applied yet on this
+    database) must never break that save for every other form too. Fails the
+    same way _resolve_page_error_updates' own DB-backed lookup would want to:
+    silently no-op rather than 500 the whole request."""
+    try:
+        site_key = subsidiary_recaptcha_config_service.get_site_key_for_subsidiary(db, form.subsidiaryId)
+    except Exception as err:  # noqa: BLE001 — must never break an unrelated save/publish
+        print(f"[form_builder_service] Failed to resolve reCAPTCHA site key for subsidiary {form.subsidiaryId!r}: {err}")
+        db.rollback()
+        return {}
     return {"reCaptchaSiteKey": site_key} if site_key else {}
 
 
