@@ -26,6 +26,7 @@ from app.models.form import Form
 from app.models.form_version import FormVersion
 from app.models.form_template import FormTemplate
 from app.models.form_contribution import FormContribution
+from app.models.form_update_request import FormUpdateRequest
 from app.models.question_master_version import QuestionMasterVersion
 from app.models.ai_conversation import AIConversation
 from app.models.ai_conversation_message import AIConversationMessage
@@ -60,6 +61,7 @@ __all__ = [
     "FormVersion",
     "FormTemplate",
     "FormContribution",
+    "FormUpdateRequest",
     "QuestionMasterVersion",
     "AIConversation",
     "AIConversationMessage",

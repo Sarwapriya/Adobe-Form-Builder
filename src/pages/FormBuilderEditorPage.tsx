@@ -16,6 +16,7 @@ import { BuilderValidationPanel } from "../components/formBuilder/BuilderValidat
 import { BuilderActionBar } from "../components/formBuilder/BuilderActionBar";
 import { ContributionReviewPanel } from "../components/formBuilder/ContributionReviewPanel";
 import { AdHocReviewPanel } from "../components/formBuilder/AdHocReviewPanel";
+import { UpdateRequestPanel } from "../components/formBuilder/UpdateRequestPanel";
 import { ResourceCheckPanel } from "../components/formBuilder/ResourceCheckPanel";
 
 const PROFILE_FIELD_KEYS = new Set<string>([
@@ -98,6 +99,8 @@ export function FormBuilderEditorPage() {
       <BuilderValidationPanel />
 
       {id && pendingReview && <AdHocReviewPanel formId={id} />}
+
+      {id && <UpdateRequestPanel formId={id} />}
 
       {id && <ContributionReviewPanel formId={id} />}
 

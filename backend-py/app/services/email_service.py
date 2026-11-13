@@ -597,6 +597,96 @@ def send_project_locked_notification(db: Session, recipients: list[str], project
         print(f"[email_service] Failed to send project-locked email: {err}")
 
 
+# --- Update request submitted / approved / rejected -------------------------
+
+
+def _build_update_request_submitted_message(form_id: str, form_name: str, subsidiary_id: str, note: Optional[str]) -> EmailContent:
+    link = _app_link(f"/admin/form-builder/{form_id}")
+    subject = f"Update request submitted: {form_name}"
+    text = (
+        f"A subsidiary user requested permission to edit a deployed/published form.\n\n"
+        f"Form: {form_name}\nSubsidiary: {subsidiary_id}\n"
+        + (f"Note: {note}\n" if note else "")
+        + f"\nReview it here: {link}\n"
+    )
+    rows = [("Form", form_name), ("Subsidiary", subsidiary_id)]
+    if note:
+        rows.append(("Note", note))
+    html = _render_email_html(title="Update request submitted", rows=rows, cta_label="Review in Form Initiator", cta_url=link)
+    return EmailContent(subject=subject, text=text, html=html)
+
+
+def send_update_request_submitted_notification(db: Session, form_id: str, form_name: str, subsidiary_id: str, note: Optional[str]) -> None:
+    """Never raises — same best-effort discipline as every other notification here."""
+    try:
+        recipients = _resolve_admin_recipients(db)
+        if not recipients:
+            return
+        result = send_email(db, recipients, _build_update_request_submitted_message(form_id, form_name, subsidiary_id, note))
+        if not result.ok:
+            print(f"[email_service] Failed to send update-request-submitted email: {result.error}")
+    except Exception as err:  # noqa: BLE001
+        print(f"[email_service] Failed to send update-request-submitted email: {err}")
+
+
+def _build_update_request_approved_message(form_id: str, form_name: str, form_origin: str) -> EmailContent:
+    link = _subsidiary_form_link(form_id, form_origin)
+    subject = f"Update request approved: {form_name}"
+    text = f'Your request to edit "{form_name}" was approved — you can make your changes now.\n\nOpen it here: {link}\n'
+    html = _render_email_html(
+        title="Update request approved",
+        intro=f'Your request to edit "{form_name}" was approved — you can make your changes now.',
+        rows=[("Form", form_name)],
+        cta_label="Open the form",
+        cta_url=link,
+    )
+    return EmailContent(subject=subject, text=text, html=html)
+
+
+def send_update_request_approved_notification(db: Session, recipients: list[str], form_id: str, form_name: str, form_origin: str) -> None:
+    """Never raises — same best-effort discipline as every other notification here."""
+    if not recipients:
+        return
+    try:
+        result = send_email(db, recipients, _build_update_request_approved_message(form_id, form_name, form_origin))
+        if not result.ok:
+            print(f"[email_service] Failed to send update-request-approved email: {result.error}")
+    except Exception as err:  # noqa: BLE001
+        print(f"[email_service] Failed to send update-request-approved email: {err}")
+
+
+def _build_update_request_rejected_message(form_id: str, form_name: str, form_origin: str, note: Optional[str]) -> EmailContent:
+    link = _subsidiary_form_link(form_id, form_origin)
+    subject = f"Update request rejected: {form_name}"
+    reason_line = f" Reason: {note}" if note else ""
+    text = f'Your request to edit "{form_name}" was rejected.{reason_line}\n\nView it here: {link}\n'
+    rows = [("Form", form_name)]
+    if note:
+        rows.append(("Reason", note))
+    html = _render_email_html(
+        title="Update request rejected",
+        intro=f'Your request to edit "{form_name}" was rejected.{reason_line}',
+        rows=rows,
+        cta_label="Open the form",
+        cta_url=link,
+    )
+    return EmailContent(subject=subject, text=text, html=html)
+
+
+def send_update_request_rejected_notification(
+    db: Session, recipients: list[str], form_id: str, form_name: str, form_origin: str, note: Optional[str]
+) -> None:
+    """Never raises — same best-effort discipline as every other notification here."""
+    if not recipients:
+        return
+    try:
+        result = send_email(db, recipients, _build_update_request_rejected_message(form_id, form_name, form_origin, note))
+        if not result.ok:
+            print(f"[email_service] Failed to send update-request-rejected email: {result.error}")
+    except Exception as err:  # noqa: BLE001
+        print(f"[email_service] Failed to send update-request-rejected email: {err}")
+
+
 # --- SMTP settings test send --------------------------------------------------
 
 

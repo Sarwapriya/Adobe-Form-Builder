@@ -18,9 +18,9 @@ from app.models.form_version import FormVersion
 from app.models.project_code import ProjectCode
 from app.models.user import User
 from app.security import dkms_client
-from app.services import email_service, notification_service
+from app.services import email_service, form_update_request_service, notification_service, project_code_service
 from app.services.form_access_service import get_accessible_form_detail
-from app.services.form_builder_service import update_draft
+from app.services.form_builder_service import is_edit_locked_post_deploy, update_draft
 from app.utils.background import run_in_background
 
 
@@ -44,7 +44,7 @@ def _to_summary(row: FormContribution) -> dict[str, Any]:
     }
 
 
-SubmitContributionOutcome = Literal["ok", "not_found", "invalid", "project_locked"]
+SubmitContributionOutcome = Literal["ok", "not_found", "invalid", "project_locked", "cutoff_passed", "update_locked"]
 
 
 def submit_contribution(
@@ -63,13 +63,28 @@ def submit_contribution(
     if not detail or not detail.get("published"):
         return {"outcome": "not_found"}
 
-    # A locked project code freezes subsidiary contributions.
+    # A locked or past-cutoff project code freezes subsidiary contributions.
     if detail.get("projectCode"):
         project_code = db.execute(
             select(ProjectCode).where(ProjectCode.code == detail["projectCode"])
         ).scalar_one_or_none()
-        if project_code is not None and project_code.isLocked:
-            return {"outcome": "project_locked"}
+        if project_code is not None:
+            if project_code.isLocked:
+                return {"outcome": "project_locked"}
+            if project_code_service.is_past_cutoff(project_code):
+                return {"outcome": "cutoff_passed"}
+
+    # Locked once this form's *currently published* content has actually
+    # been deployed to Adobe — see is_edit_locked_post_deploy's own doc
+    # comment. A subsidiary's approved, not-yet-consumed FormUpdateRequest
+    # bypasses this one check.
+    form = db.get(Form, form_id)
+    if (
+        form is not None
+        and is_edit_locked_post_deploy(form)
+        and not form_update_request_service.has_open_update_request(db, form_id, subsidiary_id)
+    ):
+        return {"outcome": "update_locked"}
 
     published = detail["published"]
     validation: ValidationResult = validate_contribution(published["definition"], content)
@@ -160,7 +175,7 @@ def list_own_contributions(db: Session, form_id: str, user_id: str) -> list[dict
     return [_to_summary(r) for r in rows]
 
 
-SaveContributionDraftOutcome = Literal["ok", "not_found"]
+SaveContributionDraftOutcome = Literal["ok", "not_found", "project_locked", "cutoff_passed", "update_locked"]
 
 
 def save_contribution_draft(
@@ -173,10 +188,29 @@ def save_contribution_draft(
 ) -> dict[str, Any]:
     """Saves (or updates in place) this user's one draft row for a form —
     never queues it for admin review, and unlike `submit_contribution` runs
-    no validation."""
+    no validation. Same project-code-locked/past-cutoff/post-deploy-locked
+    gates as `submit_contribution` — saving a draft is still "modifying" the
+    form from the subsidiary's own perspective, so it shouldn't stay open
+    once any of those block the real submission."""
     detail = get_accessible_form_detail(db, form_id, subsidiary_id)
     if not detail or not detail.get("published"):
         return {"outcome": "not_found"}
+
+    if detail.get("projectCode"):
+        project_code = db.execute(select(ProjectCode).where(ProjectCode.code == detail["projectCode"])).scalar_one_or_none()
+        if project_code is not None:
+            if project_code.isLocked:
+                return {"outcome": "project_locked"}
+            if project_code_service.is_past_cutoff(project_code):
+                return {"outcome": "cutoff_passed"}
+
+    form = db.get(Form, form_id)
+    if (
+        form is not None
+        and is_edit_locked_post_deploy(form)
+        and not form_update_request_service.has_open_update_request(db, form_id, subsidiary_id)
+    ):
+        return {"outcome": "update_locked"}
 
     published = detail["published"]
     existing_draft = db.execute(

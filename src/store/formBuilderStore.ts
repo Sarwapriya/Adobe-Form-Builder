@@ -16,9 +16,12 @@ import {
   type FormStatus,
 } from "../api/formBuilderApi";
 import {
+  createUpdateRequest as apiCreateUpdateRequest,
   getMyAdHocFormDetail,
+  getOwnUpdateRequest,
   submitAdHocFormForReview as apiSubmitAdHocFormForReview,
   updateMyAdHocFormDraft as apiUpdateMyAdHocFormDraft,
+  type UpdateRequestSummary,
 } from "../api/subsidiaryFormsApi";
 
 /** "admin" (Form Initiator, the default) or "adhoc" (a subsidiary user's own My
@@ -71,9 +74,22 @@ interface FormBuilderState {
    * of drifting apart. */
   contributions: ContributionSummary[];
   contributionsLoading: boolean;
+  /** adhoc mode only — this subsidiary's own current update request for this
+   * form (pending/approved) or most-recently-rejected one, or null if
+   * there's never been one. Drives the "Request Update" banner once the
+   * form is locked for editing (status === "published" with no open
+   * request) — see AdHocActionBar.tsx/MyAdHocFormEditorPage.tsx. Refreshed
+   * by loadForm and by requestUpdate itself; never set by publish/
+   * submitForReview directly (those just reload the form, which re-fetches
+   * this too). */
+  updateRequest: UpdateRequestSummary | null;
+  requestingUpdate: boolean;
 
   loadForm: (formId: string, mode?: FormBuilderMode) => Promise<void>;
   refreshContributions: () => Promise<void>;
+  /** adhoc mode only — submits a "Request Update" for the current form; a
+   * no-op (returns false) outside adhoc mode or with no formId. */
+  requestUpdate: (note?: string) => Promise<boolean>;
   setActiveLocale: (locale: string) => void;
   updateDefinition: (updater: (definition: FormDefinition) => FormDefinition) => void;
   updateConfig: (patch: Partial<BuilderConfig>) => void;
@@ -144,17 +160,46 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
   error: null,
   contributions: [],
   contributionsLoading: false,
+  updateRequest: null,
+  requestingUpdate: false,
 
   async loadForm(formId, mode = "admin") {
-    set({ loading: true, error: null, contributions: [] });
+    set({ loading: true, error: null, contributions: [], updateRequest: null });
     try {
       const detail = mode === "adhoc" ? await getMyAdHocFormDetail(formId) : await getFormDetail(formId);
       set(applyDetail(detail, mode));
-      if (mode === "admin") await get().refreshContributions();
+      if (mode === "admin") {
+        await get().refreshContributions();
+      } else {
+        // Best-effort — a failure here shouldn't block the form from loading;
+        // it just means the "Request Update" banner falls back to its
+        // default (no active request) state.
+        try {
+          set({ updateRequest: await getOwnUpdateRequest(formId) });
+        } catch {
+          // ignore
+        }
+      }
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to load form" });
     } finally {
       set({ loading: false });
+    }
+  },
+
+  async requestUpdate(note) {
+    const { formId, mode } = get();
+    if (!formId || mode !== "adhoc") return false;
+    set({ requestingUpdate: true, error: null });
+    try {
+      const request = await apiCreateUpdateRequest(formId, note);
+      set({ updateRequest: request });
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to submit update request" });
+      return false;
+    } finally {
+      set({ requestingUpdate: false });
     }
   },
 
@@ -322,6 +367,8 @@ export const useFormBuilderStore = create<FormBuilderState>((set, get) => ({
       error: null,
       contributions: [],
       contributionsLoading: false,
+      updateRequest: null,
+      requestingUpdate: false,
     });
   },
 }));

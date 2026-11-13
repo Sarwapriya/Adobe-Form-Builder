@@ -296,7 +296,16 @@ def create_form(
     subsidiary_service.assert_subsidiary_active(db, subsidiary_id)
     if project_code:
         project_code_service.assert_project_code_open(
-            db, project_code, exclude_locked=exclude_locked_project_code, exclude_hand_raiser=exclude_hand_raiser_project_code
+            db,
+            project_code,
+            exclude_locked=exclude_locked_project_code,
+            exclude_hand_raiser=exclude_hand_raiser_project_code,
+            # Same caller as exclude_locked_project_code — a subsidiary user
+            # starting a brand-new ad-hoc form shouldn't be able to pick a
+            # code whose cutoff has already passed, same reasoning as the
+            # lock; an admin creating/approving a form stays exempt, same as
+            # every other check here.
+            exclude_past_cutoff=exclude_locked_project_code,
         )
         subsidiary_project_block_service.assert_not_blocked(db, subsidiary_id, project_code)
 
@@ -1086,7 +1095,27 @@ def publish_form(db: Session, form_id: str, user_id: str, force: bool = False) -
 
         run_in_background(_notify)
 
+    # Whatever a subsidiary user was granted permission to edit via an
+    # approved FormUpdateRequest has now gone live in this republish — see
+    # form_update_request_service.consume_approved_requests's own doc
+    # comment. Local import to avoid a module-level import cycle (that
+    # service imports find_owned_adhoc_form from this module).
+    from app.services import form_update_request_service
+
+    form_update_request_service.consume_approved_requests(db, form_id)
+
     return {"outcome": "ok", "validation": validation}
+
+
+def is_edit_locked_post_deploy(form: Form) -> bool:
+    """True iff `form`'s *currently published* content has actually been
+    deployed to Adobe over SFTP — the gate `submit_contribution`/
+    `save_contribution_draft` check (via `form_update_request_service.
+    has_open_update_request` for the bypass), deliberately not just
+    `status == "published"` (see `Form.lastDeployedVersionId`'s own doc
+    comment for why those two are different moments). Pure — no DB access,
+    `form` must already be loaded."""
+    return form.lastDeployedVersionId is not None and form.lastDeployedVersionId == form.publishedVersionId
 
 
 def published_consent_document_file_names(db: Session, form: Form) -> list[str]:
@@ -1143,6 +1172,15 @@ def deploy_form(db: Session, form_id: str, user_id: str) -> dict[str, Any]:
         file_names.append(uploaded_name)
 
     deployment = deploy_generated_files(db, deploy_files)
+
+    # Stamps which exact published version actually made it to Adobe, and
+    # when — see Form.lastDeployedVersionId's own doc comment. This is what
+    # is_edit_locked_post_deploy checks, not status=="published" alone, so a
+    # subsidiary's edit window only closes once this really happened.
+    if deployment.ok:
+        form.lastDeployedVersionId = form.publishedVersionId
+        form.lastDeployedAt = _now()
+        db.commit()
 
     # Once Adobe has had time to pick the files up, check they're actually
     # served by every frontal server (resource_check_service; never raises).
@@ -1413,14 +1451,23 @@ SubmitAdHocOutcome = Literal["ok", "not_found", "already_pending", "already_publ
 def submit_adhoc_form_for_review(db: Session, form_id: str, subsidiary_id: str) -> SubmitAdHocOutcome:
     """A subsidiary user's "Submit for Review" action. Best-effort notifies
     admins via `email_service.send_adhoc_review_submitted_notification` —
-    never fails this action if the notification itself fails."""
+    never fails this action if the notification itself fails.
+
+    Once published, this has always been a dead end for a never-before-
+    approved edit (see `update_adhoc_draft`'s own doc comment) — the one
+    exception is an approved `FormUpdateRequest` for this subsidiary
+    (`form_update_request_service.has_open_update_request`), which reopens
+    exactly this one resubmission instead of permanently."""
     form = find_owned_adhoc_form(db, form_id, subsidiary_id)
     if form is None:
         return "not_found"
     if form.pendingReview:
         return "already_pending"
     if form.status == "published":
-        return "already_published"
+        from app.services import form_update_request_service
+
+        if not form_update_request_service.has_open_update_request(db, form_id, subsidiary_id):
+            return "already_published"
 
     form.pendingReview = True
     form.submittedForReviewAt = _now()

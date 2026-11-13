@@ -6,6 +6,11 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Divider,
   FormControlLabel,
   IconButton,
@@ -24,6 +29,8 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
 import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
+import { useResponsiveDialogProps } from "../hooks/useResponsiveDialog";
 import { resolveLocalizedText } from "@formbuilder/shared";
 import { useFormContributionStore } from "../store/formContributionStore";
 import { FormStatusBar, type FormStatusTone } from "../components/common/FormStatusBar";
@@ -102,11 +109,35 @@ export function MyFormTranslatePage() {
   const locked = useFormContributionStore((s) => s.locked);
   const lockedContribution = useFormContributionStore((s) => s.lockedContribution);
   const projectLocked = useFormContributionStore((s) => s.projectLocked);
+  const editLockedPostDeploy = useFormContributionStore((s) => s.editLockedPostDeploy);
+  const updateRequest = useFormContributionStore((s) => s.updateRequest);
+  const requestingUpdate = useFormContributionStore((s) => s.requestingUpdate);
+  const requestUpdate = useFormContributionStore((s) => s.requestUpdate);
 
   const [addQuestionOpen, setAddQuestionOpen] = useState(false);
   const [addAnswerForQuestionId, setAddAnswerForQuestionId] = useState<string | null>(null);
   const [addConsentOpen, setAddConsentOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestNote, setRequestNote] = useState("");
+  const responsiveDialogProps = useResponsiveDialogProps();
+
+  // An approved, not-yet-consumed update request is the one thing that
+  // reopens editing once the form's actually been deployed — see
+  // form_update_request_service.py's own doc comment (same meaning as
+  // AdHocActionBar.tsx's own hasOpenUpdateRequest). A merely "pending" or
+  // "rejected" request still leaves editLockedPostDeploy in effect.
+  const hasOpenUpdateRequest = updateRequest?.status === "approved";
+  const effectivelyLocked = locked || projectLocked || (editLockedPostDeploy && !hasOpenUpdateRequest);
+
+  async function handleRequestUpdate() {
+    const ok = await requestUpdate(requestNote.trim() || undefined);
+    if (ok) {
+      setRequestOpen(false);
+      setRequestNote("");
+      showToast("Update request sent.", "success");
+    }
+  }
 
   useEffect(() => {
     if (error) showToast(error, "error");
@@ -143,7 +174,7 @@ export function MyFormTranslatePage() {
     if (ok) showToast("Draft saved.", "success");
   }
 
-  useSaveShortcut(() => void handleSaveDraft(), dirty && !savingDraft && !locked && !projectLocked);
+  useSaveShortcut(() => void handleSaveDraft(), dirty && !savingDraft && !effectivelyLocked);
 
   async function handleSubmit() {
     const ok = await submit();
@@ -176,27 +207,33 @@ export function MyFormTranslatePage() {
   const latestContribution = ownContributions[0] ?? null;
   const statusTone: FormStatusTone = projectLocked
     ? "locked"
-    : locked
-      ? "pending"
-      : latestContribution?.status === "approved"
-        ? "approved"
-        : latestContribution?.status === "rejected"
-          ? "rejected"
-          : "draft";
+    : editLockedPostDeploy && !hasOpenUpdateRequest
+      ? "locked"
+      : locked
+        ? "pending"
+        : latestContribution?.status === "approved"
+          ? "approved"
+          : latestContribution?.status === "rejected"
+            ? "rejected"
+            : "draft";
   const statusLabel = projectLocked
     ? "Project locked"
-    : locked
-      ? "Pending review"
-      : latestContribution?.status === "approved"
-        ? "Approved"
-        : latestContribution?.status === "rejected"
-          ? "Rejected — editing enabled"
-          : latestContribution?.status === "draft"
-            ? "Draft saved"
-            : "No submissions yet";
+    : editLockedPostDeploy && !hasOpenUpdateRequest
+      ? "Deployed — locked"
+      : locked
+        ? "Pending review"
+        : latestContribution?.status === "approved"
+          ? "Approved"
+          : latestContribution?.status === "rejected"
+            ? "Rejected — editing enabled"
+            : latestContribution?.status === "draft"
+              ? "Draft saved"
+              : "No submissions yet";
   const statusDescription = projectLocked
     ? "No further submissions can be made for this project."
-    : locked && lockedContribution
+    : editLockedPostDeploy && !hasOpenUpdateRequest
+      ? "This form has been deployed — request an update if you need to make a change."
+      : locked && lockedContribution
       ? `Submitted ${new Date(lockedContribution.submittedAt).toLocaleString()}`
       : latestContribution?.status === "rejected"
         ? (latestContribution.reviewNote ?? "You can make changes and submit again.")
@@ -233,6 +270,41 @@ export function MyFormTranslatePage() {
         </Alert>
       )}
 
+      {!projectLocked && editLockedPostDeploy && hasOpenUpdateRequest && (
+        <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+          Update approved — you can submit changes again.
+        </Alert>
+      )}
+
+      {!projectLocked && editLockedPostDeploy && !hasOpenUpdateRequest && updateRequest?.status === "pending" && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          Update request sent — awaiting admin approval.
+        </Alert>
+      )}
+
+      {!projectLocked && editLockedPostDeploy && !hasOpenUpdateRequest && updateRequest?.status !== "pending" && (
+        <Alert
+          severity={updateRequest?.status === "rejected" ? "warning" : "info"}
+          sx={{ mb: 2, borderRadius: 2 }}
+          action={
+            <Button color="inherit" size="small" startIcon={<LockOpenIcon />} onClick={() => setRequestOpen(true)}>
+              Request Update
+            </Button>
+          }
+        >
+          {updateRequest?.status === "rejected" ? (
+            <>
+              <Typography variant="body2" fontWeight={600}>
+                Your update request was rejected{updateRequest.reviewNote ? ":" : "."}
+              </Typography>
+              {updateRequest.reviewNote}
+            </>
+          ) : (
+            "This form has been deployed — no further translations, questions, or consents can be submitted until an admin approves an update request."
+          )}
+        </Alert>
+      )}
+
       {locked && (
         <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
           You have a submission pending admin review{lockedContribution ? ` (submitted ${new Date(lockedContribution.submittedAt).toLocaleString()})` : ""}.
@@ -257,7 +329,7 @@ export function MyFormTranslatePage() {
         )}
       </Paper>
 
-      <Box component="fieldset" disabled={locked || projectLocked} sx={{ border: 0, m: 0, p: 0, opacity: locked || projectLocked ? 0.65 : 1 }}>
+      <Box component="fieldset" disabled={effectivelyLocked} sx={{ border: 0, m: 0, p: 0, opacity: effectivelyLocked ? 0.65 : 1 }}>
       {locale && (
         <>
           <Paper sx={{ p: 2, mb: 2, borderRadius: 3 }}>
@@ -420,14 +492,14 @@ export function MyFormTranslatePage() {
                       {q.lockedFromSubsidiary ? (
                         <Chip size="small" icon={<LockIcon fontSize="small" />} label="Locked by admin" variant="outlined" />
                       ) : isDeleted ? (
-                        <Button size="small" onClick={() => toggleQuestionDeleted(q.id)} disabled={locked || projectLocked}>
+                        <Button size="small" onClick={() => toggleQuestionDeleted(q.id)} disabled={effectivelyLocked}>
                           Undo
                         </Button>
                       ) : (
                         <IconButton
                           size="small"
                           onClick={() => toggleQuestionDeleted(q.id)}
-                          disabled={locked || projectLocked}
+                          disabled={effectivelyLocked}
                           aria-label="Delete question"
                         >
                           <DeleteIcon fontSize="small" />
@@ -457,7 +529,7 @@ export function MyFormTranslatePage() {
                           <Switch
                             size="small"
                             checked={autoPopulateToggles.get(q.id) ?? false}
-                            disabled={locked || projectLocked}
+                            disabled={effectivelyLocked}
                             onChange={(e) => setAutoPopulateToggle(q.id, e.target.checked)}
                           />
                         }
@@ -478,14 +550,14 @@ export function MyFormTranslatePage() {
                             />
                           </Box>
                           {answerDeleted ? (
-                            <Button size="small" onClick={() => toggleAnswerDeleted(q.id, a.id)} disabled={locked || projectLocked}>
+                            <Button size="small" onClick={() => toggleAnswerDeleted(q.id, a.id)} disabled={effectivelyLocked}>
                               Undo
                             </Button>
                           ) : (
                             <IconButton
                               size="small"
                               onClick={() => toggleAnswerDeleted(q.id, a.id)}
-                              disabled={locked || projectLocked}
+                              disabled={effectivelyLocked}
                               aria-label="Delete option"
                             >
                               <DeleteIcon fontSize="small" />
@@ -507,7 +579,7 @@ export function MyFormTranslatePage() {
                         <IconButton
                           size="small"
                           onClick={() => removeNewAnswer(pending.localId)}
-                          disabled={locked || projectLocked}
+                          disabled={effectivelyLocked}
                           aria-label="Remove new option"
                         >
                           <DeleteIcon fontSize="small" />
@@ -519,7 +591,7 @@ export function MyFormTranslatePage() {
                         size="small"
                         startIcon={<AddIcon />}
                         onClick={() => setAddAnswerForQuestionId(q.id)}
-                        disabled={locked || projectLocked}
+                        disabled={effectivelyLocked}
                         sx={{ alignSelf: "flex-start" }}
                       >
                         Add option
@@ -627,13 +699,13 @@ export function MyFormTranslatePage() {
           <Button
             variant="outlined"
             startIcon={<SaveIcon />}
-            disabled={savingDraft || locked || projectLocked}
+            disabled={savingDraft || effectivelyLocked}
             onClick={() => void handleSaveDraft()}
-            sx={unsavedChangesBlinkSx(dirty && !savingDraft && !locked && !projectLocked)}
+            sx={unsavedChangesBlinkSx(dirty && !savingDraft && !effectivelyLocked)}
           >
             {savingDraft ? "Saving..." : "Save Draft"}
           </Button>
-          <Button variant="contained" startIcon={<SendIcon />} disabled={submitting || locked || projectLocked} onClick={handleSubmit}>
+          <Button variant="contained" startIcon={<SendIcon />} disabled={submitting || effectivelyLocked} onClick={handleSubmit}>
             {submitting ? "Submitting..." : "Submit for review"}
           </Button>
         </Stack>
@@ -693,6 +765,35 @@ export function MyFormTranslatePage() {
           <ContributionPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
         </>
       )}
+      <Dialog {...responsiveDialogProps} open={requestOpen} onClose={() => setRequestOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <LockOpenIcon color="primary" fontSize="small" />
+          Request update
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Let the admin know what you need to change and why — once approved, you can submit translations,
+            questions, or consents again.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={3}
+            label="What do you need to change? (optional)"
+            value={requestNote}
+            onChange={(e) => setRequestNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setRequestOpen(false)} disabled={requestingUpdate}>
+            Cancel
+          </Button>
+          <Button variant="contained" disabled={requestingUpdate} onClick={() => void handleRequestUpdate()}>
+            {requestingUpdate ? "Sending..." : "Send Request"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

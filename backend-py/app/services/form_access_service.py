@@ -15,7 +15,7 @@ from app.models.form_contribution import FormContribution
 from app.models.form_version import FormVersion
 from app.models.project_code import ProjectCode
 from app.models.subsidiary_project_block import SubsidiaryProjectBlock
-from app.services.form_builder_service import get_form_detail
+from app.services.form_builder_service import get_form_detail, is_edit_locked_post_deploy
 
 
 def _to_access_list_item(
@@ -146,4 +146,10 @@ def get_accessible_form_detail(db: Session, form_id: str, subsidiary_id: str) ->
     if form.projectCode:
         project_code_row = db.execute(select(ProjectCode).where(ProjectCode.code == form.projectCode)).scalar_one_or_none()
         detail["projectCodeLocked"] = project_code_row.isLocked if project_code_row else False
+    # Whether this form's currently published content has actually been
+    # deployed to Adobe — the gate Translate & Extend contributions respect
+    # (see form_contribution_service.submit_contribution), distinct from
+    # "published" alone. Purely informational here (UX only, same as
+    # projectCodeLocked above) — the real enforcement is server-side.
+    detail["editLockedPostDeploy"] = is_edit_locked_post_deploy(form)
     return detail

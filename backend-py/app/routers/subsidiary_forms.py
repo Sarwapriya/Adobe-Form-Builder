@@ -21,6 +21,7 @@ from app.schemas.form_builder import (
     CreateAdHocFormBody,
     CreateAdHocFormWithQuestionsBody,
     DraftUpdateBody,
+    UpdateRequestBody,
 )
 from app.security.deps import require_auth
 from app.services import (
@@ -29,6 +30,8 @@ from app.services import (
     form_builder_service,
     form_contribution_service,
     form_template_service,
+    form_update_request_service,
+    project_code_service,
 )
 
 router = APIRouter(dependencies=[Depends(require_auth)])
@@ -134,8 +137,16 @@ def update_adhoc_draft(id: str, body: DraftUpdateBody, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="form not found")
     if owned.pendingReview:
         raise HTTPException(status_code=409, detail="This form is awaiting admin review — it can't be edited until reviewed")
-    if owned.status == "published":
-        raise HTTPException(status_code=409, detail="This campaign has been approved and published — it can only be viewed")
+    # Unchanged trigger point from before FormUpdateRequest existed (see
+    # submit_adhoc_form_for_review's own doc comment) — the one new
+    # exception is an approved, not-yet-consumed update request for this
+    # subsidiary, which reopens this one edit instead of permanently.
+    if owned.status == "published" and not form_update_request_service.has_open_update_request(db, id, subsidiary_id):
+        raise HTTPException(
+            status_code=409,
+            detail="This campaign has been approved and published — request an update if you need to make a change",
+        )
+    project_code_service.assert_project_code_cutoff_not_passed(db, owned.projectCode)
     form_builder_service.update_draft(db, id, body.definition, body.config)
 
 
@@ -155,8 +166,12 @@ async def upload_adhoc_consent_document(
         raise HTTPException(status_code=404, detail="form not found")
     if owned.pendingReview:
         raise HTTPException(status_code=409, detail="This form is awaiting admin review — it can't be edited until reviewed")
-    if owned.status == "published":
-        raise HTTPException(status_code=409, detail="This campaign has been approved and published — it can only be viewed")
+    if owned.status == "published" and not form_update_request_service.has_open_update_request(db, id, subsidiary_id):
+        raise HTTPException(
+            status_code=409,
+            detail="This campaign has been approved and published — request an update if you need to make a change",
+        )
+    project_code_service.assert_project_code_cutoff_not_passed(db, owned.projectCode)
     data = await file.read()
     result = form_builder_service.upload_consent_document(db, id, kind, file.filename or "document.pdf", data)  # type: ignore[arg-type]
     if result["outcome"] == "not_found":
@@ -171,6 +186,9 @@ def submit_adhoc_for_review(id: str, db: Session = Depends(get_db), auth: dict =
     subsidiary_id = auth.get("subsidiaryId")
     if not subsidiary_id:
         raise HTTPException(status_code=404, detail="form not found")
+    owned = form_builder_service.find_owned_adhoc_form(db, id, subsidiary_id)
+    if owned is not None:
+        project_code_service.assert_project_code_cutoff_not_passed(db, owned.projectCode)
     outcome = form_builder_service.submit_adhoc_form_for_review(db, id, subsidiary_id)
     if outcome == "not_found":
         raise HTTPException(status_code=404, detail="form not found")
@@ -216,6 +234,12 @@ def submit_contribution(id: str, body: ContributionBody, db: Session = Depends(g
         raise HTTPException(status_code=422, detail={"error": "contribution is not valid", "validation": validation.model_dump()})
     if result["outcome"] == "project_locked":
         raise HTTPException(status_code=409, detail="This project code is locked — contributions can no longer be submitted")
+    if result["outcome"] == "cutoff_passed":
+        raise HTTPException(status_code=409, detail="This project code's cutoff date has passed — contributions can no longer be submitted")
+    if result["outcome"] == "update_locked":
+        raise HTTPException(
+            status_code=409, detail="This form has been deployed — request an update if you need to make a change"
+        )
     return result["contribution"]
 
 
@@ -232,4 +256,41 @@ def save_contribution_draft(id: str, body: ContributionBody, db: Session = Depen
     result = form_contribution_service.save_contribution_draft(db, id, auth["sub"], subsidiary_id, body.content, body.note)
     if result["outcome"] == "not_found":
         raise HTTPException(status_code=404, detail="form not found")
+    if result["outcome"] == "project_locked":
+        raise HTTPException(status_code=409, detail="This project code is locked — contributions can no longer be submitted")
+    if result["outcome"] == "cutoff_passed":
+        raise HTTPException(status_code=409, detail="This project code's cutoff date has passed — contributions can no longer be submitted")
+    if result["outcome"] == "update_locked":
+        raise HTTPException(
+            status_code=409, detail="This form has been deployed — request an update if you need to make a change"
+        )
     return result["contribution"]
+
+
+@router.post("/{id}/update-request", status_code=status.HTTP_201_CREATED)
+def create_update_request(id: str, body: UpdateRequestBody, db: Session = Depends(get_db), auth: dict = Depends(require_auth)) -> dict:
+    """A subsidiary user's "Request Update" action on a form that's
+    currently locked for their own editing — works for an ad-hoc form they
+    own, or any published form they can otherwise reach via Translate &
+    Extend. See form_update_request_service.create_request."""
+    subsidiary_id = auth.get("subsidiaryId")
+    if not subsidiary_id:
+        raise HTTPException(status_code=404, detail="form not found")
+    result = form_update_request_service.create_request(db, id, subsidiary_id, auth["sub"], body.note)
+    if result["outcome"] == "not_found":
+        raise HTTPException(status_code=404, detail="form not found")
+    if result["outcome"] == "already_open":
+        raise HTTPException(status_code=409, detail="You already have an update request pending or approved for this form")
+    return result["request"]
+
+
+@router.get("/{id}/update-request")
+def get_update_request(id: str, db: Session = Depends(get_db), auth: dict = Depends(require_auth)) -> Optional[dict]:
+    """This subsidiary's own current (pending/approved) or most-recently-
+    rejected update request for this form, or `null` if there's never been
+    one — drives the "Request Update"/"awaiting approval"/"approved, editable
+    now"/"rejected: <reason>" banner states on the subsidiary side."""
+    subsidiary_id = auth.get("subsidiaryId")
+    if not subsidiary_id:
+        return None
+    return form_update_request_service.get_own_active_request(db, id, subsidiary_id)

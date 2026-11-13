@@ -14,10 +14,13 @@ import {
 } from "@formbuilder/shared";
 import {
   ContributionInvalidError,
+  createUpdateRequest as apiCreateUpdateRequest,
   getMyFormDetail,
+  getOwnUpdateRequest,
   saveContributionDraft as apiSaveContributionDraft,
   submitContribution as apiSubmitContribution,
   type ContributionSummary,
+  type UpdateRequestSummary,
 } from "../api/subsidiaryFormsApi";
 
 const EMPTY_VALIDATION: ValidationResult = { errors: [], warnings: [] };
@@ -114,6 +117,23 @@ interface FormContributionState {
    * is UX only, never the source of truth. Independent of `locked` above (a pending
    * own-contribution) — both can be true at once. */
   projectLocked: boolean;
+  /** True when this form's *currently published* content has actually been
+   * deployed to Adobe — set from `loadForm`'s own response
+   * (`detail.editLockedPostDeploy`), same UX-only, server-enforces-it-
+   * independently convention as `projectLocked` above, and independent of
+   * it (both can be true at once). Distinct from `locked` (a pending own
+   * contribution) and from `projectLocked` (a locked project code) —
+   * bypassed by an open update request (see `hasOpenUpdateRequest` derived
+   * in MyFormTranslatePage.tsx), unlike those two. */
+  editLockedPostDeploy: boolean;
+  /** This subsidiary's own current update request for this form — pending/
+   * approved/rejected, or null if there's never been one. See
+   * formBuilderStore.ts's own `updateRequest` for the shared ad-hoc-side
+   * meaning; here it's scoped per-subsidiary rather than per-owner, since
+   * several subsidiaries can each have their own independent request
+   * against the same shared (e.g. HR-authored) form. */
+  updateRequest: UpdateRequestSummary | null;
+  requestingUpdate: boolean;
   /** True once this session has changed something since the last successful Save
    * Draft/Submit (or since load) — drives the Ctrl+S shortcut's enabled state and
    * the Save Draft button's unsaved-changes blink, same convention as
@@ -121,6 +141,7 @@ interface FormContributionState {
   dirty: boolean;
 
   loadForm: (formId: string) => Promise<void>;
+  requestUpdate: (note?: string) => Promise<boolean>;
   setLocale: (locale: string) => void;
   setTranslation: (target: TranslationTarget, value: string) => void;
   addQuestion: (question: QuestionDefinition) => void;
@@ -234,11 +255,14 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
   lockedContribution: null,
   prefilledFromContributionId: null,
   projectLocked: false,
+  editLockedPostDeploy: false,
+  updateRequest: null,
+  requestingUpdate: false,
   autoPopulateToggles: new Map(),
   dirty: false,
 
   async loadForm(formId) {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, updateRequest: null });
     try {
       const detail = await getMyFormDetail(formId);
       if (!detail.published) {
@@ -262,11 +286,35 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
         note: "",
         loading: false,
         projectLocked: detail.projectCodeLocked ?? false,
+        editLockedPostDeploy: detail.editLockedPostDeploy ?? false,
         autoPopulateToggles: autoPopulateTogglesFromQuestions(detail.published.definition.questions),
         dirty: false,
       });
+      // Best-effort — same "never blocks the form from loading" discipline
+      // as formBuilderStore's own update-request fetch.
+      try {
+        set({ updateRequest: await getOwnUpdateRequest(formId) });
+      } catch {
+        // ignore
+      }
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "Failed to load form", loading: false });
+    }
+  },
+
+  async requestUpdate(note) {
+    const { formId } = get();
+    if (!formId) return false;
+    set({ requestingUpdate: true, error: null });
+    try {
+      const request = await apiCreateUpdateRequest(formId, note);
+      set({ updateRequest: request });
+      return true;
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to submit update request" });
+      return false;
+    } finally {
+      set({ requestingUpdate: false });
     }
   },
 
@@ -467,6 +515,9 @@ export const useFormContributionStore = create<FormContributionState>((set, get)
       lockedContribution: null,
       prefilledFromContributionId: null,
       projectLocked: false,
+      editLockedPostDeploy: false,
+      updateRequest: null,
+      requestingUpdate: false,
       autoPopulateToggles: new Map(),
       dirty: false,
     });

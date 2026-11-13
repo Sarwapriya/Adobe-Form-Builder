@@ -45,6 +45,14 @@ export interface FormListItem {
    * subsidiary-listing-only, undefined-from-admin convention as
    * myContributionProgress above (admins stay exempt from the lock). */
   projectCodeLocked?: boolean;
+  /** Whether this form's *currently published* content has actually been
+   * deployed to Adobe over SFTP — only set on the subsidiary-accessible
+   * detail (`getMyFormDetail`), same undefined-from-admin convention as
+   * projectCodeLocked above. Drives MyFormTranslatePage's own lock banner —
+   * distinct from `status === "published"` alone (see backend
+   * `form_builder_service.is_edit_locked_post_deploy`'s own doc comment).
+   * UX only; the server enforces this independently. */
+  editLockedPostDeploy?: boolean;
 }
 
 export interface FormVersionContent {
@@ -445,6 +453,24 @@ export function approveContribution(formId: string, contributionId: string, revi
 
 export function rejectContribution(formId: string, contributionId: string, reviewNote?: string): Promise<void> {
   return apiClient.post<void>(`/api/v1/admin/forms/${formId}/contributions/${contributionId}/reject`, { reviewNote });
+}
+
+// Update requests — a subsidiary user's "Request Update" action on a form
+// that's currently locked for their own editing (see subsidiaryFormsApi.ts's
+// own createUpdateRequest/getUpdateRequest for the submitting side). Re-uses
+// UpdateRequestSummary from there so both sides share one shape.
+export type { UpdateRequestStatus, UpdateRequestSummary } from "./subsidiaryFormsApi";
+
+export function listUpdateRequests(formId: string): Promise<import("./subsidiaryFormsApi").UpdateRequestSummary[]> {
+  return apiClient.get(`/api/v1/admin/forms/${formId}/update-requests`);
+}
+
+export function approveUpdateRequest(formId: string, requestId: string, reviewNote?: string): Promise<void> {
+  return apiClient.post<void>(`/api/v1/admin/forms/${formId}/update-requests/${requestId}/approve`, { reviewNote });
+}
+
+export function rejectUpdateRequest(formId: string, requestId: string, reviewNote?: string): Promise<void> {
+  return apiClient.post<void>(`/api/v1/admin/forms/${formId}/update-requests/${requestId}/reject`, { reviewNote });
 }
 
 /** Admin review queue actions for a subsidiary user's own "ad-hoc" submission

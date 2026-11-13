@@ -59,6 +59,11 @@ class ProjectCodeHandRaiserOnlyError(AppError):
         super().__init__(message)
 
 
+class ProjectCodeCutoffPassedError(AppError):
+    def __init__(self, message: str = "This project code's cutoff date has passed") -> None:
+        super().__init__(message)
+
+
 class SubsidiaryInactiveError(AppError):
     def __init__(self, message: str = "This subsidiary is disabled") -> None:
         super().__init__(message)
@@ -105,6 +110,7 @@ CONFLICT_ERRORS = (
     ProjectCodeClosedError,
     ProjectCodeLockedError,
     ProjectCodeHandRaiserOnlyError,
+    ProjectCodeCutoffPassedError,
     SubsidiaryInactiveError,
     SubsidiaryProjectBlockedError,
 )

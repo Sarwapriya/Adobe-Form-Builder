@@ -88,6 +88,44 @@ export function deleteAdHocForm(formId: string): Promise<void> {
   return apiClient.delete<void>(`/api/v1/forms/adhoc/${formId}`);
 }
 
+/** A subsidiary user's "Request Update" action on a form that's currently
+ * locked for their own editing — see backend form_update_request_service.py.
+ * "pending" = awaiting admin review, "approved" = the edit window is open
+ * (until the next successful publish consumes it), "rejected" = denied
+ * (reviewNote may explain why); "consumed" never reaches the frontend (see
+ * getOwnUpdateRequest's own doc comment — it only ever returns the current
+ * open/rejected one, never a stale consumed row). */
+export type UpdateRequestStatus = "pending" | "approved" | "rejected" | "consumed";
+
+export interface UpdateRequestSummary {
+  id: string;
+  formId: string;
+  subsidiaryId: string;
+  requestedByUserId: string;
+  status: UpdateRequestStatus;
+  note: string | null;
+  reviewNote: string | null;
+  reviewedByUserId: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
+  consumedAt: string | null;
+}
+
+/** Works for either an ad-hoc form this subsidiary owns, or any published
+ * form they can otherwise reach via Translate & Extend — same form id
+ * either way (see backend form_update_request_service.create_request). */
+export function createUpdateRequest(formId: string, note?: string): Promise<UpdateRequestSummary> {
+  return apiClient.post<UpdateRequestSummary>(`/api/v1/forms/${formId}/update-request`, { note });
+}
+
+/** This subsidiary's own current (pending/approved) or most-recently-
+ * rejected update request for this form, or `null` if there's never been
+ * one — drives the "Request Update"/"awaiting approval"/"approved, editable
+ * now"/"rejected: <reason>" banner states. */
+export function getOwnUpdateRequest(formId: string): Promise<UpdateRequestSummary | null> {
+  return apiClient.get<UpdateRequestSummary | null>(`/api/v1/forms/${formId}/update-request`);
+}
+
 export type ContributionStatus = "draft" | "pending" | "approved" | "rejected";
 
 export const CONTRIBUTION_STATUS_LABEL: Record<ContributionStatus, string> = {

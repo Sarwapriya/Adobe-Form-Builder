@@ -13,6 +13,7 @@ from app.errors import (
     ConflictError,
     NotFoundError,
     ProjectCodeClosedError,
+    ProjectCodeCutoffPassedError,
     ProjectCodeHandRaiserOnlyError,
     ProjectCodeLockedError,
     ValidationError,
@@ -44,6 +45,16 @@ def _parse_date(value: Optional[str]) -> Optional[date]:
 
 def is_expired(project_code: ProjectCode) -> bool:
     return project_code.endDate is not None and project_code.endDate < date.today()
+
+
+def is_past_cutoff(project_code: ProjectCode) -> bool:
+    """Whether this code's own `cutoffDate` (distinct from `endDate` — the
+    cutoff is an earlier, admin-set "last day for subsidiary edits" milestone
+    within the campaign's overall open window, today only used to trigger a
+    reminder email — see `cutoff_reminder_service.py`) has already passed.
+    `False` when no cutoffDate is set at all, same "unset means no
+    restriction" convention as `is_expired`/`endDate`."""
+    return project_code.cutoffDate is not None and project_code.cutoffDate < date.today()
 
 
 def list_project_codes(db: Session) -> list[ProjectCode]:
@@ -244,13 +255,18 @@ def set_project_code_date_range(db: Session, id: str, date_range: dict[str, Any]
 
 
 def assert_project_code_open(
-    db: Session, code: str, *, exclude_locked: bool = False, exclude_hand_raiser: bool = False
+    db: Session,
+    code: str,
+    *,
+    exclude_locked: bool = False,
+    exclude_hand_raiser: bool = False,
+    exclude_past_cutoff: bool = False,
 ) -> None:
     """Raises `NotFoundError` if no project code matches, or
     `ProjectCodeClosedError`/`ProjectCodeLockedError`/
-    `ProjectCodeHandRaiserOnlyError` if it can't be used right now. A no-op
-    if it's open, current, and (when checked) unlocked and not
-    Hand-Raiser-restricted.
+    `ProjectCodeHandRaiserOnlyError`/`ProjectCodeCutoffPassedError` if it
+    can't be used right now. A no-op if it's open, current, and (when
+    checked) unlocked, not past its cutoff, and not Hand-Raiser-restricted.
 
     Closed and expired apply to every caller, admins included. `exclude_locked`
     additionally rejects a locked code — pass this only for a subsidiary
@@ -261,10 +277,17 @@ def assert_project_code_open(
     project code categorized "handRaiser" (reserved for HR Form Initiator/
     admin-authored campaigns) — independent of the lock, pass it alongside
     `exclude_locked` wherever that's already `True` for a subsidiary user's
-    own action. Called from `create_form`/`approve_adhoc_form`/
-    `ai_proposal_service.check_proposal` so an expired, closed, or (for a
-    subsidiary user) locked or Hand-Raiser-only code can never be attached to
-    a new or newly-approved form."""
+    own action. `exclude_past_cutoff` is the same shape again, for the code's
+    `cutoffDate` — pass it for a subsidiary user starting a brand-new ad-hoc
+    form under this code (see `create_form`'s own `exclude_locked_project_code`
+    doc comment); an *existing* form's own edit-window gates (`update_adhoc_draft`
+    and friends) check the cutoff directly via `assert_project_code_cutoff_not_passed`
+    instead of this function, since they don't need the closed/expired/locked
+    checks here re-applied on every save. Called from
+    `create_form`/`approve_adhoc_form`/`ai_proposal_service.check_proposal` so
+    an expired, closed, or (for a subsidiary user) locked, past-cutoff, or
+    Hand-Raiser-only code can never be attached to a new or newly-approved
+    form."""
     project_code = db.execute(select(ProjectCode).where(ProjectCode.code == code)).scalar_one_or_none()
     if project_code is None:
         raise NotFoundError(f'Unknown project code "{code}"')
@@ -274,5 +297,25 @@ def assert_project_code_open(
         raise ProjectCodeClosedError(f'Project code "{code}" has expired')
     if exclude_locked and project_code.isLocked:
         raise ProjectCodeLockedError(f'Project code "{code}" is locked')
+    if exclude_past_cutoff and is_past_cutoff(project_code):
+        raise ProjectCodeCutoffPassedError(f'Project code "{code}"\'s cutoff date ({project_code.cutoffDate.isoformat()}) has passed')
     if exclude_hand_raiser and project_code.category == "handRaiser":
         raise ProjectCodeHandRaiserOnlyError(f'Project code "{code}" is reserved for HR Form Initiator campaigns')
+
+
+def assert_project_code_cutoff_not_passed(db: Session, code: Optional[str]) -> None:
+    """Raises `ProjectCodeCutoffPassedError` if `code` has a `cutoffDate`
+    that's already passed. A no-op if `code` is `None`/blank, unknown, or has
+    no cutoffDate set — deliberately narrower than `assert_project_code_open`
+    (doesn't also re-check isOpen/isLocked/expired), for the subsidiary-side
+    edit-window gates on an *existing* form (`update_adhoc_draft`,
+    `upload_adhoc_consent_document`, `submit_adhoc_form_for_review`,
+    `submit_contribution`, `save_contribution_draft`) — those never re-checked
+    the project code's open/locked status on every save before this existed,
+    and this shouldn't newly introduce that as a side effect; it only adds
+    the one new cutoff-based restriction that was actually asked for."""
+    if not code:
+        return
+    project_code = db.execute(select(ProjectCode).where(ProjectCode.code == code)).scalar_one_or_none()
+    if project_code is not None and is_past_cutoff(project_code):
+        raise ProjectCodeCutoffPassedError(f'Project code "{code}"\'s cutoff date ({project_code.cutoffDate.isoformat()}) has passed')

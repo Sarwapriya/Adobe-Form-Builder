@@ -24,7 +24,13 @@ from app.schemas.form_builder import (
     UpdateGeneratedFileBody,
 )
 from app.security.deps import require_admin
-from app.services import form_builder_service, form_contribution_service, form_template_service, resource_check_service
+from app.services import (
+    form_builder_service,
+    form_contribution_service,
+    form_template_service,
+    form_update_request_service,
+    resource_check_service,
+)
 from app.services.preview_service import PreviewVariant, build_form_version_preview
 
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -323,3 +329,32 @@ def reject_contribution(
         raise HTTPException(status_code=404, detail="contribution not found")
     if outcome == "not_pending":
         raise HTTPException(status_code=409, detail="contribution has already been reviewed")
+
+
+@router.get("/{id}/update-requests")
+def list_update_requests(id: str, db: Session = Depends(get_db)) -> list[dict]:
+    """Every "Request Update" a subsidiary user has made against this form,
+    newest first — see form_update_request_service.list_requests_for_form."""
+    return form_update_request_service.list_requests_for_form(db, id)
+
+
+@router.post("/{id}/update-requests/{requestId}/approve", status_code=status.HTTP_204_NO_CONTENT)
+def approve_update_request(
+    id: str, requestId: str, body: ReviewNoteBody, db: Session = Depends(get_db), auth: dict = Depends(require_admin)
+) -> None:
+    outcome = form_update_request_service.approve_request(db, requestId, auth["sub"], body.reviewNote)
+    if outcome == "not_found":
+        raise HTTPException(status_code=404, detail="update request not found")
+    if outcome == "not_pending":
+        raise HTTPException(status_code=409, detail="update request has already been reviewed")
+
+
+@router.post("/{id}/update-requests/{requestId}/reject", status_code=status.HTTP_204_NO_CONTENT)
+def reject_update_request(
+    id: str, requestId: str, body: ReviewNoteBody, db: Session = Depends(get_db), auth: dict = Depends(require_admin)
+) -> None:
+    outcome = form_update_request_service.reject_request(db, requestId, auth["sub"], body.reviewNote)
+    if outcome == "not_found":
+        raise HTTPException(status_code=404, detail="update request not found")
+    if outcome == "not_pending":
+        raise HTTPException(status_code=409, detail="update request has already been reviewed")

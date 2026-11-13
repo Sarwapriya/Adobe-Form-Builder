@@ -155,6 +155,15 @@ class UpdateGeneratedFileBody(BaseModel):
     content: str
 
 
+class UpdateRequestBody(BaseModel):
+    """A subsidiary user's "Request Update" action — `{ note?: string
+    (trimmed, <=2000) }`, same shape as ContributionBody's own note."""
+
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+    _v_note = field_validator("note")(classmethod(lambda cls, v: v.strip() if v is not None else v))
+
+
 class ContributionBody(BaseModel):
     """Shared shape for submit-contribution / save-contribution-draft — both
     `{ content: ContributionContent, note?: string (trimmed, <=2000) }`."""

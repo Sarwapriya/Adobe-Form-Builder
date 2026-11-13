@@ -66,6 +66,7 @@ export function MyAdHocFormEditorPage() {
   const status = useFormBuilderStore((s) => s.status);
   const pendingReview = useFormBuilderStore((s) => s.pendingReview);
   const reviewNote = useFormBuilderStore((s) => s.reviewNote);
+  const updateRequest = useFormBuilderStore((s) => s.updateRequest);
   const loadForm = useFormBuilderStore((s) => s.loadForm);
   const reset = useFormBuilderStore((s) => s.reset);
 
@@ -93,14 +94,19 @@ export function MyAdHocFormEditorPage() {
   const statusDescription = pendingReview
     ? "An admin needs to review this before it can be published."
     : status === "published"
-      ? "This campaign has been approved and published — it can only be viewed."
+      ? updateRequest?.status === "approved"
+        ? "Update approved — editable until you submit for review again."
+        : "This campaign has been approved and published — it can only be viewed. Need a change? Request an update."
       : reviewNote && !pendingReview
         ? reviewNote
         : undefined;
   // A published ad-hoc campaign is final — same locked-fields treatment as
   // "awaiting review", just for the opposite reason (nothing left to review,
-  // rather than not yet reviewed). See AdHocActionBar's matching Save/Submit gate.
-  const readOnly = pendingReview || status === "published";
+  // rather than not yet reviewed) — unless an admin-approved update request
+  // has reopened it. See AdHocActionBar's matching Save/Submit gate (and its
+  // own doc comment on hasOpenUpdateRequest).
+  const hasOpenUpdateRequest = updateRequest?.status === "approved";
+  const readOnly = pendingReview || (status === "published" && !hasOpenUpdateRequest);
 
   return (
     <Box>
@@ -131,9 +137,10 @@ export function MyAdHocFormEditorPage() {
         </Box>
 
         <Paper sx={{ p: 2, width: { xs: "100%", md: 280 }, flexShrink: 0, position: "sticky", top: 16 }}>
-          {status === "published" ? (
+          {status === "published" && !hasOpenUpdateRequest ? (
             <Typography variant="body2" color="text.secondary">
-              This campaign has been approved and published — it can only be viewed.
+              This campaign has been approved and published — it can only be viewed. Need a change? Request an
+              update using the button below.
             </Typography>
           ) : pendingReview ? (
             <Typography variant="body2" color="text.secondary">
