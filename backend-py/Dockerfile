@@ -29,7 +29,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl gnupg apt-transport-https ca-certificates unixodbc \
+    && apt-get install -y --no-install-recommends curl gnupg apt-transport-https ca-certificates unixodbc libatomic1 \
     && mkdir -p /usr/share/keyrings \
     && curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
     && curl https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list \
@@ -45,6 +45,14 @@ COPY --from=build /install /usr/local
 # links against — at build time, into a fixed path that doesn't depend on which
 # user/HOME the container runs as. Without this every QA run errors with
 # "BrowserType.launch: Executable doesn't exist".
+#
+# libatomic1 (installed above, alongside unixODBC) is a prerequisite for
+# Playwright's own Node driver binary to even start — without it this RUN
+# step itself fails with "driver/node: error while loading shared
+# libraries: libatomic.so.1", before --with-deps ever gets a chance to
+# install anything. python:3.12-slim is a floating tag; a point-release
+# bump apparently dropped libatomic1 as a default transitive dependency
+# that used to be pulled in incidentally, so this needs to be explicit now.
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
