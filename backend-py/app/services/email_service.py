@@ -621,6 +621,12 @@ def send_update_request_submitted_notification(db: Session, form_id: str, form_n
     try:
         recipients = _resolve_admin_recipients(db)
         if not recipients:
+            # Silent by design everywhere else in this file, but worth a
+            # line here: this is the one failure mode that looks identical
+            # to "the feature doesn't work" from the outside — no admin
+            # account has a Notification Email set (Configuration > Users)
+            # and FORMBUILDER_NOTIFY_EMAIL isn't set either.
+            print(f"[email_service] Skipped update-request-submitted email for form {form_id} — no admin recipients configured")
             return
         result = send_email(db, recipients, _build_update_request_submitted_message(form_id, form_name, subsidiary_id, note))
         if not result.ok:
@@ -646,6 +652,12 @@ def _build_update_request_approved_message(form_id: str, form_name: str, form_or
 def send_update_request_approved_notification(db: Session, recipients: list[str], form_id: str, form_name: str, form_origin: str) -> None:
     """Never raises — same best-effort discipline as every other notification here."""
     if not recipients:
+        # See send_update_request_submitted_notification's own doc comment —
+        # the subsidiary-side equivalent: every active standard user's email
+        # failed to decrypt via DKMS (or the account is inactive/has none),
+        # and the subsidiary has neither notificationEmail1 nor
+        # notificationEmail2 set as a DKMS-independent fallback.
+        print(f"[email_service] Skipped update-request-approved email for form {form_id} — no subsidiary recipients resolved")
         return
     try:
         result = send_email(db, recipients, _build_update_request_approved_message(form_id, form_name, form_origin))
@@ -678,6 +690,9 @@ def send_update_request_rejected_notification(
 ) -> None:
     """Never raises — same best-effort discipline as every other notification here."""
     if not recipients:
+        # Same diagnosis as send_update_request_approved_notification's own
+        # doc comment.
+        print(f"[email_service] Skipped update-request-rejected email for form {form_id} — no subsidiary recipients resolved")
         return
     try:
         result = send_email(db, recipients, _build_update_request_rejected_message(form_id, form_name, form_origin, note))
